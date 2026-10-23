@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 110" width="100%" height="100%">
+  <defs>
+    <linearGradient id="vdLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#0F766E" />
+    </linearGradient>
+
+    <linearGradient id="vdRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5EEAD4" />
+      <stop offset="100%" stop-color="#0D9488" />
+    </linearGradient>
+
+    <linearGradient id="vdGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="100%" stop-color="#CA8A04" />
+    </linearGradient>
+  </defs>
+
+  <!-- 3D V Symbol -->
+  <g transform="translate(12, 10) scale(0.175)">
+    <rect width="512" height="512" rx="120" fill="#1C2E3D" stroke="rgba(255,255,255,0.15)" stroke-width="6" />
+    <path d="M120 110 L195 90 L256 360 L200 415 L100 150 Z" fill="url(#vdLeft)" />
+    <path d="M195 90 L256 360 L256 415 L180 145 Z" fill="#042F2E" />
+    <path d="M317 90 L392 110 L412 150 L256 415 L256 360 Z" fill="url(#vdRight)" />
+    <path d="M256 360 L317 90 L275 145 L256 415 Z" fill="#021C1B" />
+    <path d="M256 160 L276 270 L256 425 L236 270 Z" fill="url(#vdGold)" />
+    <path d="M195 90 L256 360" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity="0.9" />
+  </g>
+
+  <!-- Wordmark "VASTRENIX" in Pure White -->
+  <text x="122" y="58" font-family="'Manrope', 'Inter', sans-serif" font-size="34" font-weight="900" letter-spacing="4" fill="#FFFFFF">
+    VASTRENIX
+  </text>
+  
+  <!-- Sub-label descriptor in luminous soft teal -->
+  <text x="124" y="80" font-family="'Inter', sans-serif" font-size="11" font-weight="700" letter-spacing="2.5" fill="#5EEAD4" text-transform="uppercase">
+    Clothing Business Platform
+  </text>
+</svg>
