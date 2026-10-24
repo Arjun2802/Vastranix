@@ -2,24 +2,51 @@ package com.vastrenix.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
+import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private static final String TAG = "VastrenixApp";
+    private static final String PREFS_NAME = "VastrenixPrefs";
+    private static final String KEY_SERVER_URL = "server_url";
+
     private WebView webView;
+    private ValueCallback<Uri[]> filePathCallback;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @SuppressLint({"SetJavaScriptEnabled", "NewApi"})
     @Override
@@ -55,15 +82,44 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
 
+        // Register Native Android Javascript Bridge
+        webView.addJavascriptInterface(new VastrenixNativeBridge(), "VastrenixNative");
+
+        // Native Download Listener for PDF and files
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+                Log.d(TAG, "Download requested: " + url + " | MIME: " + mimeType);
+                String fileName = "invoice_" + System.currentTimeMillis() + ".pdf";
+                downloadAndOpenPdf(url, fileName);
+            }
+        });
+
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
-                Log.d(TAG, cm.message() + " -- Line " + cm.lineNumber() + " of " + cm.sourceId());
+                Log.d(TAG, "[JS] " + cm.message() + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
+                return true;
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = callback;
+                Intent intent = params.createIntent();
+                try {
+                    startActivityForResult(intent, 1001);
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    return false;
+                }
                 return true;
             }
         });
@@ -72,19 +128,33 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                Log.d(TAG, "Page started: " + url);
+                Log.d(TAG, "Page load started: " + url);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                Log.d(TAG, "Page finished: " + url);
+                Log.d(TAG, "Page load complete: " + url);
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 super.onReceivedError(view, request, error);
-                Log.e(TAG, "Web error: " + error.getDescription());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Log.e(TAG, "Web error: " + error.getDescription() + " code: " + error.getErrorCode());
+                }
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String urlStr = uri.toString();
+                if (urlStr.endsWith(".pdf") || urlStr.contains("/pdf")) {
+                    String fileName = "invoice_" + System.currentTimeMillis() + ".pdf";
+                    downloadAndOpenPdf(urlStr, fileName);
+                    return true;
+                }
+                return false;
             }
         });
 
@@ -93,9 +163,32 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == 1001) {
+            if (filePathCallback != null) {
+                Uri[] results = null;
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    if (data.getData() != null) {
+                        results = new Uri[]{data.getData()};
+                    } else if (data.getClipData() != null) {
+                        int count = data.getClipData().getItemCount();
+                        results = new Uri[count];
+                        for (int i = 0; i < count; i++) {
+                            results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                    }
+                }
+                filePathCallback.onReceiveValue(results);
+                filePathCallback = null;
+            }
+        } else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    @Override
     public void onBackPressed() {
         if (webView != null) {
-            // Let JavaScript check if modal/drawer is open, or go back
             webView.evaluateJavascript(
                 "(function() { " +
                 "  if (typeof handleAndroidBack === 'function') { return handleAndroidBack(); } " +
@@ -113,6 +206,165 @@ public class MainActivity extends Activity {
             );
         } else {
             super.onBackPressed();
+        }
+    }
+
+    // =========================================================================
+    // Native PDF Download, FileProvider & Intent Handlers
+    // =========================================================================
+    public void downloadAndOpenPdf(String pdfUrl, String fileName) {
+        new Thread(() -> {
+            try {
+                File dir = new File(getCacheDir(), "invoices");
+                if (!dir.exists()) dir.mkdirs();
+                File targetFile = new File(dir, fileName);
+
+                if (pdfUrl.startsWith("data:application/pdf;base64,")) {
+                    String base64 = pdfUrl.substring("data:application/pdf;base64,".length());
+                    byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                    try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                        fos.write(bytes);
+                    }
+                } else {
+                    URL u = new URL(pdfUrl);
+                    HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(15000);
+                    conn.connect();
+
+                    try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(targetFile)) {
+                        byte[] buffer = new byte[4096];
+                        int read;
+                        while ((read = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, read);
+                        }
+                    }
+                }
+
+                mainHandler.post(() -> launchPdfViewer(targetFile));
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to download PDF: " + e.getMessage(), e);
+                mainHandler.post(() -> Toast.makeText(this, "Unable to load PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private void launchPdfViewer(File file) {
+        try {
+            Uri contentUri = VastrenixFileProvider.getUriForFile(this, file);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(contentUri, "application/pdf");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo resolveInfo : resInfoList) {
+                String packageName = resolveInfo.activityInfo.packageName;
+                grantUriPermission(packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot launch PDF viewer: " + e.getMessage(), e);
+            Toast.makeText(this, "No PDF viewer app found. Saved to cache: " + file.getName(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void launchPdfShare(File file) {
+        try {
+            Uri contentUri = VastrenixFileProvider.getUriForFile(this, file);
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("application/pdf");
+            intent.putExtra(Intent.EXTRA_STREAM, contentUri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            Intent chooser = Intent.createChooser(intent, "Share Invoice via");
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(chooser);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot share PDF: " + e.getMessage(), e);
+            Toast.makeText(this, "Sharing failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // =========================================================================
+    // JavaScript Interface for Web Client
+    // =========================================================================
+    public class VastrenixNativeBridge {
+
+        @JavascriptInterface
+        public void showToast(String message) {
+            mainHandler.post(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        }
+
+        @JavascriptInterface
+        public String getServerUrl() {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            return prefs.getString(KEY_SERVER_URL, "");
+        }
+
+        @JavascriptInterface
+        public void setServerUrl(String url) {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            prefs.edit().putString(KEY_SERVER_URL, url).apply();
+            Log.d(TAG, "Configured custom Server URL: " + url);
+        }
+
+        @JavascriptInterface
+        public void openPdfFromBase64(String base64Data, String fileName) {
+            new Thread(() -> {
+                try {
+                    File dir = new File(getCacheDir(), "invoices");
+                    if (!dir.exists()) dir.mkdirs();
+                    File file = new File(dir, fileName);
+                    byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(bytes);
+                    }
+                    mainHandler.post(() -> launchPdfViewer(file));
+                } catch (Exception e) {
+                    Log.e(TAG, "Error opening base64 PDF: " + e.getMessage(), e);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void sharePdfFromBase64(String base64Data, String fileName) {
+            new Thread(() -> {
+                try {
+                    File dir = new File(getCacheDir(), "invoices");
+                    if (!dir.exists()) dir.mkdirs();
+                    File file = new File(dir, fileName);
+                    byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(bytes);
+                    }
+                    mainHandler.post(() -> launchPdfShare(file));
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sharing base64 PDF: " + e.getMessage(), e);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void openPdfUrl(String url, String fileName) {
+            downloadAndOpenPdf(url, fileName);
+        }
+
+        @JavascriptInterface
+        public String getDeviceInfo() {
+            DisplayMetrics metrics = getResources().getDisplayMetrics();
+            float dpWidth = metrics.widthPixels / metrics.density;
+            float dpHeight = metrics.heightPixels / metrics.density;
+            return "{" +
+                "\"sdkInt\":" + Build.VERSION.SDK_INT + "," +
+                "\"model\":\"" + Build.MODEL + "\"," +
+                "\"manufacturer\":\"" + Build.MANUFACTURER + "\"," +
+                "\"density\":" + metrics.density + "," +
+                "\"dpWidth\":" + dpWidth + "," +
+                "\"dpHeight\":" + dpHeight +
+                "}";
         }
     }
 }

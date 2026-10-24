@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary_navy">#192B3A</color>
-    <color name="accent_teal">#218C82</color>
-    <color name="surface_ivory">#FAF8F3</color>
+    <color name="primary_teal">#218C82</color>
+    <color name="teal_light">#E8F4F0</color>
+    <color name="navy_dark">#101E2B</color>
+    <color name="warm_ivory">#FAF8F3</color>
+    <color name="ic_launcher_background">#101C26</color>
 </resources>

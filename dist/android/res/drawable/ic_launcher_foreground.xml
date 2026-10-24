@@ -1,0 +1,58 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 3D V - Left Wing Under Shadow -->
+    <path
+        android:fillColor="#042F2E"
+        android:pathData="M26,24 L42,20 L54,76 L46,84 Z"/>
+
+    <!-- 3D V - Right Wing Under Shadow -->
+    <path
+        android:fillColor="#021C1B"
+        android:pathData="M82,24 L66,20 L54,76 L62,84 Z"/>
+
+    <!-- 3D V - Left Wing Main Facet (Teal) -->
+    <path
+        android:fillColor="#218C82"
+        android:pathData="M26,24 L42,20 L54,76 L42,88 L22,32 Z"/>
+
+    <!-- 3D V - Left Wing Inner Bevel (Shaded Depth) -->
+    <path
+        android:fillColor="#0F766E"
+        android:pathData="M42,20 L54,76 L54,88 L38,32 Z"/>
+
+    <!-- 3D V - Right Wing Main Facet (Cyan/Teal) -->
+    <path
+        android:fillColor="#2DD4BF"
+        android:pathData="M66,20 L82,24 L86,32 L54,88 L54,76 Z"/>
+
+    <!-- 3D V - Right Wing Inner Shadow -->
+    <path
+        android:fillColor="#115E59"
+        android:pathData="M54,76 L66,20 L58,32 L54,88 Z"/>
+
+    <!-- 3D V - Gold Textile Crest Ribbon -->
+    <path
+        android:fillColor="#EAB308"
+        android:pathData="M54,34 L58,58 L54,90 L50,58 Z"/>
+
+    <!-- 3D Specular Highlight Ridge on Left Wing -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M42,20 L54,76"/>
+
+    <!-- Top Left Cap Chamfer -->
+    <path
+        android:fillColor="#99F6E4"
+        android:pathData="M26,24 L22,32 L38,28 L42,20 Z"/>
+
+    <!-- Top Right Cap Chamfer -->
+    <path
+        android:fillColor="#5EEAD4"
+        android:pathData="M66,20 L70,28 L86,32 L82,24 Z"/>
+</vector>

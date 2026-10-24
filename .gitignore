@@ -39,6 +39,7 @@ storage/qr/*.png
 android-sdk/
 *.keystore
 *.jks
+key.properties
 
 # Environment & Credentials
 .env

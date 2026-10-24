@@ -1,8 +1,54 @@
 // VASTRENIX Client Application Controller
 
-const API_BASE = (window.location.protocol === "file:" || !window.location.host) 
-  ? "/api/v1" 
-  : "/api/v1";
+function getBaseServerUrl() {
+  const saved = localStorage.getItem("vastrenix_server_url");
+  if (saved && saved.trim()) {
+    return saved.trim().replace(/\/+$/, "");
+  }
+
+  if (window.VastrenixNative && typeof window.VastrenixNative.getServerUrl === "function") {
+    const nativeSaved = window.VastrenixNative.getServerUrl();
+    if (nativeSaved && nativeSaved.trim()) {
+      return nativeSaved.trim().replace(/\/+$/, "");
+    }
+  }
+
+  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+    return window.location.origin;
+  }
+
+  // Default for Android Emulator / Local LAN testing
+  return "http://10.0.2.2:8000";
+}
+
+function getApiBase() {
+  const base = getBaseServerUrl();
+  return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
+}
+
+function openInvoicePdf(invoiceId, invoiceNumber) {
+  const fullUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+
+  if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
+    window.VastrenixNative.openPdfUrl(fullUrl, fileName);
+  } else {
+    window.open(fullUrl, "_blank");
+  }
+}
+
+function shareInvoicePdf(invoiceId, invoiceNumber) {
+  const fullUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+
+  if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
+    window.VastrenixNative.openPdfUrl(fullUrl, fileName);
+  } else if (navigator.share) {
+    navigator.share({ title: `Invoice ${invoiceNumber}`, url: fullUrl });
+  } else {
+    window.open(fullUrl, "_blank");
+  }
+}
 
 const state = {
   token: localStorage.getItem("vastrenix_token") || null,
@@ -164,7 +210,66 @@ function handleOfflineMock(endpoint, options = {}) {
   return { status: "OK", message: "Offline operation recorded" };
 }
 
-// API Helper with Automatic Offline Recovery
+// Server Connection Settings Controllers
+function openServerSettingsModal() {
+  const modal = document.getElementById("modal-server-settings");
+  if (modal) {
+    document.getElementById("server-url-input").value = getBaseServerUrl();
+    document.getElementById("server-health-status").innerHTML = "";
+    modal.classList.add("active");
+  }
+}
+
+function closeServerSettingsModal() {
+  const modal = document.getElementById("modal-server-settings");
+  if (modal) modal.classList.remove("active");
+}
+
+function setPresetServerUrl(url) {
+  const input = document.getElementById("server-url-input");
+  if (input) input.value = url;
+}
+
+async function testServerConnection() {
+  const inputUrl = document.getElementById("server-url-input").value.trim().replace(/\/+$/, "");
+  const statusEl = document.getElementById("server-health-status");
+  statusEl.innerHTML = `<span style="color: var(--text-muted); font-size: 12px;">Testing connection to ${inputUrl}...</span>`;
+
+  try {
+    const res = await fetch(`${inputUrl}/health`, { method: "GET" });
+    if (res.ok) {
+      const data = await res.json();
+      statusEl.innerHTML = `<span style="color: #10B981; font-weight: 700; font-size: 12px;">✓ Connected: ${data.platform || 'VASTRENIX'} (${data.status || 'OK'})</span>`;
+      if (window.VastrenixNative && typeof window.VastrenixNative.showToast === "function") {
+        window.VastrenixNative.showToast("Connected to VASTRENIX Server");
+      }
+    } else {
+      statusEl.innerHTML = `<span style="color: #EF4444; font-weight: 700; font-size: 12px;">✗ Server responded with HTTP status ${res.status}</span>`;
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color: #EF4444; font-weight: 700; font-size: 12px;">✗ Connection failed: ${err.message}. Ensure backend is running.</span>`;
+  }
+}
+
+function saveServerSettings() {
+  const inputUrl = document.getElementById("server-url-input").value.trim().replace(/\/+$/, "");
+  if (!inputUrl) {
+    localStorage.removeItem("vastrenix_server_url");
+  } else {
+    localStorage.setItem("vastrenix_server_url", inputUrl);
+  }
+
+  if (window.VastrenixNative && typeof window.VastrenixNative.setServerUrl === "function") {
+    window.VastrenixNative.setServerUrl(inputUrl);
+    window.VastrenixNative.showToast("Server URL saved: " + (inputUrl || "Default"));
+  }
+
+  closeServerSettingsModal();
+  loadPublicStores();
+  renderApp();
+}
+
+// API Helper with Strict Error Handling & Resilience
 async function api(endpoint, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -177,23 +282,58 @@ async function api(endpoint, options = {}) {
     headers["X-Business-ID"] = state.business.id;
   }
 
+  const method = (options.method || "GET").toUpperCase();
+  const url = `${getApiBase()}${endpoint}`;
+
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const res = await fetch(url, {
       ...options,
       headers
     });
+
     if (res.status === 401) {
       logout();
-      return null;
+      alert("Session expired or invalid credentials. Please sign in again.");
+      throw new Error("Unauthorized (401)");
     }
-    const data = await res.json();
+
+    if (res.status === 403) {
+      const data = await res.json().catch(() => ({}));
+      const msg = data.detail || "Your account does not have permission or is pending approval.";
+      alert(msg);
+      throw new Error(msg);
+    }
+
+    if (res.status === 422) {
+      const data = await res.json().catch(() => ({}));
+      const msg = data.detail ? (Array.isArray(data.detail) ? data.detail.map(d => d.msg || JSON.stringify(d)).join(", ") : JSON.stringify(data.detail)) : "Validation error";
+      alert("Input validation error: " + msg);
+      throw new Error(msg);
+    }
+
     if (!res.ok) {
-      throw new Error(data.detail || "API Request Failed");
+      const data = await res.json().catch(() => ({}));
+      const msg = data.detail || `Server error (HTTP ${res.status})`;
+      alert(msg);
+      throw new Error(msg);
     }
-    return data;
+
+    return await res.json();
   } catch (err) {
-    console.warn("API request fallback to offline mock for:", endpoint);
-    return handleOfflineMock(endpoint, options);
+    // If it was an intentional HTTP error thrown above, re-throw it
+    if (err.message && (err.message.includes("401") || err.message.includes("pending approval") || err.message.includes("Validation error") || err.message.includes("Access forbidden"))) {
+      throw err;
+    }
+
+    // Network connection failed (TypeError: Failed to fetch)
+    if (method === "GET") {
+      console.warn("VASTRENIX: Server offline or unreachable. Providing local data preview for:", endpoint);
+      return handleOfflineMock(endpoint, options);
+    }
+
+    // For POST / PUT / DELETE mutations, NEVER silently mock without notifying user
+    alert(`Network Error: Unable to reach VASTRENIX server at ${getBaseServerUrl()}.\nPlease check your connection or configure Server URL in Settings.`);
+    throw err;
   }
 }
 
@@ -771,7 +911,7 @@ async function completePOSSale() {
 
   if (res && res.invoice_id) {
     alert(`Success: Invoice ${res.invoice_number} created!\nOpening PDF download in chosen theme (${theme})...`);
-    window.open(res.pdf_download_url, "_blank");
+    openInvoicePdf(res.invoice_id, res.invoice_number);
     clearCart();
     switchTab("invoices");
   }
@@ -821,8 +961,8 @@ async function renderInvoices() {
                 <td>${inv.payment_mode}</td>
                 <td><span class="badge badge-success">${inv.payment_status}</span></td>
                 <td>
-                  <a href="/api/v1/pos/invoices/${inv.id}/pdf" target="_blank" class="btn btn-sm btn-navy">PDF</a>
-                  <a href="/api/v1/pos/invoices/${inv.id}/preview" target="_blank" class="btn btn-sm btn-secondary">Preview</a>
+                  <button onclick="openInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
+                  <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
                 </td>
               </tr>
             `).join('')}
@@ -1753,6 +1893,57 @@ async function renderApp() {
             </form>
           ` : ''}
 
+          <!-- Server Connection & Cloud API Settings Bar -->
+          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; display: inline-block;"></span>
+              <span>API: <b style="color: var(--navy);">${getBaseServerUrl()}</b></span>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="openServerSettingsModal()" style="font-size: 11px; padding: 4px 10px;">
+              ⚙ Server URL
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Server URL Settings Modal -->
+      <div class="modal-overlay" id="modal-server-settings">
+        <div class="modal-card" style="max-width: 440px;">
+          <div class="modal-header">
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Server & Cloud Connection</h3>
+            <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeServerSettingsModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
+              Configure your backend API server endpoint. Works with local development servers, LAN Wi-Fi IPs, or cloud deployments.
+            </p>
+            <div class="form-group">
+              <label class="form-label">Backend Server URL</label>
+              <input type="text" id="server-url-input" class="form-input" placeholder="http://10.0.2.2:8000">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Quick Presets</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://10.0.2.2:8000')">Emulator (10.0.2.2:8000)</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://localhost:8000')">Localhost (8000)</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://127.0.0.1:8000')">127.0.0.1:8000</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('https://api.vastrenix.com')">Cloud HTTPS</button>
+              </div>
+            </div>
+
+            <div id="server-health-status" style="min-height: 24px; margin-bottom: 14px;"></div>
+
+            <div style="display: flex; gap: 10px;">
+              <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;" onclick="testServerConnection()">
+                Test Health
+              </button>
+              <button type="button" class="btn btn-primary" style="flex: 1; padding: 10px;" onclick="saveServerSettings()">
+                Save & Connect
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;

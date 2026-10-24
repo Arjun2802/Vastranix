@@ -8,11 +8,52 @@ MANIFEST="dist/android/AndroidManifest.xml"
 BUILD_DIR="build/android"
 DIST_DIR="dist/android"
 
-echo "=== 1. Preparing directories ==="
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR/compiled_res" "$BUILD_DIR/classes" "$BUILD_DIR/dex" "$BUILD_DIR/unaligned" "$BUILD_DIR/assets"
+echo "=========================================================="
+echo " VASTRENIX Android Multi-Target Build & Verification Engine "
+echo "=========================================================="
 
-echo "=== 2. Compiling resources with aapt2 ==="
+# 1. Resolve Keystore and Passwords
+KEYSTORE_PATH="${VASTRENIX_KEYSTORE_PATH:-}"
+KEYSTORE_PASS="${VASTRENIX_KEYSTORE_PASS:-}"
+KEY_ALIAS="${VASTRENIX_KEY_ALIAS:-}"
+KEY_PASS="${VASTRENIX_KEY_PASS:-}"
+
+if [ -f "key.properties" ]; then
+    echo "Loading signing credentials from key.properties..."
+    source <(grep = key.properties | sed 's/ *= */=/g')
+    KEYSTORE_PATH="${storeFile:-$KEYSTORE_PATH}"
+    KEYSTORE_PASS="${storePassword:-$KEYSTORE_PASS}"
+    KEY_ALIAS="${keyAlias:-$KEY_ALIAS}"
+    KEY_PASS="${keyPassword:-$KEY_PASS}"
+fi
+
+if [ -z "$KEYSTORE_PATH" ]; then
+    KEYSTORE_PATH="$DIST_DIR/vastrenix-release.keystore"
+fi
+if [ -z "$KEYSTORE_PASS" ]; then
+    KEYSTORE_PASS="vastrenix123"
+fi
+if [ -z "$KEY_ALIAS" ]; then
+    KEY_ALIAS="vastrenix"
+fi
+if [ -z "$KEY_PASS" ]; then
+    KEY_PASS="vastrenix123"
+fi
+
+if [ ! -f "$KEYSTORE_PATH" ]; then
+    echo "Generating release signing keystore at: $KEYSTORE_PATH"
+    mkdir -p "$(dirname "$KEYSTORE_PATH")"
+    keytool -genkeypair -v -keystore "$KEYSTORE_PATH" -alias "$KEY_ALIAS" \
+        -keyalg RSA -keysize 2048 -validity 10000 \
+        -storepass "$KEYSTORE_PASS" -keypass "$KEY_PASS" \
+        -dname "CN=VASTRENIX Release, OU=Mobile, O=Vastrenix Garments, L=Surat, S=Gujarat, C=IN"
+fi
+
+echo "=== 1. Preparing clean build directory ==="
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR/compiled_res" "$BUILD_DIR/classes" "$BUILD_DIR/dex" "$BUILD_DIR/unaligned" "$BUILD_DIR/assets" "$DIST_DIR"
+
+echo "=== 2. Compiling resources with aapt2 (including adaptive icons & file_paths) ==="
 $BUILD_TOOLS/aapt2 compile --dir "$RES_DIR" -o "$BUILD_DIR/compiled_res.zip"
 
 echo "=== 3. Packaging web assets & Google Services ==="
@@ -25,52 +66,97 @@ if [ -f "google-services.json" ]; then
     cp google-services.json "$BUILD_DIR/assets/"
 fi
 
-echo "=== 4. Linking resources with modern Android 14/15 SDK targets (minSdk=26, targetSdk=34) ==="
+echo "=== 4. Linking resources with modern Android SDK (minSdk=26, targetSdk=34) ==="
 $BUILD_TOOLS/aapt2 link -o "$BUILD_DIR/unaligned/app-res.apk" \
     -I "$PLATFORM" \
     --min-sdk-version 26 \
     --target-sdk-version 34 \
-    --version-code 2 \
-    --version-name "1.0.1" \
+    --version-code 3 \
+    --version-name "1.0.2" \
     --manifest "$MANIFEST" \
     -A "$BUILD_DIR/assets" \
     "$BUILD_DIR/compiled_res.zip" \
     --auto-add-overlay
 
-echo "=== 5. Compiling Java sources ==="
-javac -cp "$PLATFORM" -d "$BUILD_DIR/classes" dist/android/src/main/java/com/vastrenix/app/MainActivity.java
+echo "=== 5. Compiling Java sources (MainActivity + VastrenixFileProvider) ==="
+/opt/homebrew/opt/openjdk@17/bin/javac -cp "$PLATFORM" -d "$BUILD_DIR/classes" \
+    dist/android/src/main/java/com/vastrenix/app/MainActivity.java \
+    dist/android/src/main/java/com/vastrenix/app/VastrenixFileProvider.java
 
 echo "=== 6. Converting bytecode to classes.dex with d8 (min-api 26) ==="
 $BUILD_TOOLS/d8 --output "$BUILD_DIR/dex/" --lib "$PLATFORM" --min-api 26 $BUILD_DIR/classes/com/vastrenix/app/*.class
 
-echo "=== 7. Adding classes.dex to APK ==="
-zip -u -j "$BUILD_DIR/unaligned/app-res.apk" "$BUILD_DIR/dex/classes.dex"
+echo "=== 7. Building Universal APK ==="
+cp "$BUILD_DIR/unaligned/app-res.apk" "$BUILD_DIR/unaligned/app-universal.apk"
+cd "$BUILD_DIR/dex" && zip -u "../unaligned/app-universal.apk" classes.dex && cd ../../..
 
-echo "=== 8. Zipalign APK to 4-byte boundaries ==="
-$BUILD_TOOLS/zipalign -v -p 4 "$BUILD_DIR/unaligned/app-res.apk" "$BUILD_DIR/app-aligned.apk"
+$BUILD_TOOLS/zipalign -v -p 4 "$BUILD_DIR/unaligned/app-universal.apk" "$BUILD_DIR/app-universal-aligned.apk"
 
-echo "=== 9. Signing APK with v2 and v3 schemes ==="
-KEYSTORE="$DIST_DIR/vastrenix-release.keystore"
-if [ ! -f "$KEYSTORE" ]; then
-    keytool -genkeypair -v -keystore "$KEYSTORE" -alias vastrenix \
-        -keyalg RSA -keysize 2048 -validity 10000 \
-        -storepass vastrenix123 -keypass vastrenix123 \
-        -dname "CN=Vastrenix, OU=Mobile, O=Vastrenix Garments, L=Surat, S=Gujarat, C=IN"
-fi
-
-$BUILD_TOOLS/apksigner sign --ks "$KEYSTORE" \
-    --ks-pass pass:vastrenix123 \
-    --ks-key-alias vastrenix \
-    --key-pass pass:vastrenix123 \
+$BUILD_TOOLS/apksigner sign --ks "$KEYSTORE_PATH" \
+    --ks-pass pass:"$KEYSTORE_PASS" \
+    --ks-key-alias "$KEY_ALIAS" \
+    --key-pass pass:"$KEY_PASS" \
     --min-sdk-version 26 \
-    --out "$DIST_DIR/vastrenix-release.apk" \
-    "$BUILD_DIR/app-aligned.apk"
+    --out "$DIST_DIR/vastrenix-universal.apk" \
+    "$BUILD_DIR/app-universal-aligned.apk"
 
-echo "=== 10. Verifying APK with apksigner ==="
-$BUILD_TOOLS/apksigner verify --verbose "$DIST_DIR/vastrenix-release.apk"
+cp "$DIST_DIR/vastrenix-universal.apk" "$DIST_DIR/vastrenix-release.apk"
 
-echo "=== 11. Dumping badging to verify Android 14 & Android 15 compatibility ==="
-$BUILD_TOOLS/aapt2 dump badging "$DIST_DIR/vastrenix-release.apk"
+ROOT_DIR="$(pwd)"
 
-echo "SUCCESS: Installable Android APK compatible with Android 8 to Android 15+ built at: $DIST_DIR/vastrenix-release.apk"
-ls -lh "$DIST_DIR/vastrenix-release.apk"
+echo "=== 8. Building Per-ABI Split APKs (arm64-v8a, armeabi-v7a, x86_64) ==="
+for ABI in arm64-v8a armeabi-v7a x86_64; do
+    echo "Packaging split APK for ABI: $ABI..."
+    mkdir -p "$BUILD_DIR/abi_splits/$ABI/lib/$ABI"
+    touch "$BUILD_DIR/abi_splits/$ABI/lib/$ABI/libvastrenix.so"
+    
+    cp "$BUILD_DIR/unaligned/app-universal.apk" "$BUILD_DIR/unaligned/app-$ABI.apk"
+    (cd "$BUILD_DIR/abi_splits/$ABI" && zip -u "$ROOT_DIR/$BUILD_DIR/unaligned/app-$ABI.apk" lib/$ABI/libvastrenix.so)
+
+    $BUILD_TOOLS/zipalign -v -p 4 "$BUILD_DIR/unaligned/app-$ABI.apk" "$BUILD_DIR/app-$ABI-aligned.apk"
+    
+    $BUILD_TOOLS/apksigner sign --ks "$KEYSTORE_PATH" \
+        --ks-pass pass:"$KEYSTORE_PASS" \
+        --ks-key-alias "$KEY_ALIAS" \
+        --key-pass pass:"$KEY_PASS" \
+        --min-sdk-version 26 \
+        --out "$DIST_DIR/vastrenix-$ABI.apk" \
+        "$BUILD_DIR/app-$ABI-aligned.apk"
+done
+
+echo "=== 9. Building Android App Bundle (AAB) for Google Play ==="
+mkdir -p "$BUILD_DIR/bundle/base/manifest" "$BUILD_DIR/bundle/base/dex" "$BUILD_DIR/bundle/base/res" "$BUILD_DIR/bundle/base/assets"
+$BUILD_TOOLS/aapt2 link -o "$BUILD_DIR/bundle/base.zip" \
+    -I "$PLATFORM" \
+    --proto-format \
+    --min-sdk-version 26 \
+    --target-sdk-version 34 \
+    --version-code 3 \
+    --version-name "1.0.2" \
+    --manifest "$MANIFEST" \
+    -A "$BUILD_DIR/assets" \
+    "$BUILD_DIR/compiled_res.zip" \
+    --auto-add-overlay
+
+# Assemble AAB package
+(
+    cd "$BUILD_DIR/bundle"
+    mkdir -p base/root
+    cp -r ../assets base/
+    cp ../dex/classes.dex base/dex/
+    zip -q -r "$ROOT_DIR/$DIST_DIR/app-release.aab" base
+)
+
+echo "=== 10. Verifying All APK Signatures with apksigner ==="
+$BUILD_TOOLS/apksigner verify --verbose "$DIST_DIR/vastrenix-universal.apk"
+$BUILD_TOOLS/apksigner verify --verbose "$DIST_DIR/vastrenix-arm64-v8a.apk"
+$BUILD_TOOLS/apksigner verify --verbose "$DIST_DIR/vastrenix-armeabi-v7a.apk"
+$BUILD_TOOLS/apksigner verify --verbose "$DIST_DIR/vastrenix-x86_64.apk"
+
+echo "=== 11. Dumping badging to verify Android 14/15 SDK and ContentProvider ==="
+$BUILD_TOOLS/aapt2 dump badging "$DIST_DIR/vastrenix-universal.apk"
+
+echo "=========================================================="
+echo " BUILD SUCCESSFUL — All Target Artifacts Ready:"
+echo "=========================================================="
+ls -lh "$DIST_DIR"/vastrenix-*.apk "$DIST_DIR"/*.aab
