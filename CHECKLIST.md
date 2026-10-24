@@ -9,7 +9,8 @@
 - [x] **Phase 1 — Diagnose the APK (Find Root Causes):** COMPLETE
 - [x] **Phase 2 — Android Compatibility & Multi-Device Builds:** COMPLETE
 - [x] **Phase 3 — Auth & Staff Approval Flow:** COMPLETE
-- [ ] **Phase 4 — App Shell & Screens (Adaptive Layouts, Multi-Language):** READY TO START
+- [x] **Phase 4 — App Shell & Screens (Adaptive Layouts, Multi-Language):** COMPLETE
+- [ ] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** READY TO START
 - [ ] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** NOT STARTED
 - [ ] **Phase 6 — B2B Dealer Lifecycle & Concurrency Guards:** NOT STARTED
 - [ ] **Phase 7 — Expenses, Team Screen, Invoices & Offline Queue:** NOT STARTED
@@ -46,10 +47,11 @@
 - [x] Pass automated test suite for entire auth, approval, cross-tenant isolation, and session revocation matrix (`test_auth_and_approval_extended.py`).
 
 ### Phase 4: App Shell & Responsive Screens
-- [ ] Responsive navigation: Bottom nav on mobile (< 960px), Navigation rail / luxury sidebar on tablet & desktop.
-- [ ] Prominent store identity and staff badge.
-- [ ] Language toggle: EN, हिन्दी (Hindi), ગુજરાતી (Gujarati) with bundled fonts.
-- [ ] Role-based access control (RBAC): Hide financial metrics/profit from sales/cashier roles.
+- [x] Responsive navigation: Bottom nav on mobile (< 960px), Navigation rail / luxury sidebar on tablet & desktop.
+- [x] Prominent store identity badge and staff identity pill (name + role).
+- [x] Multi-language dictionary: English (EN), हिन्दी (Hindi), ગુજરાતી (Gujarati) with bundled Noto Sans fallbacks.
+- [x] Role-based access control (RBAC): Cashiers restricted from viewing total net revenue, cost/profit, or adding/adjusting inventory.
+- [x] Clean empty states for newly created stores with zero transactions and zero garments.
 
 ### Phase 5: POS & Cash Shift Reconciliation
 - [ ] Cashier shift open (opening float prompt) and close (counted vs expected reconciliation).

@@ -64,6 +64,96 @@ const state = {
   lang: localStorage.getItem("vastrenix_lang") || "en"
 };
 
+const i18n = {
+  en: {
+    welcome: "Welcome to your clothing operations",
+    dashboard: "Dashboard",
+    inventory: "Inventory & Catalog",
+    pos: "POS Billing",
+    invoices: "Invoices & Themes",
+    expenses: "Store Expenses",
+    dealers: "Dealer B2B Network",
+    team: "Users & Staff",
+    flowcharts: "Architecture Flowcharts",
+    today_sales: "Today's Gross Sales",
+    today_orders: "Today's Orders",
+    total_revenue: "Total Net Revenue",
+    low_stock_items: "Low Stock Items",
+    pending_approvals: "Pending Staff Approvals",
+    pending_dealer_orders: "Pending Dealer Orders",
+    add_product: "+ Add New Garment",
+    adjust_stock: "Adjust Stock",
+    search_placeholder: "Search garment by name, fabric, or SKU...",
+    record_expense: "Record Store Expense",
+    open_shift: "Open Cash Shift",
+    close_shift: "Close Cash Shift",
+    server_settings: "Server URL Settings",
+    logout: "Sign Out",
+    quick_bill: "Quick POS Billing Till",
+    save_changes: "Save Changes",
+    current_store: "Current Store",
+    flagship_store: "Flagship Store"
+  },
+  hi: {
+    welcome: "आपके वस्त्र व्यापार में आपका स्वागत है",
+    dashboard: "डैशबोर्ड",
+    inventory: "इन्वेंटरी और कैटलॉग",
+    pos: "पीओएस बिलिंग",
+    invoices: "चालान और थीम्स",
+    expenses: "दुकान के खर्च",
+    dealers: "डीलर बी2बी नेटवर्क",
+    team: "कर्मचारी और टीम",
+    flowcharts: "सिस्टम फ्लोचार्ट्स",
+    today_sales: "आज की कुल बिक्री",
+    today_orders: "आज के ऑर्डर्स",
+    total_revenue: "कुल राजस्व",
+    low_stock_items: "कम स्टॉक वाले वस्त्र",
+    pending_approvals: "लंबित कर्मचारी स्वीकृतियां",
+    pending_dealer_orders: "लंबित डीलर ऑर्डर्स",
+    add_product: "+ नया वस्त्र जोड़ें",
+    adjust_stock: "स्टॉक समायोजित करें",
+    search_placeholder: "वस्त्र का नाम, फैब्रिक या SKU खोजें...",
+    record_expense: "दुकान खर्च दर्ज करें",
+    open_shift: "कैश शिफ्ट खोलें",
+    close_shift: "कैश शिफ्ट बंद करें",
+    server_settings: "सर्वर सेटिंग्स",
+    logout: "साइन आउट",
+    quick_bill: "त्वरित बिलिंग काउंटर",
+    save_changes: "परिवर्तन सहेजें",
+    current_store: "वर्तमान दुकान",
+    flagship_store: "प्रमुख दुकान"
+  },
+  gu: {
+    welcome: "તમારા વસ્ત્ર વ્યાપારમાં આપનું સ્વાગત છે",
+    dashboard: "ડેશબોર્ડ",
+    inventory: "ઇન્વેન્ટરી અને કેટલોગ",
+    pos: "પીઓએસ બિલિંગ કાઉન્ટર",
+    invoices: "બિલ અને થીમ્સ",
+    expenses: "દુકાનના ખર્ચાઓ",
+    dealers: "ડીલર બી2બી નેટવર્ક",
+    team: "સ્ટાફ અને ટીમ",
+    flowcharts: "સિસ્ટમ ફ્લોચાર્ટ",
+    today_sales: "આજનું કુલ વેચાણ",
+    today_orders: "આજના ઓર્ડર્સ",
+    total_revenue: "કુલ આવક",
+    low_stock_items: "ઓછો સ્ટોક ધરાવતા વસ્ત્રો",
+    pending_approvals: "બાકી સ્ટાફ મંજૂરીઓ",
+    pending_dealer_orders: "બાકી ડીલર ઓર્ડર્સ",
+    add_product: "+ નવો ડ્રેસ/કપડાં ઉમેરો",
+    adjust_stock: "સ્ટોક એડજસ્ટ કરો",
+    search_placeholder: "કપડાંનું નામ, કાપડ અથવા SKU શોધો...",
+    record_expense: "દુકાનનો ખર્ચ નોંધો",
+    open_shift: "રોકડ શિફ્ટ શરૂ કરો",
+    close_shift: "રોકડ શિફ્ટ સમાપ્ત કરો",
+    server_settings: "સર્વર સેટિંગ્સ",
+    logout: "લોગ આઉટ",
+    quick_bill: "ઝડપી બિલિંગ ટિલ",
+    save_changes: "સાચવો",
+    current_store: "ચાલુ સ્ટોર",
+    flagship_store: "મુખ્ય શોરૂમ"
+  }
+};
+
 // Robust offline database to guarantee ZERO blank screen on Android APK / offline devices
 const offlineDB = {
   stores: [
@@ -555,20 +645,22 @@ async function renderDashboard() {
         <div class="stat-meta">${metrics.today_orders_count} transactions completed</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">${t.low_stock_alerts}</div>
+        <div class="stat-label">${t.low_stock_items}</div>
         <div class="stat-value" style="color: ${metrics.low_stock_count > 0 ? 'var(--coral)' : 'var(--teal)'};">${metrics.low_stock_count}</div>
-        <div class="stat-meta">${metrics.low_stock_count > 0 ? 'Sizes requiring reorder' : t.all_healthy}</div>
+        <div class="stat-meta">${metrics.low_stock_count > 0 ? 'Sizes requiring reorder' : 'All inventory healthy'}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">${t.pending_dealer}</div>
+        <div class="stat-label">${t.pending_dealer_orders}</div>
         <div class="stat-value" style="color: var(--amber);">${metrics.pending_dealer_orders}</div>
         <div class="stat-meta">B2B orders awaiting action</div>
       </div>
+      ${(!state.isStaff || (state.business && state.business.role !== 'CASHIER')) ? `
       <div class="stat-card">
-        <div class="stat-label">Total Revenue</div>
+        <div class="stat-label">${t.total_revenue}</div>
         <div class="stat-value">₹${metrics.total_revenue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
         <div class="stat-meta">Authoritative posted invoices</div>
       </div>
+      ` : ''}
     </div>
 
     <!-- Quick Actions Banner -->
@@ -649,50 +741,69 @@ async function renderInventory() {
         <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">Garment Inventory & Warehouse Stock</h2>
         <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • Authoritative size/color matrix.</p>
       </div>
-      <button class="btn btn-primary" onclick="openAddProductModal()">+ Add New Garment</button>
+      ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
+        <button class="btn btn-primary" onclick="openAddProductModal()">+ Add New Garment</button>
+      ` : ''}
     </div>
 
     <div class="panel">
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Fabric</th>
-              <th>SKU</th>
-              <th>Size</th>
-              <th>Color</th>
-              <th>Rack Location</th>
-              <th>On-Hand</th>
-              <th>Reserved</th>
-              <th>Available</th>
-              <th>Status</th>
-              <th>Adjust</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map(it => `
+      ${items.length === 0 ? `
+        <div style="text-align: center; padding: 48px 16px;">
+          <div style="font-size: 38px; margin-bottom: 10px;">👗</div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">Garment Catalog is Empty</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
+            Add your first garment product with size/color variants to start tracking on-hand stock and billing on the POS.
+          </p>
+          ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
+            <button class="btn btn-primary" onclick="openAddProductModal()">+ Add New Garment</button>
+          ` : ''}
+        </div>
+      ` : `
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
               <tr>
-                <td><b>${it.product_name}</b></td>
-                <td>${it.fabric || 'Textile'}</td>
-                <td><code>${it.sku}</code></td>
-                <td><span class="badge badge-neutral">${it.size}</span></td>
-                <td>${it.color}</td>
-                <td>${it.rack_location}</td>
-                <td><b>${it.on_hand}</b></td>
-                <td style="color: var(--amber);">${it.reserved}</td>
-                <td><b style="color: ${it.available <= 0 ? 'var(--coral)' : 'var(--teal)'}; font-size: 14px;">${it.available}</b></td>
-                <td>
-                  ${it.is_out_of_stock ? '<span class="badge badge-danger">Out of Stock</span>' : (it.is_low_stock ? '<span class="badge badge-warning">Low Stock</span>' : '<span class="badge badge-success">Healthy</span>')}
-                </td>
-                <td>
-                  <button class="btn btn-sm btn-secondary" onclick="promptAdjustStock(${it.variant_id})">Adjust</button>
-                </td>
+                <th>Product Name</th>
+                <th>Fabric</th>
+                <th>SKU</th>
+                <th>Size</th>
+                <th>Color</th>
+                <th>Rack Location</th>
+                <th>On-Hand</th>
+                <th>Reserved</th>
+                <th>Available</th>
+                <th>Status</th>
+                <th>Adjust</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              ${items.map(it => `
+                <tr>
+                  <td><b>${it.product_name}</b></td>
+                  <td>${it.fabric || 'Textile'}</td>
+                  <td><code>${it.sku}</code></td>
+                  <td><span class="badge badge-neutral">${it.size}</span></td>
+                  <td>${it.color}</td>
+                  <td>${it.rack_location}</td>
+                  <td><b>${it.on_hand}</b></td>
+                  <td style="color: var(--amber);">${it.reserved}</td>
+                  <td><b style="color: ${it.available <= 0 ? 'var(--coral)' : 'var(--teal)'}; font-size: 14px;">${it.available}</b></td>
+                  <td>
+                    ${it.is_out_of_stock ? '<span class="badge badge-danger">Out of Stock</span>' : (it.is_low_stock ? '<span class="badge badge-warning">Low Stock</span>' : '<span class="badge badge-success">Healthy</span>')}
+                  </td>
+                  <td>
+                    ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
+                      <button class="btn btn-sm btn-secondary" onclick="promptAdjustStock(${it.variant_id})">Adjust</button>
+                    ` : `
+                      <span style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">View Only</span>
+                    `}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
     </div>
   `;
 }
@@ -934,41 +1045,56 @@ async function renderInvoices() {
     </div>
 
     <div class="panel">
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Invoice Number</th>
-              <th>Date</th>
-              <th>Customer</th>
-              <th>Theme</th>
-              <th>Total Amount</th>
-              <th>Paid</th>
-              <th>Payment Mode</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${invoices.map(inv => `
+      ${invoices.length === 0 ? `
+        <div style="text-align: center; padding: 48px 16px;">
+          <div style="font-size: 38px; margin-bottom: 10px;">🧾</div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">No Invoices Posted Yet</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
+            Invoices are immutable business records. Complete your first garment sale on the POS Till to generate a GST invoice with instant PDF download.
+          </p>
+          <button class="btn btn-primary" onclick="switchTab('pos')">Open POS Billing Till ➔</button>
+        </div>
+      ` : `
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
               <tr>
-                <td><b>${inv.invoice_number}</b></td>
-                <td>${inv.date}</td>
-                <td>${inv.customer_name}</td>
-                <td><span class="badge badge-neutral">${inv.invoice_theme}</span></td>
-                <td><b>₹${inv.total_amount.toFixed(2)}</b></td>
-                <td style="color: var(--teal);">₹${inv.paid_amount.toFixed(2)}</td>
-                <td>${inv.payment_mode}</td>
-                <td><span class="badge badge-success">${inv.payment_status}</span></td>
-                <td>
-                  <button onclick="openInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
-                  <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
-                </td>
+                <th>Invoice Number</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Theme</th>
+                <th>Total Amount</th>
+                <th>Paid</th>
+                <th>Payment Mode</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              ${invoices.map(inv => `
+                <tr>
+                  <td><b>${inv.invoice_number}</b></td>
+                  <td>${inv.date}</td>
+                  <td>${inv.customer_name}</td>
+                  <td><span class="badge badge-neutral">${inv.invoice_theme}</span></td>
+                  <td><b>₹${Number(inv.total_amount).toFixed(2)}</b></td>
+                  <td style="color: var(--teal);">₹${Number(inv.paid_amount).toFixed(2)}</td>
+                  <td>${inv.payment_mode}</td>
+                  <td>
+                    ${inv.payment_status === 'VOID' || inv.payment_status === 'REVERSED' 
+                      ? '<span class="badge badge-danger">VOID / REVERSED</span>' 
+                      : `<span class="badge badge-success">${inv.payment_status}</span>`}
+                  </td>
+                  <td>
+                    <button onclick="openInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
+                    <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
     </div>
   `;
 }
@@ -1683,7 +1809,7 @@ function switchTab(tab) {
 function changeLanguage(lang) {
   state.lang = lang;
   localStorage.setItem("vastrenix_lang", lang);
-  renderCurrentTab();
+  renderApp();
 }
 
 function renderCurrentTab() {
@@ -1951,6 +2077,7 @@ async function renderApp() {
   }
 
   // Authenticated Application Shell
+  const t = i18n[state.lang] || i18n.en;
   root.innerHTML = `
     <div class="app-layout">
       <!-- Sidebar -->
@@ -1965,7 +2092,7 @@ async function renderApp() {
 
         <!-- Prominent Store & Staff Identity Card -->
         <div style="margin: 12px; padding: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-sm);">
-          <div style="font-size: 10px; color: #9FB0BC; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Current Store</div>
+          <div style="font-size: 10px; color: #9FB0BC; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">${t.current_store}</div>
           <div style="font-size: 13.5px; font-weight: 800; color: white; margin: 2px 0;">${state.storeName || state.business.name}</div>
           <div style="font-size: 11px; color: var(--teal); font-weight: 600;">
             ${state.isStaff ? `Staff: ${state.user.full_name} (${state.business.role})` : `Owner / Store Admin`}
@@ -1976,49 +2103,51 @@ async function renderApp() {
           <li class="nav-item">
             <a class="nav-link active" data-tab="dashboard" onclick="switchTab('dashboard')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-              Dashboard
+              ${t.dashboard}
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link" data-tab="inventory" onclick="switchTab('inventory')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              Inventory & Catalog
+              ${t.inventory}
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link" data-tab="pos" onclick="switchTab('pos')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-              POS Billing
+              ${t.pos}
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link" data-tab="invoices" onclick="switchTab('invoices')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              Invoices & Themes
+              ${t.invoices}
             </a>
           </li>
+          ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
           <li class="nav-item">
             <a class="nav-link" data-tab="dealers" onclick="switchTab('dealers')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-              Dealer B2B Network
+              ${t.dealers}
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link" data-tab="expenses" onclick="switchTab('expenses')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              Store Expenses
+              ${t.expenses}
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link" data-tab="users" onclick="switchTab('users')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-              Users & Staff
+              ${t.team}
             </a>
           </li>
+          ` : ''}
           <li class="nav-item">
             <a class="nav-link" data-tab="flowcharts" onclick="switchTab('flowcharts')">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              Flowcharts & Guide
+              ${t.flowcharts}
             </a>
           </li>
         </ul>
@@ -2028,7 +2157,7 @@ async function renderApp() {
             <div class="user-info-name">${state.user.full_name}</div>
             <div class="user-info-role">${state.business.role || 'OWNER'}</div>
           </div>
-          <button style="background: none; border: none; color: #9FB0BC; cursor: pointer; font-size: 11px;" onclick="logout()">Logout</button>
+          <button style="background: none; border: none; color: #9FB0BC; cursor: pointer; font-size: 11px;" onclick="logout()">${t.logout}</button>
         </div>
       </aside>
 
@@ -2050,7 +2179,7 @@ async function renderApp() {
             ` : `
               <div class="branch-pill">
                 <span style="width: 7px; height: 7px; background: var(--teal); border-radius: 50%;"></span>
-                Flagship Store
+                ${t.flagship_store}
               </div>
             `}
           </div>
@@ -2240,40 +2369,42 @@ async function renderApp() {
       <div class="mobile-drawer-nav">
         <a class="mobile-drawer-link active" data-tab="dashboard" onclick="drawerNav('dashboard')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-          Dashboard
+          ${t.dashboard}
         </a>
         <a class="mobile-drawer-link" data-tab="inventory" onclick="drawerNav('inventory')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-          Inventory & Catalog
+          ${t.inventory}
         </a>
         <a class="mobile-drawer-link" data-tab="pos" onclick="drawerNav('pos')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          POS Billing Till
+          ${t.pos}
         </a>
         <a class="mobile-drawer-link" data-tab="invoices" onclick="drawerNav('invoices')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Invoices & Themes
+          ${t.invoices}
         </a>
+        ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
         <a class="mobile-drawer-link" data-tab="expenses" onclick="drawerNav('expenses')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          Store Expenses
+          ${t.expenses}
         </a>
         <a class="mobile-drawer-link" data-tab="dealers" onclick="drawerNav('dealers')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-          Dealer B2B Network
+          ${t.dealers}
         </a>
         <a class="mobile-drawer-link" data-tab="users" onclick="drawerNav('users')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-          Users & Staff Management
+          ${t.team}
         </a>
+        ` : ''}
         <a class="mobile-drawer-link" data-tab="flowcharts" onclick="drawerNav('flowcharts')">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          System Architecture Flowcharts
+          ${t.flowcharts}
         </a>
       </div>
 
       <div style="padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: auto;">
-        <button onclick="logout()" class="btn btn-secondary" style="width: 100%; border-color: rgba(255,255,255,0.2); color: #FAF8F3;">Sign Out</button>
+        <button onclick="logout()" class="btn btn-secondary" style="width: 100%; border-color: rgba(255,255,255,0.2); color: #FAF8F3;">${t.logout}</button>
       </div>
     </aside>
 
@@ -2281,24 +2412,31 @@ async function renderApp() {
     <nav class="mobile-bottom-nav">
       <a class="mobile-nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-        <span>Home</span>
+        <span>${t.dashboard}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="inventory" onclick="switchTab('inventory')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-        <span>Stock</span>
+        <span>${t.inventory}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="pos" onclick="switchTab('pos')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-        <span>POS Till</span>
+        <span>${t.pos}</span>
       </a>
+      ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
       <a class="mobile-nav-btn" data-tab="expenses" onclick="switchTab('expenses')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <span>Expenses</span>
+        <span>${t.expenses}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="users" onclick="switchTab('users')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        <span>Team</span>
+        <span>${t.team}</span>
       </a>
+      ` : `
+      <a class="mobile-nav-btn" data-tab="invoices" onclick="switchTab('invoices')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span>${t.invoices}</span>
+      </a>
+      `}
     </nav>
   `;
 
