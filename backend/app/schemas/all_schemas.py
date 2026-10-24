@@ -113,6 +113,7 @@ class InvoiceItemInputSchema(BaseModel):
     tax_rate: Decimal = Decimal("5.00")
 
 class POSSaleCreateSchema(BaseModel):
+    idempotency_key: Optional[str] = None
     customer_id: Optional[int] = None
     customer_name: Optional[str] = "Walk-in Customer"
     customer_phone: Optional[str] = None

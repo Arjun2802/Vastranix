@@ -5,11 +5,14 @@ from backend.app.models.product import ProductVariant, Product
 from backend.app.models.notification import Notification
 from typing import Optional, List, Dict
 
-def get_or_create_inventory_level(db: Session, variant_id: int, branch_id: int) -> InventoryLevel:
-    level = db.query(InventoryLevel).filter(
+def get_or_create_inventory_level(db: Session, variant_id: int, branch_id: int, for_update: bool = False) -> InventoryLevel:
+    query = db.query(InventoryLevel).filter(
         InventoryLevel.variant_id == variant_id,
         InventoryLevel.branch_id == branch_id
-    ).first()
+    )
+    if for_update:
+        query = query.with_for_update()
+    level = query.first()
     if not level:
         level = InventoryLevel(
             variant_id=variant_id,
@@ -34,9 +37,10 @@ def deduct_stock_for_sale(
 ) -> InventoryLevel:
     """
     Deducts available stock for a direct POS retail or wholesale sale.
+    Uses row-level locking (with_for_update) to prevent overselling on the last unit.
     Raises 400 if insufficient available quantity.
     """
-    level = get_or_create_inventory_level(db, variant_id, branch_id)
+    level = get_or_create_inventory_level(db, variant_id, branch_id, for_update=True)
     if level.available < quantity:
         variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
         sku = variant.sku if variant else f"Variant #{variant_id}"
@@ -79,7 +83,7 @@ def reserve_stock_for_dealer_order(
     """
     Reserves stock for B2B dealer order acceptance.
     """
-    level = get_or_create_inventory_level(db, variant_id, branch_id)
+    level = get_or_create_inventory_level(db, variant_id, branch_id, for_update=True)
     if level.available < quantity:
         variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
         sku = variant.sku if variant else f"Variant #{variant_id}"

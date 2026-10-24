@@ -831,24 +831,82 @@ async function promptAdjustStock(variantId) {
 // Render POS Billing Terminal
 async function renderPOS() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `<div style="padding: 20px;">Initializing POS terminal...</div>`;
+  container.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--navy);"><div class="spinner"></div><div style="margin-top: 12px; font-weight: 600;">Connecting to counter terminal & cash register...</div></div>`;
+
+  // 1. Shift check: if no open shift for this cashier, prompt for opening float
+  const shiftRes = await api("/finance/shifts/current");
+  const hasShift = shiftRes && shiftRes.has_active_shift;
+  state.currentShift = hasShift ? shiftRes.shift : null;
+
+  if (!hasShift) {
+    container.innerHTML = `
+      <div style="max-width: 540px; margin: 40px auto; background: #fff; border-radius: var(--radius-md); border: 1px solid var(--border); padding: 36px 30px; box-shadow: var(--shadow-md); text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #E8F4F0; color: var(--teal); font-size: 30px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
+          💼
+        </div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 8px;">Cash Register Shift Required</h2>
+        <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px;">
+          To begin processing retail sales with tamper-proof financial reconciliation, please count and enter the opening cash float in the drawer.
+        </p>
+
+        <form onsubmit="submitOpenShift(event)" style="text-align: left;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" style="font-weight: 700;">Opening Cash Float (₹)</label>
+            <input type="number" step="0.01" id="shift-open-float" class="form-input" required value="2000.00" placeholder="e.g. 2000.00" style="font-size: 16px; font-weight: 700;">
+            <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 4px;">Initial physical currency & coins placed into the store till.</small>
+          </div>
+          <div class="form-group" style="margin-bottom: 22px;">
+            <label class="form-label">Shift Notes / Register ID (Optional)</label>
+            <input type="text" id="shift-open-notes" class="form-input" placeholder="e.g. Morning Counter Shift #1">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 14.5px;">
+            Open Shift & Unlock Counter
+          </button>
+        </form>
+      </div>
+    `;
+    return;
+  }
+
   const prods = await api("/products/");
   if (!prods) return;
   state.products = prods;
 
+  const canDiscount = ["OWNER", "ADMIN", "BRANCH_MANAGER"].includes(state.business.role);
+
   container.innerHTML = `
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-      <div style="font-size: 13.5px; color: var(--navy);">
-        Store Counter: <b>${state.storeName || state.business.name}</b> • Cashier: <b>${state.user.full_name} (${state.business.role})</b>
+    <!-- Counter Header & Shift Pill -->
+    <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 13.5px; color: var(--navy); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span>Store Counter: <b>${state.storeName || state.business.name}</b></span>
+        <span>•</span>
+        <span>Cashier: <b>${state.user.full_name} (${state.business.role})</b></span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="background: #E8F4F0; border: 1px solid var(--teal-light); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--teal); font-weight: 700; display: flex; align-items: center; gap: 6px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--teal); display: inline-block;"></span>
+          Shift #${state.currentShift.id} Active • Float: ₹${Number(state.currentShift.opening_cash).toFixed(2)}
+        </div>
+        <button class="btn btn-sm btn-outline" style="border-color: var(--coral); color: var(--coral); font-weight: 700;" onclick="openCloseShiftModal()">
+          Close Shift
+        </button>
       </div>
     </div>
 
     <div class="pos-container">
       <!-- Left: Catalog & Size Selector -->
       <div class="pos-catalog">
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-          <input type="text" id="pos-search" class="form-input" placeholder="Search garment name, fabric, or barcode..." oninput="filterPOSCatalog(this.value)">
+        <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+          <div style="position: relative; flex: 1;">
+            <input type="text" id="pos-search" class="form-input" placeholder="Scan barcode or search name/fabric (Press Enter or F2)..." oninput="filterPOSCatalog(this.value)" onkeydown="handlePOSSearchKeyDown(event)" style="padding-right: 40px;">
+            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; opacity: 0.5;">🔍</span>
+          </div>
+          <button class="btn btn-secondary" onclick="document.getElementById('pos-search').focus();" title="Keyboard Shortcut: F2">
+            F2 Focus
+          </button>
         </div>
+
         <div style="flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px;" id="pos-items-grid">
           ${renderPOSItems(state.products)}
         </div>
@@ -856,19 +914,28 @@ async function renderPOS() {
 
       <!-- Right: POS Cart & Checkout -->
       <div class="pos-cart">
-        <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 15px; font-weight: 700; color: var(--navy);">Current Sale Cart</h3>
-          <button class="btn btn-sm btn-secondary" onclick="clearCart()">Clear</button>
+        <div style="padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 15px; font-weight: 700; color: var(--navy); margin: 0;">Sale Cart</h3>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-secondary" onclick="clearCart()" title="Keyboard Shortcut: F8">Clear (F8)</button>
+          </div>
         </div>
 
         <div class="cart-items" id="cart-items-list">
           ${renderCartItems()}
         </div>
 
-        <div class="cart-summary">
+        <div class="cart-summary" style="padding: 16px 18px;">
+          <!-- Customer info -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+            <input type="text" id="pos-cust-name" class="form-input" placeholder="Customer Name (optional)" style="font-size: 12px; padding: 6px 10px;">
+            <input type="text" id="pos-cust-phone" class="form-input" placeholder="Mobile No. (optional)" style="font-size: 12px; padding: 6px 10px;">
+          </div>
+
+          <!-- Theme selector -->
           <div class="form-group" style="margin-bottom: 10px;">
-            <label class="form-label">Invoice Theme (6 Configurable Themes)</label>
-            <select id="pos-theme-select" class="form-select">
+            <label class="form-label" style="font-size: 11.5px; font-weight: 700;">Invoice Theme (6 Configurable Themes)</label>
+            <select id="pos-theme-select" class="form-select" style="font-size: 12.5px;">
               <option value="CLASSIC_GST">1. Classic GST (HSN/Tax breakdown)</option>
               <option value="MODERN_MINIMAL">2. Modern Minimal (Editorial typography)</option>
               <option value="PREMIUM_BOUTIQUE" selected>3. Premium Boutique (Luxury Atelier)</option>
@@ -878,28 +945,121 @@ async function renderPOS() {
             </select>
           </div>
 
+          <!-- Payment Mode -->
           <div class="form-group" style="margin-bottom: 10px;">
-            <label class="form-label">Payment Mode</label>
-            <select id="pos-payment-mode" class="form-select">
+            <label class="form-label" style="font-size: 11.5px; font-weight: 700;">Payment Mode</label>
+            <select id="pos-payment-mode" class="form-select" style="font-size: 12.5px;" onchange="onPaymentModeChange(this.value)">
               <option value="UPI">UPI (QR Scan / Instant)</option>
-              <option value="CASH">Cash</option>
+              <option value="CASH">Cash (Drawer Till)</option>
               <option value="CARD">Debit / Credit Card</option>
               <option value="SPLIT">Split Payment</option>
+              <option value="CREDIT">Store Credit / Khata</option>
             </select>
           </div>
 
-          <div class="cart-row"><span>Subtotal:</span><span id="pos-subtotal">₹0.00</span></div>
-          <div class="cart-row"><span>GST (5%):</span><span id="pos-tax">₹0.00</span></div>
-          <div class="cart-total-row"><span>Total:</span><span id="pos-total">₹0.00</span></div>
+          <!-- UPI Verification Section -->
+          <div id="pos-upi-box" style="background: #F0F9F8; border: 1px solid var(--teal-light); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11.5px; font-weight: 700; color: var(--teal); text-transform: uppercase;">UPI Instant Pay</span>
+              <span id="pos-upi-amount-display" style="font-size: 13px; font-weight: 800; color: var(--navy);">₹0.00</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+              UPI VPA: <b>${(state.business.name || 'vastrenix').toLowerCase().replace(/[^a-z0-9]/g, '')}@upi</b>
+            </div>
+            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; font-weight: 600; color: var(--navy); cursor: pointer; user-select: none;">
+              <input type="checkbox" id="pos-upi-verified" style="margin-top: 2px;">
+              <span>Mark as verified (Payment received on Soundbox / App)</span>
+            </label>
+          </div>
 
-          <button class="btn btn-primary" style="width: 100%; margin-top: 14px; padding: 12px;" onclick="completePOSSale()">
-            Complete Sale & Generate Invoice
+          <!-- Cart Totals & Discount -->
+          <div class="cart-row">
+            <span>Subtotal:</span>
+            <span id="pos-subtotal">₹0.00</span>
+          </div>
+
+          <div class="cart-row" style="align-items: center;">
+            <span style="display: flex; align-items: center; gap: 4px;">
+              Discount:
+              ${canDiscount ? '' : '<small style="color: var(--text-muted);">(Locked)</small>'}
+            </span>
+            <div>
+              ${canDiscount ? `
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span style="font-size: 12px; color: var(--text-muted);">₹</span>
+                  <input type="number" step="0.01" min="0" id="pos-discount" class="form-input" value="0.00" style="width: 76px; padding: 3px 6px; font-size: 12px; text-align: right;" oninput="updateCartTotals()">
+                </div>
+              ` : `
+                <span id="pos-discount-display" style="color: var(--text-muted); font-size: 12px;">₹0.00</span>
+              `}
+            </div>
+          </div>
+
+          <div class="cart-row">
+            <span>GST (5%):</span>
+            <span id="pos-tax">₹0.00</span>
+          </div>
+
+          <div class="cart-total-row">
+            <span>Grand Total:</span>
+            <span id="pos-total" style="font-size: 18px; font-weight: 800; color: var(--navy);">₹0.00</span>
+          </div>
+
+          <button id="pos-complete-sale-btn" class="btn btn-primary" style="width: 100%; margin-top: 14px; padding: 13px; font-weight: 700; font-size: 14px;" onclick="completePOSSale()">
+            Complete Sale & Generate Invoice (F4)
           </button>
         </div>
       </div>
     </div>
   `;
   updateCartTotals();
+}
+
+function onPaymentModeChange(mode) {
+  const upiBox = document.getElementById("pos-upi-box");
+  if (upiBox) {
+    upiBox.style.display = (mode === "UPI") ? "block" : "none";
+  }
+}
+
+function handlePOSSearchKeyDown(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const query = e.target.value.trim().toLowerCase();
+    if (!query) return;
+
+    // Direct exact match on SKU or Barcode
+    for (const p of state.products) {
+      for (const v of p.variants) {
+        if (v.sku.toLowerCase() === query || (v.barcode && v.barcode.toLowerCase() === query)) {
+          if (v.available <= 0) {
+            alert(`SKU ${v.sku} (${p.name}) is out of stock!`);
+            return;
+          }
+          addToCart(v.id, p.name, v.size, v.color, v.retail_price, v.sku);
+          e.target.value = "";
+          filterPOSCatalog("");
+          return;
+        }
+      }
+    }
+
+    // Partial search match if only one product/variant matches
+    const matches = [];
+    state.products.forEach(p => {
+      p.variants.forEach(v => {
+        if (v.sku.toLowerCase().includes(query) || p.name.toLowerCase().includes(query)) {
+          matches.push({ p, v });
+        }
+      });
+    });
+    if (matches.length === 1 && matches[0].v.available > 0) {
+      const { p, v } = matches[0];
+      addToCart(v.id, p.name, v.size, v.color, v.retail_price, v.sku);
+      e.target.value = "";
+      filterPOSCatalog("");
+    }
+  }
 }
 
 function renderPOSItems(products) {
@@ -945,20 +1105,35 @@ function addToCart(variantId, name, size, color, price, sku) {
 
 function renderCartItems() {
   if (state.cart.length === 0) {
-    return `<div style="text-align: center; color: var(--text-muted); padding: 40px 10px;">Cart is empty. Select garments from catalog to add.</div>`;
+    return `<div style="text-align: center; color: var(--text-muted); padding: 40px 10px; font-size: 13px;">Cart is empty. Scan barcodes or click '+ Add' from catalog.</div>`;
   }
   return state.cart.map((item, idx) => `
-    <div class="cart-item">
-      <div>
-        <div style="font-weight: 600; font-size: 13px;">${item.name}</div>
-        <div style="font-size: 11.5px; color: var(--text-muted);">${item.size} / ${item.color} • ₹${item.price.toFixed(2)}</div>
+    <div class="cart-item" style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+      <div style="flex: 1; padding-right: 8px;">
+        <div style="font-weight: 700; font-size: 13px; color: var(--navy);">${item.name}</div>
+        <div style="font-size: 11.5px; color: var(--text-muted);">${item.size} / ${item.color} • <b style="color: var(--navy);">₹${item.price.toFixed(2)}</b></div>
       </div>
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <input type="number" min="1" value="${item.quantity}" style="width: 48px; padding: 4px; border: 1px solid var(--border); text-align: center;" onchange="updateCartQty(${idx}, this.value)">
-        <button style="border: none; background: none; color: var(--coral); cursor: pointer; font-size: 16px;" onclick="removeFromCart(${idx})">&times;</button>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button type="button" style="width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, -1)">-</button>
+        <input type="number" min="1" value="${item.quantity}" style="width: 44px; height: 34px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-weight: 700; font-size: 13px;" onchange="updateCartQty(${idx}, this.value)">
+        <button type="button" style="width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, 1)">+</button>
+        <button type="button" style="width: 30px; height: 30px; border: none; background: none; color: var(--coral); cursor: pointer; font-size: 18px; margin-left: 2px;" onclick="removeFromCart(${idx})" title="Remove item">&times;</button>
       </div>
     </div>
   `).join('');
+}
+
+function stepCartQty(idx, delta) {
+  if (state.cart[idx]) {
+    const newQty = state.cart[idx].quantity + delta;
+    if (newQty <= 0) {
+      removeFromCart(idx);
+    } else {
+      state.cart[idx].quantity = newQty;
+      document.getElementById("cart-items-list").innerHTML = renderCartItems();
+      updateCartTotals();
+    }
+  }
 }
 
 function updateCartQty(idx, val) {
@@ -981,26 +1156,50 @@ function clearCart() {
 
 function updateCartTotals() {
   const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.05;
-  const total = subtotal + tax;
+  const discountInput = document.getElementById("pos-discount");
+  const discountVal = discountInput ? Math.max(0, parseFloat(discountInput.value) || 0) : 0;
+
+  const taxableAmount = Math.max(0, subtotal - discountVal);
+  const tax = taxableAmount * 0.05;
+  const total = taxableAmount + tax;
 
   const subEl = document.getElementById("pos-subtotal");
+  const discDisp = document.getElementById("pos-discount-display");
   const taxEl = document.getElementById("pos-tax");
   const totEl = document.getElementById("pos-total");
+  const upiEl = document.getElementById("pos-upi-amount-display");
 
   if (subEl) subEl.textContent = `₹${subtotal.toFixed(2)}`;
+  if (discDisp) discDisp.textContent = `-₹${discountVal.toFixed(2)}`;
   if (taxEl) taxEl.textContent = `₹${tax.toFixed(2)}`;
   if (totEl) totEl.textContent = `₹${total.toFixed(2)}`;
+  if (upiEl) upiEl.textContent = `₹${total.toFixed(2)}`;
 }
 
 async function completePOSSale() {
   if (state.cart.length === 0) return alert("Please add at least one item to the cart");
 
-  const theme = document.getElementById("pos-theme-select").value;
   const paymentMode = document.getElementById("pos-payment-mode").value;
+  if (paymentMode === "UPI") {
+    const verified = document.getElementById("pos-upi-verified");
+    if (!verified || !verified.checked) {
+      return alert("Manual UPI Verification Required: Please verify payment received on the Soundbox or Bank App and check the verification box before issuing invoice.");
+    }
+  }
+
+  const theme = document.getElementById("pos-theme-select").value;
+  const discountInput = document.getElementById("pos-discount");
+  const discountVal = discountInput ? Math.max(0, parseFloat(discountInput.value) || 0) : 0;
+  const customerName = document.getElementById("pos-cust-name") ? document.getElementById("pos-cust-name").value.trim() : "Walk-in Retail Client";
+  const customerPhone = document.getElementById("pos-cust-phone") ? document.getElementById("pos-cust-phone").value.trim() : "";
+
+  // Unique client idempotency key to prevent double sales on double-tap or retries
+  const idempotencyKey = "POS-IDEMP-" + Date.now() + "-" + Math.random().toString(36).substring(2, 9);
 
   const payload = {
-    customer_name: "Counter Retail Client",
+    idempotency_key: idempotencyKey,
+    customer_name: customerName || "Walk-in Retail Client",
+    customer_phone: customerPhone || undefined,
     items: state.cart.map(c => ({
       variant_id: c.variantId,
       product_name: c.name,
@@ -1011,20 +1210,139 @@ async function completePOSSale() {
       unit_price: c.price,
       tax_rate: 5.0
     })),
+    discount_amount: discountVal,
     payment_mode: paymentMode,
     invoice_theme: theme
   };
 
-  const res = await api("/pos/sale", {
+  const btn = document.getElementById("pos-complete-sale-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Processing Sale...";
+  }
+
+  try {
+    const res = await api("/pos/sale", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload)
+    });
+
+    if (res && res.invoice_id) {
+      if (res.pdf_status === "FAILED") {
+        alert(`Invoice ${res.invoice_number} saved successfully, but background PDF generation failed or timed out.\nYou can click 'Retry PDF' on the invoice history tab.`);
+      } else {
+        alert(`Success: Invoice ${res.invoice_number} created!\nOpening PDF download in chosen theme (${theme})...`);
+        openInvoicePdf(res.invoice_id, res.invoice_number);
+      }
+      clearCart();
+      switchTab("invoices");
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Complete Sale & Generate Invoice (F4)";
+    }
+  }
+}
+
+async function submitOpenShift(e) {
+  e.preventDefault();
+  const floatVal = parseFloat(document.getElementById("shift-open-float").value) || 0;
+  const notes = document.getElementById("shift-open-notes").value;
+
+  const res = await api("/finance/shifts/open", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      opening_cash: floatVal,
+      notes: notes || undefined
+    })
   });
 
-  if (res && res.invoice_id) {
-    alert(`Success: Invoice ${res.invoice_number} created!\nOpening PDF download in chosen theme (${theme})...`);
-    openInvoicePdf(res.invoice_id, res.invoice_number);
-    clearCart();
-    switchTab("invoices");
+  if (res && res.shift_id) {
+    alert(`Register Shift #${res.shift_id} opened successfully with ₹${Number(res.opening_cash).toFixed(2)} float!`);
+    renderPOS();
+  }
+}
+
+async function openCloseShiftModal() {
+  const shiftRes = await api("/finance/shifts/current");
+  if (!shiftRes || !shiftRes.has_active_shift) {
+    return alert("No active shift found to close.");
+  }
+  const s = shiftRes.shift;
+  state.currentShift = s;
+
+  document.getElementById("close-shift-opening").textContent = `₹${Number(s.opening_cash).toFixed(2)}`;
+  document.getElementById("close-shift-sales").textContent = `+₹${Number(s.cash_sales_collected).toFixed(2)}`;
+  document.getElementById("close-shift-expenses").textContent = `-₹${Number(s.cash_payouts_expenses || 0).toFixed(2)}`;
+  document.getElementById("close-shift-expected").textContent = `₹${Number(s.expected_closing_cash).toFixed(2)}`;
+
+  const actInput = document.getElementById("close-shift-actual");
+  actInput.value = "";
+  document.getElementById("close-shift-diff-box").style.display = "none";
+  document.getElementById("close-shift-notes").value = "";
+
+  document.getElementById("modal-close-shift").classList.add("active");
+  setTimeout(() => actInput.focus(), 150);
+}
+
+function recalcShiftDifference() {
+  if (!state.currentShift) return;
+  const expected = Number(state.currentShift.expected_closing_cash);
+  const actualStr = document.getElementById("close-shift-actual").value;
+  const diffBox = document.getElementById("close-shift-diff-box");
+  if (!actualStr) {
+    diffBox.style.display = "none";
+    return;
+  }
+  const actual = parseFloat(actualStr) || 0;
+  const diff = actual - expected;
+
+  diffBox.style.display = "block";
+  if (Math.abs(diff) < 0.01) {
+    diffBox.style.background = "#E8F4F0";
+    diffBox.style.color = "var(--teal)";
+    diffBox.innerHTML = `✓ EXACT MATCH: Counted ₹${actual.toFixed(2)} matches Expected ₹${expected.toFixed(2)}`;
+  } else if (diff > 0) {
+    diffBox.style.background = "#FFF9ED";
+    diffBox.style.color = "var(--gold)";
+    diffBox.innerHTML = `⚠️ CASH OVERAGE / EXCESS: +₹${diff.toFixed(2)} over expected`;
+  } else {
+    diffBox.style.background = "#FDF0ED";
+    diffBox.style.color = "var(--coral)";
+    diffBox.innerHTML = `⚠️ CASH SHORTAGE: -₹${Math.abs(diff).toFixed(2)} below expected`;
+  }
+}
+
+async function submitCloseShift(e) {
+  e.preventDefault();
+  const actualVal = parseFloat(document.getElementById("close-shift-actual").value);
+  if (isNaN(actualVal)) return alert("Please enter the counted physical cash in drawer.");
+
+  const notes = document.getElementById("close-shift-notes").value;
+  const res = await api("/finance/shifts/close", {
+    method: "POST",
+    body: JSON.stringify({
+      actual_closing_cash: actualVal,
+      notes: notes || undefined
+    })
+  });
+
+  if (res && res.shift_id) {
+    closeModal("modal-close-shift");
+    alert(`Shift Closed & Reconciled!\nExpected: ₹${Number(res.expected_closing_cash).toFixed(2)}\nActual: ₹${Number(res.actual_closing_cash).toFixed(2)}\nReconciliation Status: ${res.reconciliation_status} (Difference: ₹${Number(res.difference).toFixed(2)})`);
+    state.currentShift = null;
+    renderPOS();
+  }
+}
+
+async function retryInvoicePdf(id, invoiceNumber) {
+  const res = await api(`/pos/invoices/${id}/retry-pdf`, { method: "POST" });
+  if (res && res.pdf_filename) {
+    alert(`PDF for ${invoiceNumber} generated successfully! Opening download...`);
+    openInvoicePdf(id, invoiceNumber);
+    renderInvoices();
   }
 }
 
@@ -1088,6 +1406,7 @@ async function renderInvoices() {
                   <td>
                     <button onclick="openInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
                     <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
+                    <button onclick="retryInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-outline" title="Re-render PDF">Retry</button>
                   </td>
                 </tr>
               `).join('')}
@@ -2346,6 +2665,53 @@ async function renderApp() {
       </div>
     </div>
 
+    <!-- Close & Reconcile Shift Modal -->
+    <div class="modal-overlay" id="modal-close-shift">
+      <div class="modal-card" style="max-width: 480px;">
+        <div class="modal-header">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Close & Reconcile Cash Shift</h3>
+          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-close-shift')">&times;</button>
+        </div>
+        <form class="modal-body" onsubmit="submitCloseShift(event)">
+          <div style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--text-muted);">Opening Cash Float:</span>
+              <b id="close-shift-opening">₹0.00</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--text-muted);">Total Cash Sales Collected:</span>
+              <b id="close-shift-sales" style="color: var(--teal);">+₹0.00</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--text-muted);">Cash Payouts / Expenses:</span>
+              <b id="close-shift-expenses" style="color: var(--coral);">-₹0.00</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 14px;">
+              <b>Expected Drawer Cash:</b>
+              <b id="close-shift-expected" style="color: var(--navy);">₹0.00</b>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-weight: 700;">Counted Physical Cash in Drawer (₹)</label>
+            <input type="number" step="0.01" id="close-shift-actual" class="form-input" required placeholder="Enter total counted notes & coins" oninput="recalcShiftDifference()" style="font-size: 16px; font-weight: 700;">
+          </div>
+
+          <div id="close-shift-diff-box" style="margin-bottom: 16px; padding: 10px; border-radius: var(--radius-sm); text-align: center; font-weight: 700; font-size: 13px; display: none;">
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">Closing Notes / Discrepancy Reason (Optional)</label>
+            <input type="text" id="close-shift-notes" class="form-input" placeholder="e.g. Verified by head cashier">
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-weight: 700;">
+            Reconcile & Close Shift
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- Mobile Navigation Drawer Overlay & Drawer -->
     <div class="mobile-drawer-overlay" id="mobile-drawer-overlay" onclick="closeMobileDrawer()"></div>
     <aside class="mobile-drawer" id="mobile-drawer">
@@ -2442,6 +2808,32 @@ async function renderApp() {
 
   renderCurrentTab();
 }
+
+window.addEventListener("keydown", (e) => {
+  // ESC closes any active modal
+  if (e.key === "Escape") {
+    const activeModal = document.querySelector(".modal-overlay.active");
+    if (activeModal) {
+      activeModal.classList.remove("active");
+      return;
+    }
+  }
+
+  // POS specific shortcuts when cashier is on the POS tab
+  if (state.currentTab === "pos") {
+    if (e.key === "F2") {
+      e.preventDefault();
+      const s = document.getElementById("pos-search");
+      if (s) { s.focus(); s.select(); }
+    } else if (e.key === "F4") {
+      e.preventDefault();
+      completePOSSale();
+    } else if (e.key === "F8") {
+      e.preventDefault();
+      clearCart();
+    }
+  }
+});
 
 window.addEventListener("DOMContentLoaded", () => {
   renderApp();

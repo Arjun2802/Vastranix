@@ -54,11 +54,15 @@
 - [x] Clean empty states for newly created stores with zero transactions and zero garments.
 
 ### Phase 5: POS & Cash Shift Reconciliation
-- [ ] Cashier shift open (opening float prompt) and close (counted vs expected reconciliation).
-- [ ] Database row-locking (`with_for_update`) to prevent concurrent double-sale of last garment unit.
-- [ ] Idempotency key protection on `/pos/sale`.
-- [ ] Manual UPI verification step before finalizing sale.
-- [ ] PDF auto-open and retry fallback.
+- [x] Cashier shift open (opening float prompt) and close (counted vs expected reconciliation including cash payouts/expenses subtraction).
+- [x] Live shift difference indicator displaying EXACT MATCH, CASH OVERAGE / EXCESS, or CASH SHORTAGE with discrepancy tracking.
+- [x] Database row-locking (`with_for_update`) to prevent concurrent double-sale of last garment unit.
+- [x] Idempotency key protection on `/pos/sale` (supports client header `Idempotency-Key` or payload `idempotency_key`, preventing duplicate sales and stock decrements on network retry).
+- [x] Manual UPI verification step with mandatory confirmation before completing sale.
+- [x] Multi-device friendly cart with +/- touch stepper controls and keyboard shortcuts (F2: search/barcode focus, F4: checkout, F8: clear cart, ESC: close modal).
+- [x] Hardware scanner / keyboard Enter barcode lookup with instant cart placement.
+- [x] Single database transaction POS sale with PDF auto-open and dedicated `/api/v1/pos/invoices/{id}/retry-pdf` endpoint on generation timeout/failure.
+- [x] Verified with automated test suite `backend/tests/test_pos_concurrency_and_shift.py` (shift open/close with petty cash expenses, idempotency key caching, row-locking overselling denial, and PDF retry).
 
 ### Phase 6: B2B Dealer Network Concurrency
 - [ ] Atomic stock reservation on Order Accept.

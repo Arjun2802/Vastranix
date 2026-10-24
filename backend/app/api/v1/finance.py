@@ -57,14 +57,22 @@ def get_current_shift(
     if not shift:
         return {"has_active_shift": False, "shift": None}
 
-    # Calculate expected cash = opening cash + total cash sales recorded by this cashier during this shift
+    # Calculate expected cash = opening cash + total cash sales - cash payouts/expenses
     cash_sales = db.query(Payment).filter(
         Payment.cashier_id == ctx.user.id,
         Payment.payment_mode == "CASH",
         Payment.created_at >= shift.opened_at
     ).all()
-    total_cash_sales = sum(p.amount for p in cash_sales)
-    expected_cash = shift.opening_cash + total_cash_sales
+    total_cash_sales = sum((Decimal(str(p.amount)) for p in cash_sales), Decimal("0.00"))
+
+    cash_expenses = db.query(BusinessExpense).filter(
+        BusinessExpense.branch_id == branch_id,
+        BusinessExpense.payment_mode == "CASH",
+        BusinessExpense.expense_date >= shift.opened_at
+    ).all()
+    total_cash_expenses = sum((Decimal(str(e.amount)) for e in cash_expenses), Decimal("0.00"))
+
+    expected_cash = shift.opening_cash + total_cash_sales - total_cash_expenses
 
     return {
         "has_active_shift": True,
@@ -73,6 +81,7 @@ def get_current_shift(
             "opened_at": shift.opened_at.strftime("%d-%b-%Y %H:%M"),
             "opening_cash": float(shift.opening_cash),
             "cash_sales_collected": float(total_cash_sales),
+            "cash_payouts_expenses": float(total_cash_expenses),
             "expected_closing_cash": float(expected_cash),
             "status": shift.status
         }
@@ -98,8 +107,16 @@ def close_cash_shift(
         Payment.payment_mode == "CASH",
         Payment.created_at >= shift.opened_at
     ).all()
-    total_cash_sales = sum(p.amount for p in cash_sales)
-    expected = shift.opening_cash + total_cash_sales
+    total_cash_sales = sum((Decimal(str(p.amount)) for p in cash_sales), Decimal("0.00"))
+
+    cash_expenses = db.query(BusinessExpense).filter(
+        BusinessExpense.branch_id == branch_id,
+        BusinessExpense.payment_mode == "CASH",
+        BusinessExpense.expense_date >= shift.opened_at
+    ).all()
+    total_cash_expenses = sum((Decimal(str(e.amount)) for e in cash_expenses), Decimal("0.00"))
+
+    expected = shift.opening_cash + total_cash_sales - total_cash_expenses
     diff = data.actual_closing_cash - expected
 
     shift.closed_at = datetime.now(timezone.utc)
@@ -115,10 +132,13 @@ def close_cash_shift(
     return {
         "message": "Cash shift closed and reconciled",
         "shift_id": shift.id,
+        "opening_cash": float(shift.opening_cash),
+        "cash_sales_collected": float(total_cash_sales),
+        "cash_payouts_expenses": float(total_cash_expenses),
         "expected_closing_cash": float(expected),
         "actual_closing_cash": float(shift.actual_closing_cash),
         "difference": float(diff),
-        "reconciliation_status": "EXACT" if diff == 0 else ("EXCESS" if diff > 0 else "SHORTAGE")
+        "reconciliation_status": "EXACT" if diff == Decimal("0.00") else ("EXCESS" if diff > Decimal("0.00") else "SHORTAGE")
     }
 
 @router.post("/expenses")

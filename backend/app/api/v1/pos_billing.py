@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Header
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -55,10 +55,35 @@ def list_customers(
 @router.post("/sale")
 def process_pos_sale(
     data: POSSaleCreateSchema,
+    idempotency_key_header: Optional[str] = Header(None, alias="Idempotency-Key"),
     ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "BRANCH_MANAGER", "CASHIER"])),
     db: Session = Depends(get_db)
 ):
     branch_id = ctx.branch.id if ctx.branch else 1
+    idempotency_key = data.idempotency_key or idempotency_key_header
+
+    # Check Idempotency Key to prevent duplicate invoices on network retry / double tap
+    if idempotency_key:
+        existing = db.query(Invoice).filter(
+            Invoice.business_id == ctx.business.id,
+            Invoice.idempotency_key == idempotency_key
+        ).first()
+        if existing:
+            return {
+                "message": "Invoice retrieved (idempotent duplicate request)",
+                "invoice_id": existing.id,
+                "invoice_number": existing.invoice_number,
+                "total_amount": float(existing.total_amount),
+                "paid_amount": float(existing.paid_amount),
+                "balance_due": float(existing.balance_due),
+                "payment_status": existing.payment_status,
+                "invoice_theme": existing.invoice_theme,
+                "pdf_status": "SUCCESS" if existing.pdf_filename else "FAILED",
+                "pdf_download_url": f"/api/v1/pos/invoices/{existing.id}/pdf",
+                "retry_pdf_url": f"/api/v1/pos/invoices/{existing.id}/retry-pdf",
+                "preview_url": f"/api/v1/pos/invoices/{existing.id}/preview",
+                "is_duplicate": True
+            }
     
     # 1. Resolve or create Customer
     customer = None
@@ -80,7 +105,7 @@ def process_pos_sale(
     count_today = db.query(Invoice).filter(Invoice.business_id == ctx.business.id).count() + 1
     inv_num = f"INV-{date_str}-{count_today:04d}"
 
-    # 3. Calculate Item totals, tax, and perform stock deduction
+    # 3. Calculate Item totals, tax, and perform stock deduction in single transaction with row locking
     subtotal = Decimal("0.00")
     tax_total = Decimal("0.00")
     invoice_items = []
@@ -114,7 +139,7 @@ def process_pos_sale(
         )
         invoice_items.append(inv_item)
 
-        # Deduct physical stock if variant_id provided
+        # Deduct physical stock if variant_id provided (uses with_for_update row locking)
         if item_data.variant_id:
             deduct_stock_for_sale(
                 db=db,
@@ -139,6 +164,7 @@ def process_pos_sale(
         business_id=ctx.business.id,
         branch_id=branch_id,
         customer_id=customer.id if customer else None,
+        idempotency_key=idempotency_key,
         invoice_number=inv_num,
         invoice_date=datetime.now(timezone.utc),
         subtotal=subtotal,
@@ -182,21 +208,25 @@ def process_pos_sale(
     db.commit()
     db.refresh(invoice)
 
-    # 6. Render PDF in chosen theme
+    # 6. Render PDF in chosen theme (Safe execution: if PDF render fails, sale is already safely committed)
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    pdf_filename = render_invoice_pdf(
-        invoice=invoice,
-        business=ctx.business,
-        branch=branch,
-        customer=customer,
-        items=invoice.items,
-        theme=theme
-    )
-    invoice.pdf_filename = pdf_filename
-    db.commit()
+    pdf_status = "SUCCESS"
+    try:
+        pdf_filename = render_invoice_pdf(
+            invoice=invoice,
+            business=ctx.business,
+            branch=branch,
+            customer=customer,
+            items=invoice.items,
+            theme=theme
+        )
+        invoice.pdf_filename = pdf_filename
+        db.commit()
+    except Exception as e:
+        pdf_status = "FAILED"
 
     return {
-        "message": "Invoice posted successfully",
+        "message": "Invoice posted successfully" if pdf_status == "SUCCESS" else "Invoice posted successfully (PDF generation failed, use Retry PDF)",
         "invoice_id": invoice.id,
         "invoice_number": invoice.invoice_number,
         "total_amount": float(invoice.total_amount),
@@ -204,9 +234,42 @@ def process_pos_sale(
         "balance_due": float(invoice.balance_due),
         "payment_status": invoice.payment_status,
         "invoice_theme": invoice.invoice_theme,
+        "pdf_status": pdf_status,
         "pdf_download_url": f"/api/v1/pos/invoices/{invoice.id}/pdf",
+        "retry_pdf_url": f"/api/v1/pos/invoices/{invoice.id}/retry-pdf",
         "preview_url": f"/api/v1/pos/invoices/{invoice.id}/preview"
     }
+
+@router.post("/invoices/{id}/retry-pdf")
+def retry_invoice_pdf(
+    id: int,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    invoice = db.query(Invoice).filter(Invoice.id == id, Invoice.business_id == ctx.business.id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    branch = db.query(Branch).filter(Branch.id == invoice.branch_id).first()
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first() if invoice.customer_id else None
+    try:
+        pdf_filename = render_invoice_pdf(
+            invoice=invoice,
+            business=ctx.business,
+            branch=branch,
+            customer=customer,
+            items=invoice.items,
+            theme=invoice.invoice_theme
+        )
+        invoice.pdf_filename = pdf_filename
+        db.commit()
+        return {
+            "message": "PDF generated successfully",
+            "pdf_filename": pdf_filename,
+            "pdf_download_url": f"/api/v1/pos/invoices/{invoice.id}/pdf"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
 
 @router.get("/invoices")
 def list_invoices(

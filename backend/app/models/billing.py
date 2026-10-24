@@ -44,6 +44,7 @@ class Invoice(Base):
     status = Column(String(50), default="POSTED") # POSTED, VOIDED, CANCELLED
     
     cashier_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    idempotency_key = Column(String(100), unique=True, index=True, nullable=True)
     pdf_filename = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
     terms_conditions = Column(Text, nullable=True)
