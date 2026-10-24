@@ -8,8 +8,8 @@
 
 - [x] **Phase 1 — Diagnose the APK (Find Root Causes):** COMPLETE
 - [x] **Phase 2 — Android Compatibility & Multi-Device Builds:** COMPLETE
-- [ ] **Phase 3 — Auth & Staff Approval Flow:** READY TO START
-- [ ] **Phase 4 — App Shell & Screens (Adaptive Layouts, Multi-Language):** NOT STARTED
+- [x] **Phase 3 — Auth & Staff Approval Flow:** COMPLETE
+- [ ] **Phase 4 — App Shell & Screens (Adaptive Layouts, Multi-Language):** READY TO START
 - [ ] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** NOT STARTED
 - [ ] **Phase 6 — B2B Dealer Lifecycle & Concurrency Guards:** NOT STARTED
 - [ ] **Phase 7 — Expenses, Team Screen, Invoices & Offline Queue:** NOT STARTED
@@ -38,10 +38,12 @@
 - [x] Configurable Server URL setting with UI toggle (`#modal-server-settings` with health check on Auth screen).
 
 ### Phase 3: Auth & Staff Approval Flow
-- [ ] Verify auth state transitions: Sign In, Owner Signup, Staff Signup.
-- [ ] Verify HTTP 403 response on unapproved staff login with message.
-- [ ] Verify Store Admin pending approval queue & 1-click Approve/Reject.
-- [ ] Verify backend tenant isolation and cross-store access denial tests.
+- [x] Verify auth state transitions: Sign In, Owner Signup, Staff Signup.
+- [x] Verify HTTP 403 response on unapproved staff login with message.
+- [x] Verify Store Admin pending approval queue & 1-click Approve/Reject.
+- [x] Verify backend tenant isolation and cross-store access denial tests.
+- [x] Implement token refresh endpoint (`/api/v1/auth/refresh`), role update, and staff deactivation (`/toggle-status`).
+- [x] Pass automated test suite for entire auth, approval, cross-tenant isolation, and session revocation matrix (`test_auth_and_approval_extended.py`).
 
 ### Phase 4: App Shell & Responsive Screens
 - [ ] Responsive navigation: Bottom nav on mobile (< 960px), Navigation rail / luxury sidebar on tablet & desktop.

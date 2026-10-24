@@ -293,6 +293,62 @@ def reject_staff(
     db.commit()
     return {"message": "Staff membership request rejected and removed."}
 
+@router.post("/refresh")
+def refresh_token(current_user: User = Depends(get_current_user)):
+    """Refreshes an active session token."""
+    new_token = create_access_token(data={"sub": str(current_user.id)})
+    return {
+        "access_token": new_token,
+        "token_type": "bearer",
+        "user_id": current_user.id
+    }
+
+@router.post("/staff/{membership_id}/toggle-status")
+def toggle_staff_status(
+    membership_id: int,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN"])),
+    db: Session = Depends(get_db)
+):
+    """Store Admin: Activates or deactivates a staff member."""
+    mem = db.query(UserMembership).filter(
+        UserMembership.id == membership_id,
+        UserMembership.business_id == ctx.business.id
+    ).first()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Staff membership not found")
+    if mem.role == UserRole.OWNER.value:
+        raise HTTPException(status_code=400, detail="Cannot deactivate the primary store owner")
+
+    mem.is_active = not mem.is_active
+    db.commit()
+    status_str = "activated" if mem.is_active else "deactivated"
+    return {"message": f"Staff member successfully {status_str}", "membership_id": mem.id, "is_active": mem.is_active}
+
+@router.post("/staff/{membership_id}/role")
+def update_staff_role(
+    membership_id: int,
+    data: dict,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN"])),
+    db: Session = Depends(get_db)
+):
+    """Store Admin: Changes a staff member's role."""
+    role = data.get("role")
+    if not role:
+        raise HTTPException(status_code=400, detail="Role is required")
+
+    mem = db.query(UserMembership).filter(
+        UserMembership.id == membership_id,
+        UserMembership.business_id == ctx.business.id
+    ).first()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Staff membership not found")
+    if mem.role == UserRole.OWNER.value and role != UserRole.OWNER.value:
+        raise HTTPException(status_code=400, detail="Cannot change role of primary store owner")
+
+    mem.role = role
+    db.commit()
+    return {"message": f"Staff role updated to {role}", "membership_id": mem.id, "role": mem.role}
+
 @router.get("/me")
 def get_current_user_profile(ctx: TenantContext = Depends(get_tenant_context)):
     return {
