@@ -59,7 +59,7 @@ def index_view():
 @app.get("/health")
 def health_check():
     return {
-        "status": "healthy",
+        "status": "ok",
         "platform": settings.PROJECT_NAME,
         "tagline": settings.PROJECT_TAGLINE,
         "database": "connected"
