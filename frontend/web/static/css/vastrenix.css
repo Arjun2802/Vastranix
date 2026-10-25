@@ -827,3 +827,349 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   VASTRENIX BOUTIQUE ENERGY & POLISH EXTENSIONS (UI-FEEL.md)
+   ========================================================================== */
+
+/* 1. Tactile Cotton-Press & Depth */
+.btn {
+  transition: transform 0.14s ease-out, box-shadow 0.14s ease-out, background-color 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 1px 3px rgba(16, 30, 43, 0.06);
+}
+
+.stat-card {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(16, 30, 43, 0.08);
+}
+
+.panel {
+  transition: box-shadow 0.2s ease;
+}
+
+/* 2. Staggered Cascading Entry */
+@keyframes staggerFadeRise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-1 { animation: staggerFadeRise 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.03s both; }
+.stagger-2 { animation: staggerFadeRise 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.09s both; }
+.stagger-3 { animation: staggerFadeRise 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+.stagger-4 { animation: staggerFadeRise 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.21s both; }
+
+/* 3. Low-Stock Soft Breathing Pulse */
+@keyframes softAmberPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.68;
+    transform: scale(0.97);
+  }
+}
+
+.badge-low-stock-pulse {
+  animation: softAmberPulse 2.4s ease-in-out infinite;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 4. Barcode Scan Touch-Catch Pulse */
+@keyframes barcodeCatchPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.035); box-shadow: 0 0 0 4px var(--teal-light); }
+  100% { transform: scale(1); }
+}
+
+.barcode-catch-active {
+  animation: barcodeCatchPulse 0.22s ease-out;
+}
+
+/* 5. Cart Item Slide-In and Slide-Out Animations */
+@keyframes cartSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cartSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 80px;
+    margin-bottom: 8px;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border: none;
+  }
+}
+
+.cart-item-enter {
+  animation: cartSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cart-item-exit {
+  animation: cartSlideOut 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overflow: hidden;
+}
+
+/* 6. Checkmark SVG Draw on Sale Completion */
+@keyframes drawCheckmark {
+  0% { stroke-dashoffset: 48; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.draw-check {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: drawCheckmark 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 7. Skeleton Shimmer Loaders */
+@keyframes skeletonShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #F0EFE9 25%, #FAF8F3 50%, #F0EFE9 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.skeleton-card {
+  height: 110px;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-row {
+  height: 48px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* 8. Non-blocking Undo Snackbar */
+.undo-snackbar {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  background: #192B3A;
+  color: #FAF8F3;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 12px 32px rgba(16, 30, 43, 0.28);
+  z-index: 999;
+  animation: staggerFadeRise 0.25s ease-out;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.undo-snackbar button {
+  background: var(--teal);
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.undo-snackbar button:hover {
+  background: var(--teal-hover);
+}
+
+/* 9. B2B Horizontal Stepper Pipeline */
+.b2b-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin: 18px 0;
+  padding: 0 8px;
+}
+
+.b2b-stepper-track {
+  position: absolute;
+  top: 14px;
+  left: 24px;
+  right: 24px;
+  height: 3px;
+  background: #E5E7E2;
+  z-index: 1;
+}
+
+.b2b-stepper-progress {
+  position: absolute;
+  top: 14px;
+  left: 24px;
+  height: 3px;
+  background: var(--teal);
+  z-index: 2;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.b2b-step-node {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.b2b-step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2px solid #E5E7E2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.b2b-step-node.completed .b2b-step-circle {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #FFFFFF;
+}
+
+.b2b-step-node.active .b2b-step-circle {
+  background: #FFFFFF;
+  border-color: var(--teal);
+  color: var(--teal);
+  box-shadow: 0 0 0 4px var(--teal-light);
+}
+
+.b2b-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.b2b-step-node.active .b2b-step-label,
+.b2b-step-node.completed .b2b-step-label {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+/* 10. Horizontal Swipeable Live Invoice Preview Carousel */
+.invoice-carousel-container {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 14px 4px 22px 4px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.invoice-carousel-card {
+  flex: 0 0 210px;
+  scroll-snap-align: start;
+  background: white;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.invoice-carousel-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.invoice-carousel-card.active {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-light), var(--shadow-md);
+}
+
+/* 11. Size & Color Tap-Select Chips */
+.chip-selector-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 12px 0;
+}
+
+.boutique-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.boutique-chip:hover {
+  border-color: var(--teal);
+}
+
+.boutique-chip.selected {
+  background: var(--teal);
+  color: white;
+  border-color: var(--teal);
+  box-shadow: 0 2px 8px var(--teal-glow);
+}
+
+/* 12. Accessibility: OS Reduce Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

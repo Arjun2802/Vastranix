@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaffMember(businessId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_approved == true &&
+        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_active == true;
+    }
+
+    function getStaffRole(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.role;
+    }
+
+    function isBusinessAdminOrOwner(businessId) {
+      return isStaffMember(businessId) &&
+        (getStaffRole(businessId) == 'OWNER' || getStaffRole(businessId) == 'ADMIN');
+    }
+
+    // Public Store Directory for Staff Signup
+    match /public_stores/{businessId} {
+      allow read: if true;
+      allow write: if isBusinessAdminOrOwner(businessId);
+    }
+
+    // User Profile Documents (Auth mapping)
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Multi-Tenant Business Root
+    match /businesses/{businessId} {
+      allow read: if isStaffMember(businessId);
+      allow write: if isBusinessAdminOrOwner(businessId);
+
+      // Staff Subcollection
+      match /staff/{staffId} {
+        allow read: if isStaffMember(businessId);
+        // Self-signup for pending request
+        allow create: if isAuthenticated() && request.auth.uid == staffId && request.resource.data.is_approved == false;
+        // Only Admin/Owner can approve, change role, or deactivate
+        allow update, delete: if isBusinessAdminOrOwner(businessId);
+      }
+
+      // Products & Variant Catalog
+      match /products/{productId} {
+        allow read: if isStaffMember(businessId);
+        allow write: if isStaffMember(businessId) &&
+          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'INVENTORY_MGR']);
+      }
+
+      match /variants/{variantId} {
+        allow read: if isStaffMember(businessId);
+        // Stock decrements allowed by Cashier during POS sale or Inventory Manager
+        allow write: if isStaffMember(businessId);
+      }
+
+      // POS Invoices (Immutable once posted)
+      match /invoices/{invoiceId} {
+        allow read: if isStaffMember(businessId);
+        allow create: if isStaffMember(businessId) &&
+          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
+        // Updates restricted to VOID/REVERSAL corrections by Admin
+        allow update: if isBusinessAdminOrOwner(businessId) && request.resource.data.payment_status in ['VOID', 'REVERSED'];
+        allow delete: if false; // Invoices are immutable
+      }
+
+      // Cash Shifts & Drawer Reconciliations
+      match /cash_shifts/{shiftId} {
+        allow read: if isStaffMember(businessId);
+        allow create, update: if isStaffMember(businessId) &&
+          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
+      }
+
+      // Store Expenses (Restricted: Cashiers cannot read/write store expenses)
+      match /expenses/{expenseId} {
+        allow read, write: if isStaffMember(businessId) &&
+          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER']);
+      }
+
+      // B2B Dealer Orders
+      match /dealer_orders/{orderId} {
+        allow read, write: if isStaffMember(businessId);
+      }
+
+      // Aggregated Analytics
+      match /analytics/{docId} {
+        allow read: if isStaffMember(businessId);
+        allow write: if isStaffMember(businessId);
+      }
+    }
+  }
+}

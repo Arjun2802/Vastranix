@@ -471,11 +471,17 @@ async function api(endpoint, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   const url = `${getApiBase()}${endpoint}`;
 
+  const controller = new AbortController();
+  const timeoutMs = options.timeout || 8500;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(url, {
       ...options,
-      headers
+      headers,
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (res.status === 401) {
       logout();
@@ -511,6 +517,12 @@ async function api(endpoint, options = {}) {
 
     return await res.json();
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      alert(`Network Timeout: The operation took longer than 8s to reach ${getApiBase()}.\nPlease check your connection or Server URL settings and retry.`);
+      throw new Error(`Timeout on ${endpoint}`);
+    }
+
     // If it was an intentional HTTP error thrown above, re-throw it
     if (err.message && (err.message.includes("401") || err.message.includes("pending approval") || err.message.includes("Validation error") || err.message.includes("Access forbidden"))) {
       throw err;
@@ -547,6 +559,105 @@ async function api(endpoint, options = {}) {
     alert(`Network Error: Unable to reach VASTRENIX server at ${getBaseServerUrl()}.\nPlease check your connection or configure Server URL in Settings.`);
     throw err;
   }
+}
+
+// =========================================================================
+// UI ENERGY & POLISH HELPERS (UI-FEEL.md)
+// =========================================================================
+
+// 1. Smooth Number Count-Up Tween
+function animateNumber(element, start, end, duration = 650, prefix = "", suffix = "", decimals = 0) {
+  if (!element) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    element.textContent = `${prefix}${decimals > 0 ? end.toLocaleString('en-IN', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}) : Math.round(end).toLocaleString('en-IN')}${suffix}`;
+    return;
+  }
+  const startTime = performance.now();
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // easeOutExpo
+    const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+    const current = start + (end - start) * ease;
+    if (decimals > 0) {
+      element.textContent = `${prefix}${current.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`;
+    } else {
+      element.textContent = `${prefix}${Math.round(current).toLocaleString('en-IN')}${suffix}`;
+    }
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  requestAnimationFrame(update);
+}
+
+// 2. Tactile Sound & Haptics Trigger
+function triggerHaptic(type = "tick") {
+  if (navigator.vibrate) {
+    if (type === "tick") navigator.vibrate(12);
+    else if (type === "success") navigator.vibrate([15, 35, 15]);
+    else if (type === "warning") navigator.vibrate(35);
+  }
+  if (window.VastrenixNative && typeof window.VastrenixNative.vibrate === "function") {
+    window.VastrenixNative.vibrate(type === "success" ? 40 : 15);
+  }
+}
+
+// 3. Non-blocking Undo Snackbar
+let undoSnackbarTimer = null;
+function showUndoSnackbar(message, onUndo) {
+  const existing = document.getElementById("vastrenix-undo-snackbar");
+  if (existing) existing.remove();
+  if (undoSnackbarTimer) clearTimeout(undoSnackbarTimer);
+
+  const bar = document.createElement("div");
+  bar.id = "vastrenix-undo-snackbar";
+  bar.className = "undo-snackbar";
+  bar.innerHTML = `
+    <span>${message}</span>
+    <button id="undo-snackbar-action-btn">UNDO</button>
+  `;
+  document.body.appendChild(bar);
+
+  document.getElementById("undo-snackbar-action-btn").addEventListener("click", () => {
+    bar.remove();
+    if (typeof onUndo === "function") onUndo();
+  });
+
+  undoSnackbarTimer = setTimeout(() => {
+    if (bar && bar.parentNode) bar.remove();
+  }, 4000);
+}
+
+// 4. Debounced Input Filter Helper
+function debounce(func, wait = 250) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// 5. Skeleton Shimmer Placeholders
+function getSkeletonCardsHTML() {
+  return `
+    <div class="grid-cards" style="margin-bottom: 24px;">
+      <div class="stat-card skeleton skeleton-card"></div>
+      <div class="stat-card skeleton skeleton-card"></div>
+      <div class="stat-card skeleton skeleton-card"></div>
+      <div class="stat-card skeleton skeleton-card"></div>
+    </div>
+  `;
+}
+
+function getSkeletonTableRowsHTML(cols = 6, count = 4) {
+  return Array.from({ length: count }).map(() => `
+    <tr><td colspan="${cols}" style="padding: 10px;"><div class="skeleton skeleton-row"></div></td></tr>
+  `).join('');
 }
 
 // Fetch public stores list
@@ -697,7 +808,13 @@ function switchTab(tab) {
 // Render Dashboard
 async function renderDashboard() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `<div style="padding: 20px; text-align: center;">Loading real metrics...</div>`;
+  container.innerHTML = `
+    <div style="margin-bottom: 24px;">
+      <div class="skeleton skeleton-text" style="width: 220px; height: 26px; margin-bottom: 12px;"></div>
+      <div class="skeleton skeleton-text" style="width: 320px; height: 16px;"></div>
+    </div>
+    ${getSkeletonCardsHTML()}
+  `;
 
   const t = i18n[state.lang] || i18n.en;
   const metrics = await api("/reports/dashboard");
@@ -746,7 +863,7 @@ async function renderDashboard() {
         
         <div style="display: flex; flex-direction: column; gap: 10px;">
           ${pendingStaff.map(s => `
-            <div style="background: white; border: 1px solid #EADBCA; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="background: white; border: 1px solid #EADBCA; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-left: 4px solid var(--amber);">
               <div>
                 <div style="font-weight: 700; font-size: 13.5px; color: var(--navy);">${s.full_name}</div>
                 <div style="font-size: 12px; color: var(--text-muted);">${s.email} • Role Requested: <span class="badge badge-neutral">${s.role}</span> • Phone: ${s.phone || 'N/A'}</div>
@@ -761,26 +878,28 @@ async function renderDashboard() {
       </div>
     ` : ''}
 
-    <div class="grid-cards">
-      <div class="stat-card">
+    <div class="grid-cards" style="margin-bottom: 24px;">
+      <div class="stat-card stagger-1">
         <div class="stat-label">${t.today_sales}</div>
-        <div class="stat-value">₹${metrics.today_sales.toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
-        <div class="stat-meta">${metrics.today_orders_count} transactions completed</div>
+        <div class="stat-value" id="dash-val-sales" style="color: var(--teal);">₹0.00</div>
+        <div class="stat-meta"><span id="dash-val-orders">0</span> transactions completed</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stagger-2">
         <div class="stat-label">${t.low_stock_items}</div>
-        <div class="stat-value" style="color: ${metrics.low_stock_count > 0 ? 'var(--coral)' : 'var(--teal)'};">${metrics.low_stock_count}</div>
+        <div class="stat-value ${metrics.low_stock_count > 0 ? 'badge-low-stock-pulse' : ''}" id="dash-val-lowstock" style="color: ${metrics.low_stock_count > 0 ? 'var(--amber)' : 'var(--teal)'};">
+          ${metrics.low_stock_count > 0 ? '▲ ' : '● '}${metrics.low_stock_count}
+        </div>
         <div class="stat-meta">${metrics.low_stock_count > 0 ? 'Sizes requiring reorder' : 'All inventory healthy'}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stagger-3">
         <div class="stat-label">${t.pending_dealer_orders}</div>
-        <div class="stat-value" style="color: var(--amber);">${metrics.pending_dealer_orders}</div>
+        <div class="stat-value" id="dash-val-dealers" style="color: var(--amber);">0</div>
         <div class="stat-meta">B2B orders awaiting action</div>
       </div>
       ${(!state.isStaff || (state.business && state.business.role !== 'CASHIER')) ? `
-      <div class="stat-card">
+      <div class="stat-card stagger-4">
         <div class="stat-label">${t.total_revenue}</div>
-        <div class="stat-value">₹${metrics.total_revenue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
+        <div class="stat-value" id="dash-val-revenue" style="color: var(--navy);">₹0.00</div>
         <div class="stat-meta">Authoritative posted invoices</div>
       </div>
       ` : ''}
@@ -836,6 +955,15 @@ async function renderDashboard() {
       </div>
     </div>
   `;
+
+  // Trigger Number Tweens for Boutique Feel
+  animateNumber(document.getElementById("dash-val-sales"), 0, Number(metrics.today_sales || 0), 700, "₹", "", 2);
+  animateNumber(document.getElementById("dash-val-orders"), 0, Number(metrics.today_orders_count || 0), 500);
+  animateNumber(document.getElementById("dash-val-dealers"), 0, Number(metrics.pending_dealer_orders || 0), 500);
+  const revEl = document.getElementById("dash-val-revenue");
+  if (revEl) {
+    animateNumber(revEl, 0, Number(metrics.total_revenue || 0), 800, "₹", "", 2);
+  }
 }
 
 async function approveStaffMember(membershipId, name) {
@@ -852,11 +980,73 @@ async function rejectStaffMember(membershipId) {
 }
 
 // Render Inventory
+let allInventoryItems = [];
+
+const debouncedFilterInventory = debounce((q) => {
+  const tbody = document.getElementById("inventory-table-body");
+  if (!tbody) return;
+  const query = (q || "").trim().toLowerCase();
+  const filtered = query
+    ? allInventoryItems.filter(it => 
+        (it.product_name && it.product_name.toLowerCase().includes(query)) ||
+        (it.sku && it.sku.toLowerCase().includes(query)) ||
+        (it.fabric && it.fabric.toLowerCase().includes(query)) ||
+        (it.color && it.color.toLowerCase().includes(query)) ||
+        (it.size && it.size.toLowerCase().includes(query))
+      )
+    : allInventoryItems;
+  tbody.innerHTML = renderInventoryRows(filtered);
+}, 250);
+
+function filterInventoryCatalog(q) {
+  debouncedFilterInventory(q);
+}
+
+function renderInventoryRows(list) {
+  if (!list || list.length === 0) {
+    return `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 32px;">No matching garments found.</td></tr>`;
+  }
+  return list.map(it => `
+    <tr>
+      <td><b>${it.product_name}</b></td>
+      <td>${it.fabric || 'Textile'}</td>
+      <td><code>${it.sku}</code></td>
+      <td><span class="badge badge-neutral">${it.size}</span></td>
+      <td>${it.color}</td>
+      <td>${it.rack_location}</td>
+      <td><b>${it.on_hand}</b></td>
+      <td style="color: var(--amber);">${it.reserved}</td>
+      <td><b style="color: ${it.available <= 0 ? 'var(--coral)' : 'var(--teal)'}; font-size: 14px;">${it.available}</b></td>
+      <td>
+        ${it.is_out_of_stock ? '<span class="badge badge-danger">✕ Out of Stock</span>' : (it.is_low_stock ? '<span class="badge badge-warning">▲ Low Stock</span>' : '<span class="badge badge-success">● Healthy</span>')}
+      </td>
+      <td>
+        ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
+          <button class="btn btn-sm btn-secondary" onclick="promptAdjustStock(${it.variant_id})">Adjust</button>
+        ` : `
+          <span style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">View Only</span>
+        `}
+      </td>
+    </tr>
+  `).join('');
+}
+
 async function renderInventory() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `<div style="padding: 20px;">Loading garment inventory...</div>`;
+  container.innerHTML = `
+    <div style="margin-bottom: 20px;">
+      <div class="skeleton skeleton-text" style="width: 260px; height: 24px; margin-bottom: 10px;"></div>
+      <div class="skeleton skeleton-text" style="width: 340px; height: 14px;"></div>
+    </div>
+    <div class="panel">
+      <div class="table-responsive">
+        <table class="data-table"><tbody>${getSkeletonTableRowsHTML(11, 5)}</tbody></table>
+      </div>
+    </div>
+  `;
   const items = await api("/inventory/levels");
   if (!items) return;
+  allInventoryItems = items;
 
   container.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
@@ -882,6 +1072,12 @@ async function renderInventory() {
           ` : ''}
         </div>
       ` : `
+        <div style="padding: 14px 18px 0 18px;">
+          <div style="position: relative; max-width: 440px;">
+            <input type="text" id="inventory-search-input" class="form-input" placeholder="Search by garment name, SKU, or fabric..." oninput="filterInventoryCatalog(this.value)" style="padding-left: 36px; font-size: 13px;">
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5;">🔍</span>
+          </div>
+        </div>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
@@ -899,30 +1095,8 @@ async function renderInventory() {
                 <th>Adjust</th>
               </tr>
             </thead>
-            <tbody>
-              ${items.map(it => `
-                <tr>
-                  <td><b>${it.product_name}</b></td>
-                  <td>${it.fabric || 'Textile'}</td>
-                  <td><code>${it.sku}</code></td>
-                  <td><span class="badge badge-neutral">${it.size}</span></td>
-                  <td>${it.color}</td>
-                  <td>${it.rack_location}</td>
-                  <td><b>${it.on_hand}</b></td>
-                  <td style="color: var(--amber);">${it.reserved}</td>
-                  <td><b style="color: ${it.available <= 0 ? 'var(--coral)' : 'var(--teal)'}; font-size: 14px;">${it.available}</b></td>
-                  <td>
-                    ${it.is_out_of_stock ? '<span class="badge badge-danger">Out of Stock</span>' : (it.is_low_stock ? '<span class="badge badge-warning">Low Stock</span>' : '<span class="badge badge-success">Healthy</span>')}
-                  </td>
-                  <td>
-                    ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
-                      <button class="btn btn-sm btn-secondary" onclick="promptAdjustStock(${it.variant_id})">Adjust</button>
-                    ` : `
-                      <span style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">View Only</span>
-                    `}
-                  </td>
-                </tr>
-              `).join('')}
+            <tbody id="inventory-table-body">
+              ${renderInventoryRows(items)}
             </tbody>
           </table>
         </div>
@@ -1185,6 +1359,38 @@ function handlePOSSearchKeyDown(e) {
   }
 }
 
+const debouncedFilterPOSCatalog = debounce((query) => {
+  const container = document.getElementById("pos-items-grid");
+  if (!container) return;
+  const q = (query || "").trim().toLowerCase();
+  if (!q) {
+    container.innerHTML = renderPOSItems(state.products);
+    return;
+  }
+  const filtered = [];
+  state.products.forEach(p => {
+    const matchingVariants = p.variants.filter(v => 
+      v.sku.toLowerCase().includes(q) || 
+      p.name.toLowerCase().includes(q) || 
+      (p.fabric && p.fabric.toLowerCase().includes(q)) || 
+      v.color.toLowerCase().includes(q) || 
+      v.size.toLowerCase().includes(q)
+    );
+    if (matchingVariants.length > 0) {
+      filtered.push({ ...p, variants: matchingVariants });
+    }
+  });
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 32px;">No garments matching '${query}'.</div>`;
+  } else {
+    container.innerHTML = renderPOSItems(filtered);
+  }
+}, 250);
+
+function filterPOSCatalog(query) {
+  debouncedFilterPOSCatalog(query);
+}
+
 function renderPOSItems(products) {
   let html = "";
   products.forEach(p => {
@@ -1216,6 +1422,7 @@ function renderPOSItems(products) {
 }
 
 function addToCart(variantId, name, size, color, price, sku) {
+  triggerHaptic("tick");
   const existing = state.cart.find(c => c.variantId === variantId);
   if (existing) {
     existing.quantity += 1;
@@ -1231,7 +1438,7 @@ function renderCartItems() {
     return `<div style="text-align: center; color: var(--text-muted); padding: 40px 10px; font-size: 13px;">Cart is empty. Scan barcodes or click '+ Add' from catalog.</div>`;
   }
   return state.cart.map((item, idx) => `
-    <div class="cart-item" style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+    <div class="cart-item cart-item-enter" id="cart-item-row-${idx}" style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
       <div style="flex: 1; padding-right: 8px;">
         <div style="font-weight: 700; font-size: 13px; color: var(--navy);">${item.name}</div>
         <div style="font-size: 11.5px; color: var(--text-muted);">${item.size} / ${item.color} • <b style="color: var(--navy);">₹${item.price.toFixed(2)}</b></div>
@@ -1252,6 +1459,7 @@ function stepCartQty(idx, delta) {
     if (newQty <= 0) {
       removeFromCart(idx);
     } else {
+      triggerHaptic("tick");
       state.cart[idx].quantity = newQty;
       document.getElementById("cart-items-list").innerHTML = renderCartItems();
       updateCartTotals();
@@ -1265,37 +1473,61 @@ function updateCartQty(idx, val) {
   updateCartTotals();
 }
 
+let lastRemovedCartItem = null;
 function removeFromCart(idx) {
-  state.cart.splice(idx, 1);
-  document.getElementById("cart-items-list").innerHTML = renderCartItems();
-  updateCartTotals();
+  const row = document.getElementById(`cart-item-row-${idx}`);
+  const removed = state.cart[idx];
+  if (!removed) return;
+  lastRemovedCartItem = { item: { ...removed }, index: idx };
+
+  if (row) {
+    row.classList.add("cart-item-exit");
+    setTimeout(() => {
+      state.cart.splice(idx, 1);
+      document.getElementById("cart-items-list").innerHTML = renderCartItems();
+      updateCartTotals();
+      showUndoSnackbar(`Removed '${removed.name}' from cart`, () => {
+        state.cart.splice(lastRemovedCartItem.index, 0, lastRemovedCartItem.item);
+        document.getElementById("cart-items-list").innerHTML = renderCartItems();
+        updateCartTotals();
+      });
+    }, 200);
+  } else {
+    state.cart.splice(idx, 1);
+    document.getElementById("cart-items-list").innerHTML = renderCartItems();
+    updateCartTotals();
+  }
 }
 
 function clearCart() {
+  if (state.cart.length === 0) return;
+  const previousCart = [...state.cart];
   state.cart = [];
   document.getElementById("cart-items-list").innerHTML = renderCartItems();
   updateCartTotals();
+  showUndoSnackbar("Sale cart cleared", () => {
+    state.cart = previousCart;
+    document.getElementById("cart-items-list").innerHTML = renderCartItems();
+    updateCartTotals();
+  });
 }
 
 function updateCartTotals() {
   const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discountInput = document.getElementById("pos-discount");
   const discountVal = discountInput ? Math.max(0, parseFloat(discountInput.value) || 0) : 0;
-
-  const taxableAmount = Math.max(0, subtotal - discountVal);
-  const tax = taxableAmount * 0.05;
-  const total = taxableAmount + tax;
+  const total = Math.max(0, subtotal - discountVal);
 
   const subEl = document.getElementById("pos-subtotal");
-  const discDisp = document.getElementById("pos-discount-display");
-  const taxEl = document.getElementById("pos-tax");
-  const totEl = document.getElementById("pos-total");
-  const upiEl = document.getElementById("pos-upi-amount-display");
-
   if (subEl) subEl.textContent = `₹${subtotal.toFixed(2)}`;
-  if (discDisp) discDisp.textContent = `-₹${discountVal.toFixed(2)}`;
-  if (taxEl) taxEl.textContent = `₹${tax.toFixed(2)}`;
-  if (totEl) totEl.textContent = `₹${total.toFixed(2)}`;
+
+  const totalEl = document.getElementById("pos-cart-total");
+  if (totalEl) {
+    const currentNum = parseFloat(totalEl.textContent.replace(/[^0-9.]/g, '')) || 0;
+    animateNumber(totalEl, currentNum, total, 450, "₹", "", 2);
+  }
+
+  const upiEl = document.getElementById("pos-upi-amount-display");
   if (upiEl) upiEl.textContent = `₹${total.toFixed(2)}`;
 }
 
@@ -1341,7 +1573,7 @@ async function completePOSSale() {
   const btn = document.getElementById("pos-complete-sale-btn");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Processing Sale...";
+    btn.innerHTML = `<span class="spinner" style="width: 16px; height: 16px; border-width: 2px; display: inline-block; margin-right: 8px;"></span> Posting Authoritative Invoice...`;
   }
 
   try {
@@ -1352,10 +1584,22 @@ async function completePOSSale() {
     });
 
     if (res && res.invoice_id) {
+      triggerHaptic("success");
+      if (btn) {
+        btn.style.background = "var(--teal)";
+        btn.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+            <path class="draw-check" d="M20 6L9 17l-5-5"/>
+          </svg>
+          Sale Confirmed & Saved!
+        `;
+      }
+
+      await new Promise(r => setTimeout(r, 450));
+
       if (res.pdf_status === "FAILED") {
         alert(`Invoice ${res.invoice_number} saved successfully, but background PDF generation failed or timed out.\nYou can click 'Retry PDF' on the invoice history tab.`);
       } else {
-        alert(`Success: Invoice ${res.invoice_number} created!\nOpening PDF download in chosen theme (${theme})...`);
         openInvoicePdf(res.invoice_id, res.invoice_number);
       }
       clearCart();
@@ -1364,6 +1608,7 @@ async function completePOSSale() {
   } finally {
     if (btn) {
       btn.disabled = false;
+      btn.style.background = "";
       btn.textContent = "Complete Sale & Generate Invoice (F4)";
     }
   }
@@ -1472,17 +1717,61 @@ async function retryInvoicePdf(id, invoiceNumber) {
 // Render Invoices List
 async function renderInvoices() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `<div style="padding: 20px;">Loading invoice history...</div>`;
+  container.innerHTML = `
+    <div style="margin-bottom: 20px;">
+      <div class="skeleton skeleton-text" style="width: 280px; height: 24px; margin-bottom: 10px;"></div>
+      <div class="skeleton skeleton-text" style="width: 380px; height: 14px;"></div>
+    </div>
+    <div class="panel">
+      <div class="table-responsive">
+        <table class="data-table"><tbody>${getSkeletonTableRowsHTML(8, 4)}</tbody></table>
+      </div>
+    </div>
+  `;
   const invoices = await api("/pos/invoices");
   if (!invoices) return;
 
+  const currentDefaultTheme = (state.business && state.business.default_invoice_theme) || "CLASSIC_GST";
+
+  const themesData = [
+    { id: "CLASSIC_GST", name: "Classic GST", desc: "Official HSN/SAC & CGST/SGST tax breakdown tables.", tag: "Tax Authority Standard", icon: "🏛️" },
+    { id: "MODERN_MINIMAL", name: "Modern Minimal", desc: "Airy editorial spacing with subtle teal divider lines.", tag: "Modern Retail", icon: "✨" },
+    { id: "PREMIUM_BOUTIQUE", name: "Premium Boutique", desc: "Gold ribbon header with luxury atelier receipt feel.", tag: "High Fashion", icon: "👑" },
+    { id: "WHOLESALE_DEALER", name: "Wholesale & Dealer", desc: "Garment size/color matrix with dispatch memo header.", tag: "B2B Wholesale", icon: "📦" },
+    { id: "COMPACT_THERMAL", name: "Compact Thermal", desc: "80mm continuous roll slip with dynamic item length.", tag: "Counter Thermal POS", icon: "🧾" },
+    { id: "INTERNATIONAL_COMMERCIAL", name: "International Commercial", desc: "Port of discharge, currency conversion & export declaration.", tag: "Global Trade", icon: "🌐" }
+  ];
+
   container.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div>
         <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">Authoritative Invoices & Billing Records</h2>
         <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • View posted invoices and download PDFs.</p>
       </div>
       <button class="btn btn-primary" onclick="switchTab('pos')">+ New POS Sale</button>
+    </div>
+
+    <!-- Live Theme Picker Carousel -->
+    <div style="margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 13.5px; font-weight: 800; color: var(--navy);">6 Invoice Themes (Swipe to Preview & Select Default)</span>
+        <span style="font-size: 11.5px; color: var(--teal); font-weight: 600;">Active: <b>${currentDefaultTheme}</b></span>
+      </div>
+      <div class="invoice-carousel-container">
+        ${themesData.map(th => `
+          <div class="invoice-carousel-card ${th.id === currentDefaultTheme ? 'active' : ''}" onclick="selectStoreDefaultTheme('${th.id}')">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 20px;">${th.icon}</span>
+              <span class="badge ${th.id === currentDefaultTheme ? 'badge-primary' : 'badge-neutral'}" style="font-size: 10px;">${th.tag}</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">${th.name}</div>
+            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4; flex: 1; margin-bottom: 12px;">${th.desc}</div>
+            <div style="font-size: 11.5px; font-weight: 700; color: ${th.id === currentDefaultTheme ? 'var(--teal)' : 'var(--text-muted)'}; display: flex; align-items: center; gap: 4px;">
+              ${th.id === currentDefaultTheme ? '✓ Store Default' : 'Tap to set default'}
+            </div>
+          </div>
+        `).join('')}
+      </div>
     </div>
 
     <div class="panel">
@@ -1541,8 +1830,48 @@ async function renderInvoices() {
   `;
 }
 
+function selectStoreDefaultTheme(themeId) {
+  triggerHaptic("tick");
+  if (state.business) {
+    state.business.default_invoice_theme = themeId;
+    localStorage.setItem("vastrenix_business", JSON.stringify(state.business));
+  }
+  const posSelect = document.getElementById("pos-theme-select");
+  if (posSelect) posSelect.value = themeId;
+  alert(`Store Default Invoice Theme set to '${themeId}'!`);
+  renderInvoices();
+}
+
 // Render Dealer B2B Network
 let cachedStaff = [];
+
+function renderOrderStepper(status) {
+  if (status === 'REJECTED') {
+    return `<div style="padding: 4px 10px; background: #FEE2E2; color: #991B1B; border-radius: 6px; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">✕ Order Rejected</div>`;
+  }
+  const steps = ["SUBMITTED", "ACCEPTED", "PROCESSING", "PACKED", "DISPATCHED", "DELIVERED"];
+  const labels = ["Submitted", "Accepted", "Picking", "Packed", "Dispatched", "Delivered"];
+  const currentIdx = steps.indexOf(status);
+  const activeIdx = currentIdx >= 0 ? currentIdx : (status === "CLOSED" ? 5 : 0);
+  const progressWidth = Math.min(100, Math.max(0, (activeIdx / (steps.length - 1)) * 100));
+
+  return `
+    <div class="b2b-stepper" style="margin: 8px 0 12px 0;">
+      <div class="b2b-stepper-track"></div>
+      <div class="b2b-stepper-progress" style="width: ${progressWidth}%;"></div>
+      ${steps.map((st, i) => {
+        const isDone = i < activeIdx;
+        const isActive = i === activeIdx;
+        return `
+          <div class="b2b-step-node ${isDone ? 'completed' : (isActive ? 'active' : '')}">
+            <div class="b2b-step-circle">${isDone ? '✓' : (i + 1)}</div>
+            <span class="b2b-step-label">${labels[i]}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
 
 async function renderDealers() {
   const container = document.getElementById("tab-content");
@@ -1638,7 +1967,10 @@ async function renderDealers() {
                     <span class="badge badge-neutral" style="color: var(--text-muted); background: #F1F3F5;">Unassigned</span>
                   `}
                 </td>
-                <td><span class="badge ${statusBadge}">${o.status}</span></td>
+                <td>
+                  <span class="badge ${statusBadge}">${o.status}</span>
+                  ${renderOrderStepper(o.status)}
+                </td>
                 <td>
                   <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                     ${o.status === 'SUBMITTED' ? `
@@ -1693,7 +2025,10 @@ async function renderDealers() {
                 <td>${o.date}</td>
                 <td>${o.items.map(it => `${it.product_name} (${it.size}) × ${it.qty_ordered}`).join(', ')}</td>
                 <td><b>₹${Number(o.total_amount).toFixed(2)}</b></td>
-                <td><span class="badge ${o.status === 'DELIVERED' ? 'badge-success' : (o.status === 'DISPATCHED' ? 'badge-warning' : 'badge-neutral')}">${o.status}</span></td>
+                <td>
+                  <span class="badge ${o.status === 'DELIVERED' ? 'badge-success' : (o.status === 'DISPATCHED' ? 'badge-warning' : 'badge-neutral')}">${o.status}</span>
+                  ${renderOrderStepper(o.status)}
+                </td>
                 <td>${o.transporter_name ? `${o.transporter_name} (${o.lr_number || ''})` : '<span style="color: var(--text-muted);">Awaiting Dispatch</span>'}</td>
                 <td>
                   ${o.status === 'DISPATCHED' ? `
