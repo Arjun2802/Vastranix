@@ -26,7 +26,8 @@ def render_invoice_pdf(invoice, business, branch, customer, items, theme: str = 
 
     # Page sizing: Thermal is 80mm roll, others standard A4
     if theme == "COMPACT_THERMAL":
-        pagesize = (80 * mm, 200 * mm)
+        roll_height = max(180 * mm, (100 + len(items) * 14) * mm)
+        pagesize = (80 * mm, roll_height)
         doc = SimpleDocTemplate(filepath, pagesize=pagesize, leftMargin=4*mm, rightMargin=4*mm, topMargin=4*mm, bottomMargin=4*mm)
     else:
         pagesize = A4

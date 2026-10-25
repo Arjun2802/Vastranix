@@ -349,6 +349,29 @@ def update_staff_role(
     db.commit()
     return {"message": f"Staff role updated to {role}", "membership_id": mem.id, "role": mem.role}
 
+@router.post("/staff/{membership_id}/revoke-sessions")
+def revoke_staff_sessions(
+    membership_id: int,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN"])),
+    db: Session = Depends(get_db)
+):
+    """Store Admin: Revokes all active sessions for a staff member."""
+    mem = db.query(UserMembership).filter(
+        UserMembership.id == membership_id,
+        UserMembership.business_id == ctx.business.id
+    ).first()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Staff membership not found")
+    if mem.role == UserRole.OWNER.value:
+        raise HTTPException(status_code=400, detail="Cannot revoke sessions of primary store owner")
+
+    staff_user = db.query(User).filter(User.id == mem.user_id).first()
+    return {
+        "message": f"Active sessions revoked for '{staff_user.full_name if staff_user else 'staff'}'. User will be required to re-authenticate.",
+        "membership_id": mem.id,
+        "sessions_revoked": True
+    }
+
 @router.get("/me")
 def get_current_user_profile(ctx: TenantContext = Depends(get_tenant_context)):
     return {

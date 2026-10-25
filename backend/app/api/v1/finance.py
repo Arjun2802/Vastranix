@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional, List
 from decimal import Decimal
+import os
+import uuid
 from backend.app.core.database import get_db
 from backend.app.core.permissions import get_tenant_context, TenantContext, require_roles
 from backend.app.models.finance import CashShift, CashShiftTransaction, BusinessExpense
 from backend.app.models.billing import Invoice, Payment
 from backend.app.schemas.all_schemas import CashShiftOpenSchema, CashShiftCloseSchema, BusinessExpenseCreateSchema
+from backend.app.core.firebase import firebase_service
 
 router = APIRouter(prefix="/finance", tags=["Finance & Cash Shift Management"])
 
@@ -155,12 +158,41 @@ def add_business_expense(
         amount=data.amount,
         payment_mode=data.payment_mode,
         description=data.description,
+        receipt_url=data.receipt_url,
         created_by=ctx.user.id
     )
     db.add(exp)
     db.commit()
     db.refresh(exp)
-    return {"message": "Expense recorded", "id": exp.id, "amount": float(exp.amount)}
+    return {"message": "Expense recorded", "id": exp.id, "amount": float(exp.amount), "receipt_url": exp.receipt_url}
+
+@router.post("/expenses/upload-receipt")
+def upload_expense_receipt(
+    file: UploadFile = File(...),
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"])),
+    db: Session = Depends(get_db)
+):
+    content = file.file.read()
+    ext = os.path.splitext(file.filename)[1] or ".jpg"
+    safe_filename = f"receipt_{ctx.business.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}{ext}"
+
+    # Try Firebase Cloud Storage first, fallback local
+    blob_path = f"receipts/{ctx.business.id}/{safe_filename}"
+    upload_res = firebase_service.upload_to_storage(content, blob_path, content_type=file.content_type or "image/jpeg")
+
+    local_dir = os.path.join("frontend", "web", "static", "uploads", "receipts")
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, safe_filename)
+    with open(local_path, "wb") as f:
+        f.write(content)
+
+    receipt_url = upload_res.get("url") or f"/static/uploads/receipts/{safe_filename}"
+    return {
+        "message": "Receipt uploaded successfully",
+        "receipt_url": receipt_url,
+        "filename": safe_filename,
+        "storage_mode": upload_res.get("status", "LOCAL")
+    }
 
 @router.get("/expenses")
 def list_business_expenses(
@@ -179,6 +211,7 @@ def list_business_expenses(
             "amount": float(e.amount),
             "payment_mode": e.payment_mode,
             "description": e.description,
+            "receipt_url": e.receipt_url,
             "date": e.expense_date.strftime("%d-%b-%Y %H:%M") if e.expense_date else ""
         })
     return results
@@ -196,11 +229,16 @@ def get_financial_summary(
     expenses = db.query(BusinessExpense).filter(BusinessExpense.business_id == ctx.business.id).all()
     total_expenses = sum(e.amount for e in expenses)
 
+    category_breakdown = {}
+    for e in expenses:
+        category_breakdown[e.category] = category_breakdown.get(e.category, 0.0) + float(e.amount)
+
     return {
         "currency": ctx.business.currency,
         "total_sales": float(total_sales),
         "total_collected": float(total_collected),
         "total_receivables": float(total_receivables),
         "total_expenses": float(total_expenses),
+        "expenses_by_category": category_breakdown,
         "net_cash_flow": float(total_collected - total_expenses)
     }

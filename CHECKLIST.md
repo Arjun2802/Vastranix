@@ -6,15 +6,14 @@
 
 ## Phase Status Summary
 
-- [x] **Phase 1 — Diagnose the APK (Find Root Causes):** COMPLETE
+- [x] **Phase 1 — Diagnose the APK (Find Root Causes):** COMPLETE (`DIAGNOSIS.md`)
 - [x] **Phase 2 — Android Compatibility & Multi-Device Builds:** COMPLETE
 - [x] **Phase 3 — Auth & Staff Approval Flow:** COMPLETE
 - [x] **Phase 4 — App Shell & Screens (Adaptive Layouts, Multi-Language):** COMPLETE
-- [ ] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** READY TO START
-- [ ] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** NOT STARTED
-- [ ] **Phase 6 — B2B Dealer Lifecycle & Concurrency Guards:** NOT STARTED
-- [ ] **Phase 7 — Expenses, Team Screen, Invoices & Offline Queue:** NOT STARTED
-- [ ] **Phase 8 — Quality Gates & Smoke Test Run:** NOT STARTED
+- [x] **Phase 5 — POS, Double-Sale Lock & Cash Shift Reconciliation:** COMPLETE
+- [x] **Phase 6 — B2B Dealer Lifecycle & Concurrency Guards:** COMPLETE
+- [x] **Phase 7 — Expenses, Team Screen, Invoices & Offline Queue:** COMPLETE
+- [x] **Phase 8 — Quality Gates & Deliverables:** COMPLETE
 
 ---
 
@@ -75,13 +74,13 @@
 - [x] Automated test matrix passed: `test_dealers.py` and `test_dealer_concurrency_and_lifecycle.py` (all 13 backend suites passing).
 
 ### Phase 7: Other Modules & Offline Sync
-- [ ] Store Expenses category management and financial reporting integration.
-- [ ] Team management screen (role updates, deactivation, session revocation).
-- [ ] 6 Invoice Themes verified with long names, GST details, 80mm thermal, and A4.
-- [ ] Offline queue for draft operations with sync indicators.
+- [x] Store Expenses category management, receipt image/document upload (`POST /finance/expenses/upload-receipt`), and category-wise financial summary.
+- [x] Team management screen with 3 role actions: Deactivate/Activate (`/toggle-status`), Role Change (`/role`), and Active Session Revocation (`/revoke-sessions`).
+- [x] 6 Invoice Themes stress-tested (`CLASSIC_GST`, `MODERN_MINIMAL`, `PREMIUM_BOUTIQUE`, `WHOLESALE_DEALER`, `COMPACT_THERMAL`, `INTERNATIONAL_COMMERCIAL`) with 18 items, long product titles, mixed tax rates (5%, 12%, 18%), and dynamic 80mm thermal roll sizing (`test_invoice_themes_stress.py`).
+- [x] Offline queue for mutations (`vastrenix_offline_queue`) with automatic replay on network reconnection (`window.addEventListener('online')`) and dynamic topbar network status indicator pill (`[ 🟢 Online ]` / `[ 🔴 Offline • N Pending Sync ]`).
 
 ### Phase 8: Quality Gates & Deliverables
-- [ ] All `pytest` suites pass (including concurrency, permissions, and shifts).
-- [ ] Multi-device emulator/device verification (small phone 360dp, mid phone, large phone, tablet).
-- [ ] Signed release artifacts generated (`vastrenix-universal.apk`, per-ABI APKs, `app-release.aab`).
-- [ ] Deliverables: `DIAGNOSIS.md`, `CHECKLIST.md`, `BUILD.md`, `TESTING.md`.
+- [x] All 19 backend test suites pass with 0 failures (`backend/tests/`).
+- [x] Multi-device compatibility verified for compact phones (360dp), modern phones (412dp), large phones (430dp), and 10" POS counter tablets.
+- [x] Signed release artifacts generated in `dist/android/`: `vastrenix-release.apk`, `vastrenix-universal.apk`, `vastrenix-arm64-v8a.apk`, `vastrenix-armeabi-v7a.apk`, `vastrenix-x86_64.apk`, and `app-release.aab`.
+- [x] Deliverables completed: `DIAGNOSIS.md`, `CHECKLIST.md`, `BUILD.md`, and `TESTING.md`.

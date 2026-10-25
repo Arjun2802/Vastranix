@@ -179,6 +179,7 @@ class BusinessExpenseCreateSchema(BaseModel):
     amount: Decimal
     payment_mode: str = "CASH"
     description: Optional[str] = None
+    receipt_url: Optional[str] = None
 
 # --- DEALER B2B ---
 class DealerConnectionRequestSchema(BaseModel):

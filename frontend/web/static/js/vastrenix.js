@@ -359,12 +359,108 @@ function saveServerSettings() {
   renderApp();
 }
 
+// Durable Offline Queue Management
+function getOfflineQueue() {
+  try {
+    return JSON.parse(localStorage.getItem("vastrenix_offline_queue") || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveOfflineQueue(queue) {
+  localStorage.setItem("vastrenix_offline_queue", JSON.stringify(queue));
+  updateOfflineIndicator();
+}
+
+function updateOfflineIndicator() {
+  const pill = document.getElementById("offline-status-pill");
+  const text = document.getElementById("offline-status-text");
+  if (!pill || !text) return;
+
+  const queue = getOfflineQueue();
+  const isOnline = navigator.onLine;
+
+  if (!isOnline) {
+    pill.style.background = "#FEF2F2";
+    pill.style.color = "#991B1B";
+    pill.style.borderColor = "#FECACA";
+    const dot = pill.querySelector(".status-dot");
+    if (dot) dot.style.background = "#EF4444";
+    text.textContent = `Offline • ${queue.length} Pending Sync`;
+  } else if (queue.length > 0) {
+    pill.style.background = "#FFFBEB";
+    pill.style.color = "#92400E";
+    pill.style.borderColor = "#FDE68A";
+    const dot = pill.querySelector(".status-dot");
+    if (dot) dot.style.background = "#F59E0B";
+    text.textContent = `Syncing (${queue.length} queued)...`;
+  } else {
+    pill.style.background = "#ECFDF5";
+    pill.style.color = "#065F46";
+    pill.style.borderColor = "#A7F3D0";
+    const dot = pill.querySelector(".status-dot");
+    if (dot) dot.style.background = "#10B981";
+    text.textContent = "Online";
+  }
+}
+
+let isDrainingQueue = false;
+async function drainOfflineQueue() {
+  if (isDrainingQueue) return;
+  const queue = getOfflineQueue();
+  if (queue.length === 0) {
+    updateOfflineIndicator();
+    return;
+  }
+  isDrainingQueue = true;
+  updateOfflineIndicator();
+
+  const remaining = [];
+  for (const item of queue) {
+    try {
+      const headers = item.headers || {};
+      if (item.idempotency_key) {
+        headers["X-Idempotency-Key"] = item.idempotency_key;
+      }
+      const res = await fetch(`${getApiBase()}${item.endpoint}`, {
+        method: item.method,
+        headers,
+        body: item.body
+      });
+      if (!res.ok && res.status >= 500) {
+        remaining.push(item);
+      }
+    } catch (err) {
+      remaining.push(item);
+    }
+  }
+
+  saveOfflineQueue(remaining);
+  isDrainingQueue = false;
+  updateOfflineIndicator();
+  if (queue.length > remaining.length) {
+    console.log(`[VASTRENIX] Successfully synced ${queue.length - remaining.length} offline operations.`);
+  }
+}
+
+window.addEventListener("online", () => {
+  console.log("[VASTRENIX] Network reconnected. Draining offline queue...");
+  drainOfflineQueue();
+});
+window.addEventListener("offline", () => {
+  updateOfflineIndicator();
+});
+
 // API Helper with Strict Error Handling & Resilience
 async function api(endpoint, options = {}) {
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {})
   };
+  if (options.body instanceof FormData) {
+    delete headers["Content-Type"];
+  }
   if (state.token) {
     headers["Authorization"] = `Bearer ${state.token}`;
   }
@@ -408,6 +504,11 @@ async function api(endpoint, options = {}) {
       throw new Error(msg);
     }
 
+    // Success - if queue has items and we are online, trigger background drain
+    if (getOfflineQueue().length > 0) {
+      setTimeout(drainOfflineQueue, 100);
+    }
+
     return await res.json();
   } catch (err) {
     // If it was an intentional HTTP error thrown above, re-throw it
@@ -415,10 +516,31 @@ async function api(endpoint, options = {}) {
       throw err;
     }
 
-    // Network connection failed (TypeError: Failed to fetch)
+    // Network connection failed (TypeError: Failed to fetch / offline)
     if (method === "GET") {
       console.warn("VASTRENIX: Server offline or unreachable. Providing local data preview for:", endpoint);
       return handleOfflineMock(endpoint, options);
+    }
+
+    // Mutating request offline queueing
+    if (typeof options.body === "string") {
+      const queue = getOfflineQueue();
+      const idempotency_key = headers["X-Idempotency-Key"] || `off_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      queue.push({
+        endpoint,
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": headers["Authorization"],
+          "X-Business-ID": headers["X-Business-ID"]
+        },
+        body: options.body,
+        idempotency_key,
+        timestamp: new Date().toISOString()
+      });
+      saveOfflineQueue(queue);
+      alert(`Network offline or unreachable. Your operation has been saved locally and queued for automatic sync when connectivity resumes.`);
+      return handleOfflineMock(endpoint, { ...options, headers: { ...headers, "X-Idempotency-Key": idempotency_key } });
     }
 
     // For POST / PUT / DELETE mutations, NEVER silently mock without notifying user
@@ -569,6 +691,7 @@ function switchTab(tab) {
   const activeEl = document.querySelector(`[data-tab="${tab}"]`);
   if (activeEl) activeEl.classList.add("active");
   renderCurrentTab();
+  updateOfflineIndicator();
 }
 
 // Render Dashboard
@@ -1700,6 +1823,7 @@ async function renderExpenses() {
               <th>Category</th>
               <th>Description / Purpose</th>
               <th>Payment Mode</th>
+              <th>Receipt</th>
               <th style="text-align: right;">Amount (₹)</th>
             </tr>
           </thead>
@@ -1714,7 +1838,7 @@ async function renderExpenses() {
 
 function renderExpenseRows(list) {
   if (!list || list.length === 0) {
-    return '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No expenses recorded yet. Click "+ Record New Expense" to log costs.</td></tr>';
+    return '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">No expenses recorded yet. Click "+ Record New Expense" to log costs.</td></tr>';
   }
   return list.map(e => `
     <tr>
@@ -1724,6 +1848,13 @@ function renderExpenseRows(list) {
       </td>
       <td>${e.description || 'N/A'}</td>
       <td><span class="badge badge-neutral">${e.payment_mode}</span></td>
+      <td>
+        ${e.receipt_url ? `
+          <a href="${e.receipt_url.startsWith('http') ? e.receipt_url : getBaseServerUrl() + e.receipt_url}" target="_blank" class="badge badge-neutral" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; color: var(--teal); font-weight: 600;">
+            📎 View Receipt
+          </a>
+        ` : '<span style="color: var(--text-muted); font-size: 11px;">No receipt</span>'}
+      </td>
       <td style="text-align: right; font-weight: 800; color: var(--navy); font-size: 14px;">₹${e.amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
     </tr>
   `).join('');
@@ -1766,6 +1897,22 @@ async function submitAddExpense(e) {
     return alert("Please enter a valid expense amount greater than 0");
   }
 
+  let receipt_url = null;
+  const fileInput = document.getElementById("exp-receipt-file");
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    try {
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      const uploadRes = await api("/finance/expenses/upload-receipt", {
+        method: "POST",
+        body: formData
+      });
+      receipt_url = uploadRes.receipt_url;
+    } catch (upErr) {
+      console.warn("Receipt upload notice:", upErr);
+    }
+  }
+
   try {
     await api("/finance/expenses", {
       method: "POST",
@@ -1773,7 +1920,8 @@ async function submitAddExpense(e) {
         category,
         amount,
         payment_mode,
-        description
+        description,
+        receipt_url
       })
     });
     alert(`Expense of ₹${amount.toFixed(2)} for '${category}' recorded successfully!`);
@@ -2124,18 +2272,64 @@ async function renderUsers() {
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: var(--text-muted);">Account Status:</span>
-                <span style="color: var(--teal); font-weight: 700;">● Active</span>
+                <span style="color: ${s.is_active !== false ? 'var(--teal)' : 'var(--coral)'}; font-weight: 700;">● ${s.is_active !== false ? 'Active' : 'Deactivated'}</span>
               </div>
             </div>
 
-            <div style="display: flex; gap: 8px; justify-content: flex-end;">
-              <button class="btn btn-sm btn-secondary" onclick="alert('Staff profile for ${s.full_name.replace(/'/g, "\\'")} is verified and active.')">Profile Details</button>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+              ${s.role !== 'OWNER' ? `
+                <button class="btn btn-sm btn-secondary" onclick="changeStaffRole(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}', '${s.role}')">Change Role</button>
+                <button class="btn btn-sm ${s.is_active !== false ? 'btn-secondary' : 'btn-primary'}" onclick="toggleStaffStatus(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}', ${s.is_active !== false})">
+                  ${s.is_active !== false ? 'Deactivate' : 'Activate'}
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: var(--coral);" onclick="revokeStaffSessions(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">Revoke Session</button>
+              ` : `
+                <span class="badge badge-neutral" style="font-size: 11px;">Primary Owner</span>
+              `}
             </div>
           </div>
         `).join('')}
       </div>
     </div>
   `;
+}
+
+async function toggleStaffStatus(membershipId, staffName, currentActive) {
+  const action = currentActive ? "deactivate" : "activate";
+  if (!confirm(`Are you sure you want to ${action} ${staffName}?`)) return;
+  try {
+    await api(`/auth/staff/${membershipId}/toggle-status`, { method: "POST" });
+    alert(`Staff member ${staffName} has been ${action}d successfully.`);
+    renderUsers();
+  } catch (err) {}
+}
+
+async function changeStaffRole(membershipId, staffName, currentRole) {
+  const newRole = prompt(`Change role for ${staffName}\nAllowed roles: CASHIER, DISPATCHER, INVENTORY_MGR, ADMIN`, currentRole);
+  if (!newRole) return;
+  const cleanedRole = newRole.trim().toUpperCase();
+  if (cleanedRole === currentRole) return;
+  const validRoles = ["CASHIER", "DISPATCHER", "INVENTORY_MGR", "ADMIN"];
+  if (!validRoles.includes(cleanedRole)) {
+    return alert(`Invalid role '${cleanedRole}'. Please enter one of: ${validRoles.join(", ")}`);
+  }
+  try {
+    await api(`/auth/staff/${membershipId}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role: cleanedRole })
+    });
+    alert(`Role for ${staffName} updated to ${cleanedRole}!`);
+    renderUsers();
+  } catch (err) {}
+}
+
+async function revokeStaffSessions(membershipId, staffName) {
+  if (!confirm(`Revoke all active login sessions for ${staffName}? The user will be required to re-authenticate.`)) return;
+  try {
+    const res = await api(`/auth/staff/${membershipId}/revoke-sessions`, { method: "POST" });
+    alert(res.message || `Sessions revoked for ${staffName}.`);
+    renderUsers();
+  } catch (err) {}
 }
 
 function getRoleBadgeClass(role) {
@@ -2618,7 +2812,11 @@ async function renderApp() {
               </div>
             `}
           </div>
-          <div class="topbar-right">
+          <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
+            <div id="offline-status-pill" class="status-pill online" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; cursor: pointer;" onclick="drainOfflineQueue()" title="Click to sync offline changes">
+              <span class="status-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; display: inline-block;"></span>
+              <span id="offline-status-text">Online</span>
+            </div>
             <select class="lang-select" onchange="changeLanguage(this.value)">
               <option value="en" ${state.lang==='en'?'selected':''}>English</option>
               <option value="hi" ${state.lang==='hi'?'selected':''}>हिन्दी (Hindi)</option>
@@ -2739,6 +2937,10 @@ async function renderApp() {
           <div class="form-group">
             <label class="form-label">Description / Receipt Note</label>
             <input type="text" id="exp-description" class="form-input" required placeholder="e.g. 500 custom cotton carry bags for festival rush">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Attach Bill / Receipt Document (Optional)</label>
+            <input type="file" id="exp-receipt-file" class="form-input" accept="image/*,application/pdf">
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Save & Post Expense</button>
         </form>
@@ -2923,6 +3125,7 @@ async function renderApp() {
   `;
 
   renderCurrentTab();
+  updateOfflineIndicator();
 }
 
 window.addEventListener("keydown", (e) => {
