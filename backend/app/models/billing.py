@@ -46,6 +46,7 @@ class Invoice(Base):
     cashier_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     idempotency_key = Column(String(100), unique=True, index=True, nullable=True)
     pdf_filename = Column(String(255), nullable=True)
+    storage_url = Column(String(500), nullable=True)
     notes = Column(Text, nullable=True)
     terms_conditions = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

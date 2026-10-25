@@ -4,7 +4,14 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from backend.app.core.database import get_db
 from backend.app.core.security import decode_access_token
+from backend.app.core.firebase import firebase_service, FIREBASE_AVAILABLE
 from backend.app.models.auth import User, Business, UserMembership, Branch, UserRole
+from backend.app.repositories.firestore_repo import firestore_repo
+
+if FIREBASE_AVAILABLE:
+    from firebase_admin import auth
+else:
+    auth = None
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
@@ -15,17 +22,53 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
+
+    user = None
+
+    # 1. Primary: Verify Firebase ID Token via Firebase Admin SDK
+    if FIREBASE_AVAILABLE and auth and firebase_service.is_configured:
+        try:
+            decoded = auth.verify_id_token(token)
+            uid = decoded.get("uid")
+            email = decoded.get("email", "")
+            name = decoded.get("name") or decoded.get("display_name") or (email.split("@")[0] if email else "Staff Member")
+
+            user = db.query(User).filter((User.firebase_uid == uid) | (User.email == email)).first()
+            if not user and email:
+                user = User(
+                    firebase_uid=uid,
+                    email=email,
+                    full_name=name,
+                    hashed_password="FIREBASE_AUTH_PROVIDER",
+                    is_active=True
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            elif user and not user.firebase_uid:
+                user.firebase_uid = uid
+                db.commit()
+                db.refresh(user)
+        except Exception:
+            # Token was not a valid Firebase ID token or expired, fallback to local decode
+            pass
+
+    # 2. Fallback: Local JWT decoder (for local tests & legacy offline tokens)
+    if not user:
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            try:
+                user_id = int(payload["sub"])
+                user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+            except (ValueError, TypeError):
+                pass
+
+    if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user_id = int(payload["sub"])
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     return user
 
 class TenantContext:

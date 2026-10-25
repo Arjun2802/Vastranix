@@ -1,20 +1,38 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Scoped business file access
-    match /businesses/{businessId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && 
-        request.resource.size < 15 * 1024 * 1024 && // 15MB max file size
-        (request.resource.contentType.matches('image/.*') || 
-         request.resource.contentType == 'application/pdf');
+
+    // Default deny all access
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
 
-    // Public QR & Receipts
-    match /receipts/{businessId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 10 * 1024 * 1024;
+    // Scoped Multi-Tenant Business Storage
+    match /businesses/{businessId} {
+      
+      // Invoices: PDF only, max 5MB, authenticated users
+      match /invoices/{fileName} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null &&
+          request.resource.size < 5 * 1024 * 1024 &&
+          request.resource.contentType == 'application/pdf';
+      }
+
+      // Catalog Photos: Image only, max 10MB
+      match /photos/{fileName} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null &&
+          request.resource.size < 10 * 1024 * 1024 &&
+          request.resource.contentType.matches('image/.*');
+      }
+
+      // Expense Receipts: PDF or Image, max 10MB
+      match /expenses/{fileName} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null &&
+          request.resource.size < 10 * 1024 * 1024 &&
+          (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+      }
     }
   }
 }

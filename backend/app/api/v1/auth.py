@@ -5,6 +5,7 @@ from backend.app.core.database import get_db
 from backend.app.core.security import verify_password, get_password_hash, create_access_token
 from backend.app.core.permissions import get_current_user, get_tenant_context, TenantContext, require_roles
 from backend.app.models.auth import User, Business, Branch, UserMembership, UserRole
+from backend.app.repositories.firestore_repo import firestore_repo
 from datetime import datetime, timezone
 from backend.app.schemas.all_schemas import UserLoginSchema, UserRegisterSchema, StaffInviteSchema, StaffSelfRegisterSchema
 
@@ -79,6 +80,23 @@ def register_staff(data: StaffSelfRegisterSchema, db: Session = Depends(get_db))
     )
     db.add(membership)
     db.commit()
+
+    # Sync to Firestore multi-tenant hierarchy
+    firestore_repo.save_staff_profile(
+        business_id=business.id,
+        uid=user.firebase_uid or str(user.id),
+        staff_data={
+            "id": user.id,
+            "uid": user.firebase_uid or str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "phone": user.phone,
+            "role": membership.role,
+            "is_approved": membership.is_approved,
+            "business_id": business.id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    )
 
     return {
         "message": f"Staff registration submitted successfully. Your account is pending approval by the Store Administrator of '{business.name}' before you can log in.",
@@ -269,6 +287,13 @@ def approve_staff(
     db.commit()
 
     u = db.query(User).filter(User.id == mem.user_id).first()
+    if u:
+        firestore_repo.approve_staff(
+            business_id=ctx.business.id,
+            uid=u.firebase_uid or str(u.id),
+            role=mem.role
+        )
+
     return {
         "message": f"Staff member '{u.full_name if u else ''}' approved successfully. They can now log in.",
         "membership_id": mem.id,
@@ -430,6 +455,23 @@ def invite_staff(
     )
     db.add(membership)
     db.commit()
+
+    # Sync to Firestore multi-tenant hierarchy
+    firestore_repo.save_staff_profile(
+        business_id=ctx.business.id,
+        uid=user.firebase_uid or str(user.id),
+        staff_data={
+            "id": user.id,
+            "uid": user.firebase_uid or str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "phone": user.phone,
+            "role": membership.role,
+            "is_approved": membership.is_approved,
+            "business_id": ctx.business.id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    )
 
     return {"message": "Staff member created and assigned successfully", "user_id": user.id, "role": data.role}
 

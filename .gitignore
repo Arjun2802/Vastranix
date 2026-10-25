@@ -43,7 +43,15 @@ key.properties
 
 # Environment & Credentials
 .env
+.env.*
+!.env.example
+*.env
+*service-account*.json
 firebase-service-account.json
+backend/firebase-service-account.json
+FIREBASE_SERVICE_ACCOUNT_JSON
+*.pem
+*.key
 
 # macOS
 .DS_Store

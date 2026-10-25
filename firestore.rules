@@ -2,16 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isStaffDocApproved(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_approved == true;
+    }
+
     function isStaffMember(businessId) {
-      return isAuthenticated() &&
-        exists(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_approved == true &&
-        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_active == true;
+      return isAuthenticated() && (
+        (request.auth.token.business_id == businessId) ||
+        isStaffDocApproved(businessId)
+      );
     }
 
     function getStaffRole(businessId) {
@@ -23,62 +33,63 @@ service cloud.firestore {
         (getStaffRole(businessId) == 'OWNER' || getStaffRole(businessId) == 'ADMIN');
     }
 
-    // Public Store Directory for Staff Signup
+    // Public Directory (Public store lookup for staff self-signup)
     match /public_stores/{businessId} {
       allow read: if true;
       allow write: if isBusinessAdminOrOwner(businessId);
     }
 
-    // User Profile Documents (Auth mapping)
+    // User Self Document
     match /users/{userId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Multi-Tenant Business Root
+    // Multi-Tenant Business Root: businesses/{businessId}
     match /businesses/{businessId} {
       allow read: if isStaffMember(businessId);
       allow write: if isBusinessAdminOrOwner(businessId);
 
-      // Staff Subcollection
+      // Staff Subcollection: businesses/{businessId}/staff/{uid}
       match /staff/{staffId} {
         allow read: if isStaffMember(businessId);
-        // Self-signup for pending request
+        // Self-signup for pending approval: can create if unapproved
         allow create: if isAuthenticated() && request.auth.uid == staffId && request.resource.data.is_approved == false;
-        // Only Admin/Owner can approve, change role, or deactivate
-        allow update, delete: if isBusinessAdminOrOwner(businessId);
+        // Staff can NEVER edit their own role or is_approved field
+        allow update: if isBusinessAdminOrOwner(businessId) && (request.auth.uid != staffId || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'is_approved']));
+        allow delete: if isBusinessAdminOrOwner(businessId) && request.auth.uid != staffId;
       }
 
-      // Products & Variant Catalog
+      // Catalog Products & Variants: Read allowed for staff; direct writes denied (managed via FastAPI backend)
       match /products/{productId} {
         allow read: if isStaffMember(businessId);
-        allow write: if isStaffMember(businessId) &&
-          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'INVENTORY_MGR']);
+        allow write: if false;
       }
 
       match /variants/{variantId} {
         allow read: if isStaffMember(businessId);
-        // Stock decrements allowed by Cashier during POS sale or Inventory Manager
-        allow write: if isStaffMember(businessId);
+        // Direct client writes to stock levels denied; inventory decrements handled strictly via backend transactions
+        allow write: if false;
       }
 
-      // POS Invoices (Immutable once posted)
+      // POS Invoices (Append-Only / Financial Immutability)
       match /invoices/{invoiceId} {
         allow read: if isStaffMember(businessId);
         allow create: if isStaffMember(businessId) &&
           (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
-        // Updates restricted to VOID/REVERSAL corrections by Admin
-        allow update: if isBusinessAdminOrOwner(businessId) && request.resource.data.payment_status in ['VOID', 'REVERSED'];
-        allow delete: if false; // Invoices are immutable
+        // Never allow update or delete — strictly append-only
+        allow update: if false;
+        allow delete: if false;
       }
 
-      // Cash Shifts & Drawer Reconciliations
+      // Cash Shifts & Drawer Sessions
       match /cash_shifts/{shiftId} {
         allow read: if isStaffMember(businessId);
         allow create, update: if isStaffMember(businessId) &&
           (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
+        allow delete: if false;
       }
 
-      // Store Expenses (Restricted: Cashiers cannot read/write store expenses)
+      // Store Expenses (Restricted to Management & Accounts)
       match /expenses/{expenseId} {
         allow read, write: if isStaffMember(businessId) &&
           (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER']);
@@ -86,13 +97,14 @@ service cloud.firestore {
 
       // B2B Dealer Orders
       match /dealer_orders/{orderId} {
-        allow read, write: if isStaffMember(businessId);
+        allow read: if isStaffMember(businessId);
+        allow write: if false; // All state transitions handled via backend Admin SDK
       }
 
-      // Aggregated Analytics
-      match /analytics/{docId} {
+      // Idempotency Records
+      match /idempotency/{key} {
         allow read: if isStaffMember(businessId);
-        allow write: if isStaffMember(businessId);
+        allow write: if false; // Backend only
       }
     }
   }

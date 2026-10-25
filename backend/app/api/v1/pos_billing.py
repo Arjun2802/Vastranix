@@ -14,6 +14,8 @@ from backend.app.models.product import ProductVariant, Product
 from backend.app.services.stock_service import deduct_stock_for_sale, check_and_trigger_stock_alert, get_or_create_inventory_level
 from backend.app.services.invoice_renderer import render_invoice_pdf
 from backend.app.schemas.all_schemas import POSSaleCreateSchema, CustomerCreateSchema
+from backend.app.core.firebase import firebase_service
+from backend.app.repositories.firestore_repo import firestore_repo
 
 router = APIRouter(prefix="/pos", tags=["Point of Sale & Billing"])
 
@@ -221,7 +223,37 @@ def process_pos_sale(
             theme=theme
         )
         invoice.pdf_filename = pdf_filename
+        
+        # Upload generated PDF to Firebase Storage (businesses/{businessId}/invoices/{id}.pdf)
+        pdf_full_path = os.path.join(settings.INVOICE_DIR, pdf_filename)
+        dest_blob_path = f"businesses/{ctx.business.id}/invoices/{invoice.id}.pdf"
+        storage_res = firebase_service.upload_to_storage(
+            content=pdf_full_path,
+            destination_blob_name=dest_blob_path,
+            content_type="application/pdf"
+        )
+        if storage_res.get("public_url"):
+            invoice.storage_url = storage_res["public_url"]
+        
         db.commit()
+
+        # Sync invoice metadata to Firestore
+        firestore_repo.record_invoice(
+            business_id=ctx.business.id,
+            invoice_id=invoice.id,
+            invoice_data={
+                "id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "total_amount": float(invoice.total_amount),
+                "paid_amount": float(invoice.paid_amount),
+                "balance_due": float(invoice.balance_due),
+                "payment_status": invoice.payment_status,
+                "invoice_theme": invoice.invoice_theme,
+                "pdf_filename": invoice.pdf_filename,
+                "storage_url": invoice.storage_url or f"/api/v1/pos/invoices/{invoice.id}/pdf",
+                "created_at": invoice.created_at.isoformat() if invoice.created_at else datetime.now(timezone.utc).isoformat()
+            }
+        )
     except Exception as e:
         pdf_status = "FAILED"
 
@@ -235,6 +267,7 @@ def process_pos_sale(
         "payment_status": invoice.payment_status,
         "invoice_theme": invoice.invoice_theme,
         "pdf_status": pdf_status,
+        "storage_url": invoice.storage_url,
         "pdf_download_url": f"/api/v1/pos/invoices/{invoice.id}/pdf",
         "retry_pdf_url": f"/api/v1/pos/invoices/{invoice.id}/retry-pdf",
         "preview_url": f"/api/v1/pos/invoices/{invoice.id}/preview"
@@ -262,10 +295,41 @@ def retry_invoice_pdf(
             theme=invoice.invoice_theme
         )
         invoice.pdf_filename = pdf_filename
+
+        # Upload generated PDF to Firebase Storage (businesses/{businessId}/invoices/{id}.pdf)
+        pdf_full_path = os.path.join(settings.INVOICE_DIR, pdf_filename)
+        dest_blob_path = f"businesses/{ctx.business.id}/invoices/{invoice.id}.pdf"
+        storage_res = firebase_service.upload_to_storage(
+            content=pdf_full_path,
+            destination_blob_name=dest_blob_path,
+            content_type="application/pdf"
+        )
+        if storage_res.get("public_url"):
+            invoice.storage_url = storage_res["public_url"]
+
         db.commit()
+
+        firestore_repo.record_invoice(
+            business_id=ctx.business.id,
+            invoice_id=invoice.id,
+            invoice_data={
+                "id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "total_amount": float(invoice.total_amount),
+                "paid_amount": float(invoice.paid_amount),
+                "balance_due": float(invoice.balance_due),
+                "payment_status": invoice.payment_status,
+                "invoice_theme": invoice.invoice_theme,
+                "pdf_filename": invoice.pdf_filename,
+                "storage_url": invoice.storage_url or f"/api/v1/pos/invoices/{invoice.id}/pdf",
+                "created_at": invoice.created_at.isoformat() if invoice.created_at else datetime.now(timezone.utc).isoformat()
+            }
+        )
+
         return {
             "message": "PDF generated successfully",
             "pdf_filename": pdf_filename,
+            "storage_url": invoice.storage_url,
             "pdf_download_url": f"/api/v1/pos/invoices/{invoice.id}/pdf"
         }
     except Exception as e:
