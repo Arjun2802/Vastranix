@@ -1,11 +1,19 @@
 // VASTRENIX Client Application Controller
+// Build-time Production Cloud API constant (Render Free Web Service + Firebase Admin)
+const PRODUCTION_RENDER_API = "https://vastrenix-api.onrender.com";
+
+let isServerWarm = false;
+let coldStartTimer = null;
+let coldStartTimeoutTimer = null;
 
 function getBaseServerUrl() {
-  const saved = localStorage.getItem("vastrenix_server_url");
-  if (saved && saved.trim()) {
-    return saved.trim().replace(/\/+$/, "");
+  // 1. Hidden developer override (accessible only via logo gesture, never shown to regular users)
+  const debugOverride = localStorage.getItem("vastrenix_debug_server_url");
+  if (debugOverride && debugOverride.trim()) {
+    return debugOverride.trim().replace(/\/+$/, "");
   }
 
+  // 2. Native container override if explicitly provided
   if (window.VastrenixNative && typeof window.VastrenixNative.getServerUrl === "function") {
     const nativeSaved = window.VastrenixNative.getServerUrl();
     if (nativeSaved && nativeSaved.trim()) {
@@ -13,12 +21,15 @@ function getBaseServerUrl() {
     }
   }
 
+  // 3. Web browser hosting if not localhost
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-    return window.location.origin;
+    if (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
+      return window.location.origin;
+    }
   }
 
-  // Default for Android Emulator / Local LAN testing
-  return "http://10.0.2.2:8000";
+  // 4. Default Production Render API URL
+  return PRODUCTION_RENDER_API;
 }
 
 function getApiBase() {
@@ -373,35 +384,68 @@ function saveOfflineQueue(queue) {
   updateOfflineIndicator();
 }
 
-function updateOfflineIndicator() {
-  const pill = document.getElementById("offline-status-pill");
-  const text = document.getElementById("offline-status-text");
-  if (!pill || !text) return;
+function cycleLanguage() {
+  const modes = ["en", "hi", "gu"];
+  const currentIdx = modes.indexOf(state.lang || "en");
+  const nextIdx = (currentIdx + 1) % modes.length;
+  changeLanguage(modes[nextIdx]);
+}
 
+function showStoreInfoToast() {
+  const name = state.storeName || (state.business && state.business.name) || "VASTRENIX Flagship";
+  const user = state.user ? `${state.user.full_name} (${state.isStaff ? state.business.role : 'Owner'})` : "";
+  if (window.VastrenixNative && typeof window.VastrenixNative.showToast === "function") {
+    window.VastrenixNative.showToast(`${name} • ${user}`);
+  } else {
+    alert(`Store: ${name}\nLogged in: ${user}`);
+  }
+}
+
+function updateOfflineIndicator() {
   const queue = getOfflineQueue();
   const isOnline = navigator.onLine;
 
-  if (!isOnline) {
-    pill.style.background = "#FEF2F2";
-    pill.style.color = "#991B1B";
-    pill.style.borderColor = "#FECACA";
-    const dot = pill.querySelector(".status-dot");
-    if (dot) dot.style.background = "#EF4444";
-    text.textContent = `Offline • ${queue.length} Pending Sync`;
-  } else if (queue.length > 0) {
-    pill.style.background = "#FFFBEB";
-    pill.style.color = "#92400E";
-    pill.style.borderColor = "#FDE68A";
-    const dot = pill.querySelector(".status-dot");
-    if (dot) dot.style.background = "#F59E0B";
-    text.textContent = `Syncing (${queue.length} queued)...`;
-  } else {
-    pill.style.background = "#ECFDF5";
-    pill.style.color = "#065F46";
-    pill.style.borderColor = "#A7F3D0";
-    const dot = pill.querySelector(".status-dot");
-    if (dot) dot.style.background = "#10B981";
-    text.textContent = "Online";
+  // 1. Mobile Auto-Hiding Row 2 Sync Banner
+  const syncRow = document.getElementById("sync-banner-row");
+  const syncText = document.getElementById("sync-banner-text");
+  if (syncRow && syncText) {
+    if (!isOnline) {
+      syncRow.style.display = "flex";
+      syncRow.className = "sync-banner-row offline-pending";
+      syncText.textContent = `Offline • ${queue.length} Pending Sync`;
+    } else if (queue.length > 0) {
+      syncRow.style.display = "flex";
+      syncRow.className = "sync-banner-row";
+      syncText.textContent = isDrainingQueue ? `Syncing (${queue.length} queued)...` : `${queue.length} operations queued for cloud sync`;
+    } else {
+      // Auto-hide when queue is empty and network is online — NEVER reserve space!
+      syncRow.style.display = "none";
+    }
+  }
+
+  // 2. Desktop Status Pill (if present)
+  const pill = document.getElementById("offline-status-pill");
+  const text = document.getElementById("offline-status-text");
+  if (pill && text) {
+    if (!isOnline) {
+      pill.style.background = "#FEF2F2";
+      pill.style.color = "#991B1B";
+      pill.style.borderColor = "#FECACA";
+      const dot = pill.querySelector(".status-dot");
+      if (dot) dot.style.background = "#EF4444";
+      text.textContent = `Offline • ${queue.length} Pending`;
+      pill.style.display = "inline-flex";
+    } else if (queue.length > 0) {
+      pill.style.background = "#FFFBEB";
+      pill.style.color = "#92400E";
+      pill.style.borderColor = "#FDE68A";
+      const dot = pill.querySelector(".status-dot");
+      if (dot) dot.style.background = "#F59E0B";
+      text.textContent = `Syncing (${queue.length})...`;
+      pill.style.display = "inline-flex";
+    } else {
+      pill.style.display = "none"; // Clean auto-hide on desktop as well
+    }
   }
 }
 
@@ -452,7 +496,56 @@ window.addEventListener("offline", () => {
   updateOfflineIndicator();
 });
 
-// API Helper with Strict Error Handling & Resilience
+// Render Cold-Start Management (Part 2)
+function showColdStartOverlay() {
+  const overlay = document.getElementById("render-coldstart-overlay");
+  if (overlay) {
+    overlay.style.display = "flex";
+    const title = document.getElementById("coldstart-title");
+    const sub = document.getElementById("coldstart-subline");
+    const action = document.getElementById("coldstart-timeout-action");
+    if (title) title.innerText = "Waking up your store's cloud server…";
+    if (sub) sub.innerText = "This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.";
+    if (action) action.style.display = "none";
+
+    // Set 55s fallback timer
+    if (coldStartTimeoutTimer) clearTimeout(coldStartTimeoutTimer);
+    coldStartTimeoutTimer = setTimeout(() => {
+      if (overlay.style.display === "flex") {
+        if (title) title.innerText = "Taking longer than expected";
+        if (sub) sub.innerText = "The cloud instance is taking a little longer to boot. Please check your connection or tap below.";
+        if (action) action.style.display = "block";
+      }
+    }, 55000);
+  }
+}
+
+function hideColdStartOverlay() {
+  if (coldStartTimer) {
+    clearTimeout(coldStartTimer);
+    coldStartTimer = null;
+  }
+  if (coldStartTimeoutTimer) {
+    clearTimeout(coldStartTimeoutTimer);
+    coldStartTimeoutTimer = null;
+  }
+  const overlay = document.getElementById("render-coldstart-overlay");
+  if (overlay && overlay.style.display === "flex") {
+    overlay.style.transition = "opacity 0.25s ease-out";
+    overlay.style.opacity = "0";
+    setTimeout(() => {
+      overlay.style.display = "none";
+      overlay.style.opacity = "1";
+    }, 250);
+  }
+}
+
+function retryColdStartRequest() {
+  hideColdStartOverlay();
+  renderApp();
+}
+
+// API Helper with Strict Error Handling, Cold-Start Grace & Offline Resilience
 async function api(endpoint, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -472,8 +565,14 @@ async function api(endpoint, options = {}) {
   const url = `${getApiBase()}${endpoint}`;
 
   const controller = new AbortController();
-  const timeoutMs = options.timeout || 8500;
+  // Allow up to 65s for Render free-tier instance wake-up
+  const timeoutMs = options.timeout || 65000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // If request takes > 1.8s (typical of Render sleeping), display reassuring branded wake screen
+  coldStartTimer = setTimeout(() => {
+    showColdStartOverlay();
+  }, 1800);
 
   try {
     const res = await fetch(url, {
@@ -482,6 +581,8 @@ async function api(endpoint, options = {}) {
       signal: controller.signal
     });
     clearTimeout(timeoutId);
+    hideColdStartOverlay();
+    isServerWarm = true;
 
     if (res.status === 401) {
       logout();
@@ -518,8 +619,9 @@ async function api(endpoint, options = {}) {
     return await res.json();
   } catch (err) {
     clearTimeout(timeoutId);
+    hideColdStartOverlay();
     if (err.name === "AbortError") {
-      alert(`Network Timeout: The operation took longer than 8s to reach ${getApiBase()}.\nPlease check your connection or Server URL settings and retry.`);
+      alert(`Network Timeout: The operation took longer than 60s to reach the cloud server.\nPlease tap Retry or check your network.`);
       throw new Error(`Timeout on ${endpoint}`);
     }
 
@@ -2832,6 +2934,23 @@ async function submitAddProduct(event) {
   renderInventory();
 }
 
+let devTapCount = 0;
+let devTapTimeout = null;
+function handleDevLogoTap() {
+  devTapCount++;
+  if (devTapTimeout) clearTimeout(devTapTimeout);
+  if (devTapCount >= 5) {
+    devTapCount = 0;
+    openServerSettingsModal();
+    return;
+  }
+  devTapTimeout = setTimeout(() => { devTapCount = 0; }, 1800);
+}
+function handleDevLogoHold(e) {
+  e.preventDefault();
+  openServerSettingsModal();
+}
+
 // Render Main App or Authentication Gate
 async function renderApp() {
   const root = document.getElementById("app");
@@ -2852,11 +2971,32 @@ async function renderApp() {
     }).catch(() => {});
 
     root.innerHTML = `
+      <!-- Render Cold-Start Grace Screen (Part 2) -->
+      <div id="render-coldstart-overlay" class="coldstart-overlay" style="display: none;">
+        <div class="coldstart-card">
+          <div class="coldstart-logo-pulse">
+            <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX" style="width: 58px; height: 58px;">
+          </div>
+          <h2 id="coldstart-title" class="coldstart-title">Waking up your store's cloud server…</h2>
+          <p id="coldstart-subline" class="coldstart-subline">
+            This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.
+          </p>
+          <div class="coldstart-progress-bar">
+            <div id="coldstart-progress-fill" class="coldstart-progress-fill"></div>
+          </div>
+          <div id="coldstart-timeout-action" style="display: none; margin-top: 18px;">
+            <button class="btn btn-primary" onclick="retryColdStartRequest()" style="padding: 10px 20px; font-size: 13px;">
+              ↻ Retry Server Connection
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px;">
         <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(229, 231, 226, 0.9); border-radius: var(--radius-lg); padding: 40px 36px; width: 100%; max-width: 480px; box-shadow: 0 20px 48px rgba(16, 30, 43, 0.12); position: relative;">
           
           <div style="text-align: center; margin-bottom: 26px;">
-            <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" style="width: 82px; height: 82px; margin-bottom: 14px; filter: drop-shadow(0 12px 24px rgba(16, 30, 43, 0.28));">
+            <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" style="width: 82px; height: 82px; margin-bottom: 14px; filter: drop-shadow(0 12px 24px rgba(16, 30, 43, 0.28)); cursor: pointer;" onclick="handleDevLogoTap()" oncontextmenu="handleDevLogoHold(event)" title="VASTRENIX Platform">
             <div style="font-size: 26px; font-weight: 900; letter-spacing: 3.5px; color: var(--navy); margin-bottom: 4px;">VASTRENIX</div>
             <p style="color: var(--teal); font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">Your Business, Beautifully in Sync.</p>
           </div>
@@ -2994,43 +3134,31 @@ async function renderApp() {
             </form>
           ` : ''}
 
-          <!-- Server Connection & Cloud API Settings Bar -->
-          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
-            <div style="font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; display: inline-block;"></span>
-              <span>API: <b style="color: var(--navy);">${getBaseServerUrl()}</b></span>
-            </div>
-            <button class="btn btn-sm btn-secondary" onclick="openServerSettingsModal()" style="font-size: 11px; padding: 4px 10px;">
-              ⚙ Server URL
-            </button>
-          </div>
-
         </div>
       </div>
 
-      <!-- Server URL Settings Modal -->
+      <!-- Developer Diagnostic Server URL Modal (Hidden from regular users, accessible via logo gesture) -->
       <div class="modal-overlay" id="modal-server-settings">
         <div class="modal-card" style="max-width: 440px;">
           <div class="modal-header">
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Server & Cloud Connection</h3>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Developer Diagnostic Settings</h3>
             <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeServerSettingsModal()">&times;</button>
           </div>
           <div class="modal-body">
             <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
-              Configure your backend API server endpoint. Works with local development servers, LAN Wi-Fi IPs, or cloud deployments.
+              Production default is hardcoded to Render cloud service. Use this dialog only for internal debugging or self-hosted testing.
             </p>
             <div class="form-group">
-              <label class="form-label">Backend Server URL</label>
-              <input type="text" id="server-url-input" class="form-input" placeholder="http://10.0.2.2:8000">
+              <label class="form-label">API Override Endpoint</label>
+              <input type="text" id="server-url-input" class="form-input" placeholder="${PRODUCTION_RENDER_API}">
             </div>
 
             <div style="margin-bottom: 16px;">
-              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Quick Presets</div>
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Presets</div>
               <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://10.0.2.2:8000')">Emulator (10.0.2.2:8000)</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="setPresetServerUrl('${PRODUCTION_RENDER_API}')">Production Render</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://10.0.2.2:8000')">Android Emulator (10.0.2.2)</button>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://localhost:8000')">Localhost (8000)</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://127.0.0.1:8000')">127.0.0.1:8000</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('https://api.vastrenix.com')">Cloud HTTPS</button>
               </div>
             </div>
 
@@ -3041,7 +3169,7 @@ async function renderApp() {
                 Test Health
               </button>
               <button type="button" class="btn btn-primary" style="flex: 1; padding: 10px;" onclick="saveServerSettings()">
-                Save & Connect
+                Save Override
               </button>
             </div>
           </div>
@@ -3054,6 +3182,27 @@ async function renderApp() {
   // Authenticated Application Shell
   const t = i18n[state.lang] || i18n.en;
   root.innerHTML = `
+    <!-- Render Cold-Start Grace Screen (Part 2) -->
+    <div id="render-coldstart-overlay" class="coldstart-overlay" style="display: none;">
+      <div class="coldstart-card">
+        <div class="coldstart-logo-pulse">
+          <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX" style="width: 58px; height: 58px;">
+        </div>
+        <h2 id="coldstart-title" class="coldstart-title">Waking up your store's cloud server…</h2>
+        <p id="coldstart-subline" class="coldstart-subline">
+          This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.
+        </p>
+        <div class="coldstart-progress-bar">
+          <div id="coldstart-progress-fill" class="coldstart-progress-fill"></div>
+        </div>
+        <div id="coldstart-timeout-action" style="display: none; margin-top: 18px;">
+          <button class="btn btn-primary" onclick="retryColdStartRequest()" style="padding: 10px 20px; font-size: 13px;">
+            ↻ Retry Server Connection
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="app-layout">
       <!-- Sidebar -->
       <aside class="sidebar">
@@ -3139,35 +3288,27 @@ async function renderApp() {
       <!-- Main Section -->
       <div class="main-wrapper">
         <header class="topbar">
-          <div class="topbar-left">
-            <button class="mobile-hamburger" onclick="toggleMobileDrawer()" aria-label="Open Navigation">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-            <div class="topbar-title">
-              ${state.storeName || state.business.name}
+          <div class="topbar-row-main">
+            <div class="topbar-left">
+              <button class="mobile-hamburger" onclick="toggleMobileDrawer()" aria-label="Open Navigation">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </button>
+              <div class="topbar-title-wrap" onclick="showStoreInfoToast()" title="${state.storeName || state.business.name}">
+                <div class="topbar-title">${state.storeName || state.business.name}</div>
+                <div class="topbar-subtitle">${state.isStaff ? `Staff: ${state.user.full_name} (${state.business.role})` : (t.flagship_store || 'Flagship Store')}</div>
+              </div>
             </div>
-            ${state.isStaff ? `
-              <div class="branch-pill" style="background: #E8F4F0; color: var(--teal);">
-                <span style="width: 7px; height: 7px; background: var(--teal); border-radius: 50%;"></span>
-                Staff: <b>${state.user.full_name} (${state.business.role})</b>
-              </div>
-            ` : `
-              <div class="branch-pill">
-                <span style="width: 7px; height: 7px; background: var(--teal); border-radius: 50%;"></span>
-                ${t.flagship_store}
-              </div>
-            `}
+            <div class="topbar-right">
+              <button class="lang-compact-chip" onclick="cycleLanguage()" title="Switch Language (English / हिन्दी / ગુજરાતી)">
+                <span class="lang-globe-icon">🌐</span>
+                <span class="lang-code-text">${state.lang==='hi' ? 'हि' : state.lang==='gu' ? 'ગુ' : 'EN'}</span>
+              </button>
+            </div>
           </div>
-          <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
-            <div id="offline-status-pill" class="status-pill online" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; cursor: pointer;" onclick="drainOfflineQueue()" title="Click to sync offline changes">
-              <span class="status-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; display: inline-block;"></span>
-              <span id="offline-status-text">Online</span>
-            </div>
-            <select class="lang-select" onchange="changeLanguage(this.value)">
-              <option value="en" ${state.lang==='en'?'selected':''}>English</option>
-              <option value="hi" ${state.lang==='hi'?'selected':''}>हिन्दी (Hindi)</option>
-              <option value="gu" ${state.lang==='gu'?'selected':''}>ગુજરાતી (Gujarati)</option>
-            </select>
+          <!-- Row 2: Sync Status Pill (Shown ONLY while syncing/offline, auto-hides when empty) -->
+          <div id="sync-banner-row" class="sync-banner-row" style="display: none;" onclick="drainOfflineQueue()" title="Tap to sync with cloud">
+            <span class="sync-pulse-dot"></span>
+            <span id="sync-banner-text">Syncing...</span>
           </div>
         </header>
 
@@ -3398,38 +3539,54 @@ async function renderApp() {
 
       <div class="mobile-drawer-nav">
         <a class="mobile-drawer-link active" data-tab="dashboard" onclick="drawerNav('dashboard')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-          ${t.dashboard}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          </div>
+          <span class="drawer-label">${t.dashboard}</span>
         </a>
         <a class="mobile-drawer-link" data-tab="inventory" onclick="drawerNav('inventory')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-          ${t.inventory}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          </div>
+          <span class="drawer-label">${t.inventory}</span>
         </a>
         <a class="mobile-drawer-link" data-tab="pos" onclick="drawerNav('pos')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          ${t.pos}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
+          </div>
+          <span class="drawer-label">${t.pos}</span>
         </a>
         <a class="mobile-drawer-link" data-tab="invoices" onclick="drawerNav('invoices')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          ${t.invoices}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          </div>
+          <span class="drawer-label">${t.invoices}</span>
         </a>
         ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
         <a class="mobile-drawer-link" data-tab="expenses" onclick="drawerNav('expenses')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          ${t.expenses}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          </div>
+          <span class="drawer-label">${t.expenses}</span>
         </a>
         <a class="mobile-drawer-link" data-tab="dealers" onclick="drawerNav('dealers')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-          ${t.dealers}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+          </div>
+          <span class="drawer-label">${t.dealers}</span>
         </a>
         <a class="mobile-drawer-link" data-tab="users" onclick="drawerNav('users')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-          ${t.team}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          </div>
+          <span class="drawer-label">${t.team}</span>
         </a>
         ` : ''}
         <a class="mobile-drawer-link" data-tab="flowcharts" onclick="drawerNav('flowcharts')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          ${t.flowcharts}
+          <div class="mobile-drawer-icon-box">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><path d="M10 6.5h4"></path><path d="M17.5 10v4"></path></svg>
+          </div>
+          <span class="drawer-label">${t.flowcharts}</span>
         </a>
       </div>
 
@@ -3438,32 +3595,44 @@ async function renderApp() {
       </div>
     </aside>
 
-    <!-- Mobile Bottom Navigation Bar (5 Primary Actions) -->
+    <!-- Mobile Bottom Navigation Bar (Max 5 Actions, Crisp Icons & Clean Non-Overlapping Labels) -->
     <nav class="mobile-bottom-nav">
       <a class="mobile-nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        </div>
         <span>${t.dashboard}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="inventory" onclick="switchTab('inventory')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        </div>
         <span>${t.inventory}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="pos" onclick="switchTab('pos')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
+        </div>
         <span>${t.pos}</span>
       </a>
       ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
       <a class="mobile-nav-btn" data-tab="expenses" onclick="switchTab('expenses')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
         <span>${t.expenses}</span>
       </a>
       <a class="mobile-nav-btn" data-tab="users" onclick="switchTab('users')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        </div>
         <span>${t.team}</span>
       </a>
       ` : `
       <a class="mobile-nav-btn" data-tab="invoices" onclick="switchTab('invoices')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <div class="mobile-nav-icon-pill">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        </div>
         <span>${t.invoices}</span>
       </a>
       `}
