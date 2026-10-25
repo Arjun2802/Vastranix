@@ -7,28 +7,22 @@ let coldStartTimer = null;
 let coldStartTimeoutTimer = null;
 
 function getBaseServerUrl() {
-  // 1. Hidden developer override (accessible only via logo gesture, never shown to regular users)
-  const debugOverride = localStorage.getItem("vastrenix_debug_server_url");
-  if (debugOverride && debugOverride.trim()) {
-    return debugOverride.trim().replace(/\/+$/, "");
-  }
+  // Always clean up any stale overrides pointing to localhost or old URLs
+  try {
+    localStorage.removeItem("vastrenix_server_url");
+    localStorage.removeItem("vastrenix_debug_server_url");
+  } catch (e) {}
 
-  // 2. Native container override if explicitly provided
-  if (window.VastrenixNative && typeof window.VastrenixNative.getServerUrl === "function") {
-    const nativeSaved = window.VastrenixNative.getServerUrl();
-    if (nativeSaved && nativeSaved.trim()) {
-      return nativeSaved.trim().replace(/\/+$/, "");
+  // 1. Web browser hosting if deployed directly to another domain (production domain)
+  if (typeof window !== "undefined" && window.location) {
+    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+      if (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
+        return window.location.origin;
+      }
     }
   }
 
-  // 3. Web browser hosting if not localhost
-  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-    if (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
-      return window.location.origin;
-    }
-  }
-
-  // 4. Default Production Render API URL
+  // 2. Default Production Render API URL (Strict Cloud Source of Truth)
   return PRODUCTION_RENDER_API;
 }
 
@@ -239,6 +233,13 @@ const offlineDB = {
   staff: [
     { id: 2, full_name: "Aman Verma", email: "aman.staff@store.com", role: "DISPATCHER", branch_name: "Main Store", is_active: true },
     { id: 3, full_name: "Pooja Sharma", email: "pooja.cashier@store.com", role: "CASHIER", branch_name: "Main Store", is_active: true }
+  ],
+  suppliers: [
+    { id: 1, name: "Surat Textile Mill (Primary Supplier)", city: "Surat", phone: "+91 98250 11223" },
+    { id: 2, name: "Jaipur Handloom Weavers", city: "Jaipur", phone: "+91 94140 33445" }
+  ],
+  purchaseOrders: [
+    { id: 1, po_number: "PO-20261025-0001", order_date: "25-Oct-2026", supplier_name: "Surat Textile Mill", status: "ISSUED", total_amount: 24000.00 }
   ]
 };
 
@@ -256,6 +257,28 @@ function handleOfflineMock(endpoint, options = {}) {
   if (endpoint.includes("/dealers/connections")) return offlineDB.connections;
   if (endpoint.includes("/auth/staff")) return offlineDB.staff;
   if (endpoint.includes("/auth/pending-staff")) return [];
+  if (endpoint.includes("/purchases/suppliers")) return offlineDB.suppliers;
+  if (endpoint.includes("/purchases/orders") && method === "GET") return offlineDB.purchaseOrders;
+  if (endpoint.includes("/purchases/orders") && method === "POST") {
+    const payload = JSON.parse(options.body || "{}");
+    const num = `PO-${Date.now().toString().slice(-4)}`;
+    const newPo = {
+      id: Date.now(),
+      po_number: num,
+      order_date: "Today",
+      supplier_name: "Surat Textile Mill",
+      status: "ISSUED",
+      total_amount: payload.items ? payload.items.reduce((s, it) => s + (it.unit_cost * it.quantity), 0) : 5000.00
+    };
+    offlineDB.purchaseOrders.unshift(newPo);
+    return { message: "Purchase order created", po_id: newPo.id, po_number: newPo.po_number, total_amount: newPo.total_amount };
+  }
+  if (endpoint.includes("/purchases/grn") && method === "POST") {
+    const payload = JSON.parse(options.body || "{}");
+    const po = offlineDB.purchaseOrders.find(o => o.id === payload.purchase_order_id);
+    if (po) po.status = "COMPLETED";
+    return { message: "Goods received into stock successfully", grn_number: `GRN-${Date.now().toString().slice(-4)}` };
+  }
 
   if (endpoint.includes("/auth/login") && method === "POST") {
     return {
@@ -384,11 +407,50 @@ function saveOfflineQueue(queue) {
   updateOfflineIndicator();
 }
 
+function showToast(message, duration = 4000) {
+  const existing = document.getElementById("vastrenix-toast");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.id = "vastrenix-toast";
+  toast.className = "toast-notification";
+  toast.innerHTML = `<span>✨</span><span>${message}</span>`;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translate(-50%, 20px)";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, duration);
+}
+
+function openLanguageModal() {
+  const picker = document.getElementById("modal-language-picker");
+  if (picker) {
+    picker.querySelectorAll(".lang-option-card").forEach(card => {
+      const lang = card.getAttribute("data-lang");
+      card.classList.toggle("selected", lang === (state.lang || "en"));
+    });
+    picker.classList.add("active");
+  } else {
+    cycleLanguage();
+  }
+}
+
+function selectLanguage(lang) {
+  state.lang = lang;
+  localStorage.setItem("vastrenix_lang", lang);
+  closeModal("modal-language-picker");
+  showToast(lang === 'hi' ? 'भाषा हिन्दी सक्रिय है' : lang === 'gu' ? 'ગુજરાતી ભાષા સેટ થઈ' : 'Language set to English');
+  renderApp();
+}
+
 function cycleLanguage() {
   const modes = ["en", "hi", "gu"];
   const currentIdx = modes.indexOf(state.lang || "en");
   const nextIdx = (currentIdx + 1) % modes.length;
-  changeLanguage(modes[nextIdx]);
+  selectLanguage(modes[nextIdx]);
 }
 
 function showStoreInfoToast() {
@@ -496,31 +558,53 @@ window.addEventListener("offline", () => {
   updateOfflineIndicator();
 });
 
-// Render Cold-Start Management (Part 2)
+// Render Cold-Start Management (Part 2 - Non-blocking floating banner)
+let coldStartInterval = null;
+let coldStartElapsedSeconds = 0;
+
 function showColdStartOverlay() {
-  const overlay = document.getElementById("render-coldstart-overlay");
-  if (overlay) {
-    overlay.style.display = "flex";
+  const banner = document.getElementById("render-coldstart-overlay");
+  if (banner) {
+    banner.style.display = "block";
+    requestAnimationFrame(() => {
+      banner.classList.add("visible");
+    });
+
     const title = document.getElementById("coldstart-title");
     const sub = document.getElementById("coldstart-subline");
     const action = document.getElementById("coldstart-timeout-action");
-    if (title) title.innerText = "Waking up your store's cloud server…";
-    if (sub) sub.innerText = "This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.";
-    if (action) action.style.display = "none";
+    const dot = document.getElementById("cloud-wake-dot");
 
-    // Set 55s fallback timer
+    if (dot) {
+      dot.style.background = "#2DD4BF";
+      dot.style.boxShadow = "0 0 8px #2DD4BF";
+    }
+    if (action) action.style.display = "none";
+    if (sub) sub.innerText = "Offline operations & billing active";
+
+    coldStartElapsedSeconds = 0;
+    if (title) title.innerText = "Connecting to cloud server (1s)...";
+    if (coldStartInterval) clearInterval(coldStartInterval);
+    coldStartInterval = setInterval(() => {
+      coldStartElapsedSeconds++;
+      if (title) {
+        title.innerText = `Connecting to cloud server (${coldStartElapsedSeconds}s)...`;
+      }
+    }, 1000);
+
+    // Set 45s fallback action
     if (coldStartTimeoutTimer) clearTimeout(coldStartTimeoutTimer);
     coldStartTimeoutTimer = setTimeout(() => {
-      if (overlay.style.display === "flex") {
-        if (title) title.innerText = "Taking longer than expected";
-        if (sub) sub.innerText = "The cloud instance is taking a little longer to boot. Please check your connection or tap below.";
+      if (banner.classList.contains("visible") || banner.style.display !== "none") {
+        if (title) title.innerText = "Server waking up slowly...";
+        if (sub) sub.innerText = "Tap retry or continue using offline mode";
         if (action) action.style.display = "block";
       }
-    }, 55000);
+    }, 45000);
   }
 }
 
-function hideColdStartOverlay() {
+function hideColdStartOverlay(isSuccess = true) {
   if (coldStartTimer) {
     clearTimeout(coldStartTimer);
     coldStartTimer = null;
@@ -529,19 +613,34 @@ function hideColdStartOverlay() {
     clearTimeout(coldStartTimeoutTimer);
     coldStartTimeoutTimer = null;
   }
-  const overlay = document.getElementById("render-coldstart-overlay");
-  if (overlay && overlay.style.display === "flex") {
-    overlay.style.transition = "opacity 0.25s ease-out";
-    overlay.style.opacity = "0";
+  if (coldStartInterval) {
+    clearInterval(coldStartInterval);
+    coldStartInterval = null;
+  }
+  document.body.style.overflow = "";
+
+  const banner = document.getElementById("render-coldstart-overlay");
+  if (banner && (banner.classList.contains("visible") || banner.style.display !== "none")) {
+    const title = document.getElementById("coldstart-title");
+    const dot = document.getElementById("cloud-wake-dot");
+    if (isSuccess && title) {
+      title.innerText = "✓ Cloud Server Connected";
+      if (dot) {
+        dot.style.background = "#10B981";
+        dot.style.boxShadow = "0 0 10px #10B981";
+      }
+    }
     setTimeout(() => {
-      overlay.style.display = "none";
-      overlay.style.opacity = "1";
-    }, 250);
+      banner.classList.remove("visible");
+      setTimeout(() => {
+        banner.style.display = "none";
+      }, 350);
+    }, isSuccess ? 1200 : 200);
   }
 }
 
 function retryColdStartRequest() {
-  hideColdStartOverlay();
+  hideColdStartOverlay(false);
   renderApp();
 }
 
@@ -563,6 +662,7 @@ async function api(endpoint, options = {}) {
 
   const method = (options.method || "GET").toUpperCase();
   const url = `${getApiBase()}${endpoint}`;
+  console.log(`[VASTRENIX-HTTP] ${method} ${url}`);
 
   const controller = new AbortController();
   // Allow up to 65s for Render free-tier instance wake-up
@@ -574,40 +674,75 @@ async function api(endpoint, options = {}) {
     showColdStartOverlay();
   }, 1800);
 
+  let resStatus = 0;
+  let resData = null;
+
   try {
-    const res = await fetch(url, {
-      ...options,
-      headers,
-      signal: controller.signal
-    });
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal
+      });
+      resStatus = res.status;
+      resData = await res.json().catch(() => ({}));
+    } catch (fetchErr) {
+      // If standard browser fetch failed in Android WebView (e.g. file:// CORS restriction), try Native Android Bridge
+      if (window.VastrenixNative && typeof window.VastrenixNative.fetchNative === "function") {
+        try {
+          console.log("[VASTRENIX] Attempting native Android HTTP bridge for: " + url);
+          const bodyStr = typeof options.body === "string" ? options.body : "";
+          const nativeRaw = window.VastrenixNative.fetchNative(url, method, JSON.stringify(headers), bodyStr);
+          if (nativeRaw) {
+            const parsed = JSON.parse(nativeRaw);
+            if (parsed && parsed.status > 0) {
+              resStatus = parsed.status;
+              resData = parsed.body ? JSON.parse(parsed.body) : {};
+              console.log(`[VASTRENIX-NATIVE-OK] ${url} returned HTTP ${resStatus}`);
+            }
+          }
+        } catch (nativeErr) {
+          console.warn("[VASTRENIX] Native bridge exception: " + nativeErr.message);
+        }
+      }
+
+      // If neither standard fetch nor native bridge succeeded, rethrow fetchErr
+      if (!resStatus) {
+        throw fetchErr;
+      }
+    }
+
     clearTimeout(timeoutId);
-    hideColdStartOverlay();
+    hideColdStartOverlay(true);
     isServerWarm = true;
 
-    if (res.status === 401) {
+    if (resStatus === 401) {
       logout();
-      alert("Session expired or invalid credentials. Please sign in again.");
+      showToast("Session expired or invalid credentials. Please sign in again.");
       throw new Error("Unauthorized (401)");
     }
 
-    if (res.status === 403) {
-      const data = await res.json().catch(() => ({}));
-      const msg = data.detail || "Your account does not have permission or is pending approval.";
-      alert(msg);
+    if (resStatus === 403) {
+      const msg = (resData && resData.detail) || "Account pending approval or insufficient role.";
+      showToast(msg);
       throw new Error(msg);
     }
 
-    if (res.status === 422) {
-      const data = await res.json().catch(() => ({}));
-      const msg = data.detail ? (Array.isArray(data.detail) ? data.detail.map(d => d.msg || JSON.stringify(d)).join(", ") : JSON.stringify(data.detail)) : "Validation error";
-      alert("Input validation error: " + msg);
+    if (resStatus >= 500) {
+      const msg = (resData && resData.detail) || `Server is temporarily updating (${resStatus}). Please try again shortly.`;
+      showToast(msg);
       throw new Error(msg);
     }
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const msg = data.detail || `Server error (HTTP ${res.status})`;
-      alert(msg);
+    if (resStatus === 422) {
+      const msg = resData && resData.detail ? (Array.isArray(resData.detail) ? resData.detail.map(d => d.msg || JSON.stringify(d)).join(", ") : JSON.stringify(resData.detail)) : "Validation error";
+      showToast("Input validation error: " + msg);
+      throw new Error(msg);
+    }
+
+    if (resStatus < 200 || resStatus >= 300) {
+      const msg = (resData && resData.detail) || `Server error (HTTP ${resStatus})`;
+      showToast(msg);
       throw new Error(msg);
     }
 
@@ -616,23 +751,26 @@ async function api(endpoint, options = {}) {
       setTimeout(drainOfflineQueue, 100);
     }
 
-    return await res.json();
+    return resData;
   } catch (err) {
     clearTimeout(timeoutId);
-    hideColdStartOverlay();
+    hideColdStartOverlay(false);
+    console.error(`[VASTRENIX-HTTP-ERROR] ${url} Failed: ${err.message || err}`);
+
     if (err.name === "AbortError") {
-      alert(`Network Timeout: The operation took longer than 60s to reach the cloud server.\nPlease tap Retry or check your network.`);
+      showToast("Cloud Connection Timeout: Server took >65s to respond. Please tap Retry.");
       throw new Error(`Timeout on ${endpoint}`);
     }
 
     // If it was an intentional HTTP error thrown above, re-throw it
-    if (err.message && (err.message.includes("401") || err.message.includes("pending approval") || err.message.includes("Validation error") || err.message.includes("Access forbidden"))) {
+    if (err.message && (err.message.includes("401") || err.message.includes("pending approval") || err.message.includes("Validation error") || err.message.includes("Server is temporarily updating"))) {
       throw err;
     }
 
     // Network connection failed (TypeError: Failed to fetch / offline)
     if (method === "GET") {
-      console.warn("VASTRENIX: Server offline or unreachable. Providing local data preview for:", endpoint);
+      console.warn("VASTRENIX: Server unreachable. Providing local data preview for:", endpoint);
+      showToast(`Notice: Server unreachable (${err.message || 'offline'}). Showing cached data.`);
       return handleOfflineMock(endpoint, options);
     }
 
@@ -653,12 +791,11 @@ async function api(endpoint, options = {}) {
         timestamp: new Date().toISOString()
       });
       saveOfflineQueue(queue);
-      alert(`Network offline or unreachable. Your operation has been saved locally and queued for automatic sync when connectivity resumes.`);
+      showToast("Network unreachable: Operation queued for automatic cloud sync.");
       return handleOfflineMock(endpoint, { ...options, headers: { ...headers, "X-Idempotency-Key": idempotency_key } });
     }
 
-    // For POST / PUT / DELETE mutations, NEVER silently mock without notifying user
-    alert(`Network Error: Unable to reach VASTRENIX server at ${getBaseServerUrl()}.\nPlease check your connection or configure Server URL in Settings.`);
+    showToast(`Network Error: Unable to reach VASTRENIX server at ${getBaseServerUrl()}.`);
     throw err;
   }
 }
@@ -897,16 +1034,6 @@ function logout() {
   renderApp();
 }
 
-// Tab Switching
-function switchTab(tab) {
-  state.activeTab = tab;
-  document.querySelectorAll(".nav-link").forEach(el => el.classList.remove("active"));
-  const activeEl = document.querySelector(`[data-tab="${tab}"]`);
-  if (activeEl) activeEl.classList.add("active");
-  renderCurrentTab();
-  updateOfflineIndicator();
-}
-
 // Render Dashboard
 async function renderDashboard() {
   const container = document.getElementById("tab-content");
@@ -1124,7 +1251,11 @@ function renderInventoryRows(list) {
       </td>
       <td>
         ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
-          <button class="btn btn-sm btn-secondary" onclick="promptAdjustStock(${it.variant_id})">Adjust</button>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-sm btn-primary" style="font-size: 11px; padding: 4px 8px; font-weight: 700;" onclick="openPurchaseOrderModal(${it.variant_id}, '${it.product_name.replace(/'/g, "\\'")}', '${it.sku}')">+ Order More</button>
+            <button class="btn btn-sm btn-secondary" style="font-size: 11px; padding: 4px 8px; font-weight: 700;" onclick="openReceiveGoodsModal(${it.variant_id}, '${it.product_name.replace(/'/g, "\\'")}', '${it.sku}')">Receive Stock</button>
+            <button class="btn btn-sm" style="background: none; border: 1px dashed var(--border); font-size: 10px; color: var(--text-muted); padding: 3px 6px;" onclick="promptAdjustStock(${it.variant_id})" title="Manual Audit / Breakage Correction">Correction</button>
+          </div>
         ` : `
           <span style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">View Only</span>
         `}
@@ -1194,7 +1325,7 @@ async function renderInventory() {
                 <th>Reserved</th>
                 <th>Available</th>
                 <th>Status</th>
-                <th>Adjust</th>
+                <th>Stock Operations</th>
               </tr>
             </thead>
             <tbody id="inventory-table-body">
@@ -2846,27 +2977,29 @@ function handleAndroidBack() {
   return false;
 }
 
+function drawerNav(tab) {
+  closeMobileDrawer();
+  switchTab(tab);
+}
+
 function switchTab(tab) {
   state.activeTab = tab;
   // Update desktop sidebar
   document.querySelectorAll(".nav-link").forEach(el => {
-    if (el.getAttribute("data-tab") === tab) {
-      el.classList.add("active");
-    } else {
-      el.classList.remove("active");
-    }
+    el.classList.toggle("active", el.getAttribute("data-tab") === tab);
   });
   // Update mobile bottom nav
-  document.querySelectorAll(".mobile-nav-item").forEach(el => {
-    if (el.getAttribute("data-tab") === tab) {
-      el.classList.add("active");
-    } else {
-      el.classList.remove("active");
-    }
+  document.querySelectorAll(".mobile-nav-btn").forEach(el => {
+    el.classList.toggle("active", el.getAttribute("data-tab") === tab);
+  });
+  // Update mobile drawer links
+  document.querySelectorAll(".mobile-drawer-link").forEach(el => {
+    el.classList.toggle("active", el.getAttribute("data-tab") === tab);
   });
   // Close mobile drawer if open
   closeMobileDrawer();
   renderCurrentTab();
+  updateOfflineIndicator();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2891,47 +3024,209 @@ function renderCurrentTab() {
 }
 
 function openAddProductModal() {
+  const name = document.getElementById("prod-name");
+  const fabric = document.getElementById("prod-fabric");
+  const price = document.getElementById("prod-price");
+  const cost = document.getElementById("prod-cost");
+  const size = document.getElementById("prod-size");
+  const color = document.getElementById("prod-color");
+  const stock = document.getElementById("prod-stock");
+  if (name) name.value = "";
+  if (fabric) fabric.value = "";
+  if (price) price.value = "";
+  if (cost) cost.value = "";
+  if (size) size.value = "";
+  if (color) color.value = "";
+  if (stock) stock.value = "";
   document.getElementById("modal-add-product").classList.add("active");
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove("active");
+  const el = document.getElementById(id);
+  if (el) el.classList.remove("active");
 }
 
 async function submitAddProduct(event) {
   event.preventDefault();
-  const name = document.getElementById("prod-name").value;
-  const fabric = document.getElementById("prod-fabric").value;
+  const btn = event.target.querySelector('button[type="submit"]');
+  const originalText = btn ? btn.textContent : "Save & Create Garment";
+  if (btn) { btn.disabled = true; btn.textContent = "Saving Garment..."; }
+
+  const name = document.getElementById("prod-name").value.trim();
+  const fabric = document.getElementById("prod-fabric").value.trim();
   const price = parseFloat(document.getElementById("prod-price").value);
   const cost = parseFloat(document.getElementById("prod-cost").value);
-  const size = document.getElementById("prod-size").value;
-  const color = document.getElementById("prod-color").value;
+  const size = document.getElementById("prod-size").value.trim();
+  const color = document.getElementById("prod-color").value.trim();
   const stock = parseInt(document.getElementById("prod-stock").value, 10);
 
   const sku = `${name.replace(/\s+/g, '-').toUpperCase().slice(0, 8)}-${size}-${color.slice(0, 3).toUpperCase()}`;
 
-  await api("/products/", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      fabric,
-      hsn_sac: "6205",
-      tax_rate: 5.0,
-      variants: [{
-        sku,
-        size,
-        color,
-        retail_price: price,
-        purchase_cost: cost,
-        initial_stock: stock,
-        min_stock_alert: 3
-      }]
-    })
-  });
+  try {
+    await api("/products/", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        fabric,
+        hsn_sac: "6205",
+        tax_rate: 5.0,
+        variants: [{
+          sku,
+          size,
+          color,
+          retail_price: price,
+          purchase_cost: cost,
+          initial_stock: stock,
+          min_stock_alert: 3
+        }]
+      })
+    });
 
-  alert("Product created successfully!");
-  closeModal("modal-add-product");
-  renderInventory();
+    showToast("Garment product created successfully!");
+    closeModal("modal-add-product");
+    if (state.activeTab !== "inventory") {
+      switchTab("inventory");
+    } else {
+      renderInventory();
+    }
+  } catch (err) {
+    showToast("Failed to create garment: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+// Purchase Orders (Order More) & Goods Receipt Note (Receive Stock)
+let currentPoVariantId = null;
+
+async function openPurchaseOrderModal(variantId, productName, sku) {
+  currentPoVariantId = variantId;
+  const nameEl = document.getElementById("po-product-display");
+  if (nameEl) nameEl.textContent = `${productName} (${sku})`;
+
+  const suppSelect = document.getElementById("po-supplier-select");
+  if (suppSelect) {
+    suppSelect.innerHTML = `<option value="1">Primary Surat Textile Mill</option>`;
+    try {
+      const suppliers = await api("/purchases/suppliers");
+      if (suppliers && suppliers.length > 0) {
+        suppSelect.innerHTML = suppliers.map(s => `<option value="${s.id}">${s.name} (${s.city || 'India'})</option>`).join('');
+      }
+    } catch (e) {
+      // Fallback already rendered
+    }
+  }
+  const qtyInput = document.getElementById("po-quantity");
+  const costInput = document.getElementById("po-unit-cost");
+  const notesInput = document.getElementById("po-notes");
+  if (qtyInput) qtyInput.value = "20";
+  if (costInput) costInput.value = "1200.00";
+  if (notesInput) notesInput.value = "Store inventory replenishment";
+
+  document.getElementById("modal-purchase-order").classList.add("active");
+}
+
+async function submitPurchaseOrder(event) {
+  event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]');
+  const originalText = btn ? btn.textContent : "Issue Purchase Order";
+  if (btn) { btn.disabled = true; btn.textContent = "Issuing PO..."; }
+
+  const supplierId = parseInt(document.getElementById("po-supplier-select").value, 10) || 1;
+  const quantity = parseInt(document.getElementById("po-quantity").value, 10);
+  const unitCost = parseFloat(document.getElementById("po-unit-cost").value);
+  const notes = document.getElementById("po-notes").value;
+
+  try {
+    const res = await api("/purchases/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        supplier_id: supplierId,
+        items: [{
+          variant_id: currentPoVariantId || 101,
+          quantity: quantity,
+          unit_cost: unitCost,
+          tax_rate: 5.0
+        }],
+        notes: notes
+      })
+    });
+    showToast(`Purchase Order ${res.po_number || ''} issued successfully!`);
+    closeModal("modal-purchase-order");
+    renderInventory();
+  } catch (err) {
+    showToast("Error creating purchase order: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+async function openReceiveGoodsModal(variantId, productName, sku) {
+  currentPoVariantId = variantId;
+  const nameEl = document.getElementById("grn-product-display");
+  if (nameEl) nameEl.textContent = `${productName} (${sku})`;
+
+  const poSelect = document.getElementById("grn-po-select");
+  if (poSelect) {
+    poSelect.innerHTML = `<option value="0">Direct Warehouse Stock Receipt</option>`;
+    try {
+      const orders = await api("/purchases/orders");
+      const pendingOrders = (orders || []).filter(o => o.status !== "COMPLETED");
+      if (pendingOrders.length > 0) {
+        poSelect.innerHTML = pendingOrders.map(o => `<option value="${o.id}">${o.po_number} - ${o.supplier_name} (₹${o.total_amount})</option>`).join('');
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+  const invInput = document.getElementById("grn-invoice-no");
+  const notesInput = document.getElementById("grn-notes");
+  if (invInput) invInput.value = `INV-${Date.now().toString().slice(-6)}`;
+  if (notesInput) notesInput.value = "Received in warehouse in good condition";
+
+  document.getElementById("modal-receive-goods").classList.add("active");
+}
+
+async function submitReceiveGoods(event) {
+  event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]');
+  const originalText = btn ? btn.textContent : "Confirm & Add to Stock";
+  if (btn) { btn.disabled = true; btn.textContent = "Receiving Stock..."; }
+
+  let poId = parseInt(document.getElementById("grn-po-select").value, 10);
+  const invNo = document.getElementById("grn-invoice-no").value;
+  const notes = document.getElementById("grn-notes").value;
+
+  try {
+    if (!poId || poId <= 0) {
+      // Auto-issue a PO to link GRN cleanly
+      const quickPo = await api("/purchases/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          supplier_id: 1,
+          items: [{ variant_id: currentPoVariantId || 101, quantity: 10, unit_cost: 1000.00, tax_rate: 5.0 }],
+          notes: "Direct stock delivery"
+        })
+      });
+      poId = quickPo.po_id || 1;
+    }
+
+    const res = await api("/purchases/grn", {
+      method: "POST",
+      body: JSON.stringify({
+        purchase_order_id: poId,
+        supplier_invoice_no: invNo,
+        notes: notes
+      })
+    });
+    showToast(`Stock received (${res.grn_number || 'GRN Recorded'}) into inventory!`);
+    closeModal("modal-receive-goods");
+    renderInventory();
+  } catch (err) {
+    showToast("Error processing GRN: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+  }
 }
 
 let devTapCount = 0;
@@ -2971,27 +3266,6 @@ async function renderApp() {
     }).catch(() => {});
 
     root.innerHTML = `
-      <!-- Render Cold-Start Grace Screen (Part 2) -->
-      <div id="render-coldstart-overlay" class="coldstart-overlay" style="display: none;">
-        <div class="coldstart-card">
-          <div class="coldstart-logo-pulse">
-            <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX" style="width: 58px; height: 58px;">
-          </div>
-          <h2 id="coldstart-title" class="coldstart-title">Waking up your store's cloud server…</h2>
-          <p id="coldstart-subline" class="coldstart-subline">
-            This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.
-          </p>
-          <div class="coldstart-progress-bar">
-            <div id="coldstart-progress-fill" class="coldstart-progress-fill"></div>
-          </div>
-          <div id="coldstart-timeout-action" style="display: none; margin-top: 18px;">
-            <button class="btn btn-primary" onclick="retryColdStartRequest()" style="padding: 10px 20px; font-size: 13px;">
-              ↻ Retry Server Connection
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px;">
         <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(229, 231, 226, 0.9); border-radius: var(--radius-lg); padding: 40px 36px; width: 100%; max-width: 480px; box-shadow: 0 20px 48px rgba(16, 30, 43, 0.12); position: relative;">
           
@@ -3182,27 +3456,6 @@ async function renderApp() {
   // Authenticated Application Shell
   const t = i18n[state.lang] || i18n.en;
   root.innerHTML = `
-    <!-- Render Cold-Start Grace Screen (Part 2) -->
-    <div id="render-coldstart-overlay" class="coldstart-overlay" style="display: none;">
-      <div class="coldstart-card">
-        <div class="coldstart-logo-pulse">
-          <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX" style="width: 58px; height: 58px;">
-        </div>
-        <h2 id="coldstart-title" class="coldstart-title">Waking up your store's cloud server…</h2>
-        <p id="coldstart-subline" class="coldstart-subline">
-          This happens after a few minutes of inactivity on cloud infrastructure — it'll be fast after this.
-        </p>
-        <div class="coldstart-progress-bar">
-          <div id="coldstart-progress-fill" class="coldstart-progress-fill"></div>
-        </div>
-        <div id="coldstart-timeout-action" style="display: none; margin-top: 18px;">
-          <button class="btn btn-primary" onclick="retryColdStartRequest()" style="padding: 10px 20px; font-size: 13px;">
-            ↻ Retry Server Connection
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div class="app-layout">
       <!-- Sidebar -->
       <aside class="sidebar">
@@ -3299,7 +3552,7 @@ async function renderApp() {
               </div>
             </div>
             <div class="topbar-right">
-              <button class="lang-compact-chip" onclick="cycleLanguage()" title="Switch Language (English / हिन्दी / ગુજરાતી)">
+              <button class="lang-compact-chip" onclick="openLanguageModal()" title="Switch Language (English / हिन्दी / ગુજરાતી)">
                 <span class="lang-globe-icon">🌐</span>
                 <span class="lang-code-text">${state.lang==='hi' ? 'हि' : state.lang==='gu' ? 'ગુ' : 'EN'}</span>
               </button>
@@ -3332,7 +3585,7 @@ async function renderApp() {
             <label class="form-label">Fabric / Material</label>
             <input type="text" id="prod-fabric" class="form-input" required placeholder="e.g. Handwoven Mulberry Silk">
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="modal-responsive-grid">
             <div class="form-group">
               <label class="form-label">Retail Price (₹)</label>
               <input type="number" step="0.01" id="prod-price" class="form-input" required placeholder="3490.00">
@@ -3342,7 +3595,7 @@ async function renderApp() {
               <input type="number" step="0.01" id="prod-cost" class="form-input" required placeholder="1400.00">
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div class="modal-responsive-grid-3">
             <div class="form-group">
               <label class="form-label">Size</label>
               <input type="text" id="prod-size" class="form-input" required placeholder="M or Free">
@@ -3358,6 +3611,103 @@ async function renderApp() {
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Save & Create Garment</button>
         </form>
+      </div>
+    </div>
+
+    <!-- Purchase Order Modal (Order More) -->
+    <div class="modal-overlay" id="modal-purchase-order">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Create Purchase Order (Order More)</h3>
+          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-purchase-order')">&times;</button>
+        </div>
+        <form class="modal-body" onsubmit="submitPurchaseOrder(event)">
+          <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Garment Target</div>
+            <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="po-product-display">Garment Variant</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Select Textile Supplier / Weaver</label>
+            <select id="po-supplier-select" class="form-select" required></select>
+          </div>
+          <div class="modal-responsive-grid">
+            <div class="form-group">
+              <label class="form-label">Order Quantity (Pieces)</label>
+              <input type="number" id="po-quantity" class="form-input" min="1" required placeholder="20">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Unit Purchase Cost (₹)</label>
+              <input type="number" step="0.01" id="po-unit-cost" class="form-input" required placeholder="1200.00">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">PO Notes / Reference</label>
+            <input type="text" id="po-notes" class="form-input" placeholder="e.g. Festival restocking">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Issue Purchase Order</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Goods Receipt Modal (Receive Stock) -->
+    <div class="modal-overlay" id="modal-receive-goods">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Goods Received Note (Receive Stock)</h3>
+          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-receive-goods')">&times;</button>
+        </div>
+        <form class="modal-body" onsubmit="submitReceiveGoods(event)">
+          <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Receiving Garment</div>
+            <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="grn-product-display">Garment Variant</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Select Issued Purchase Order</label>
+            <select id="grn-po-select" class="form-select" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Supplier Invoice / Challan Number</label>
+            <input type="text" id="grn-invoice-no" class="form-input" required placeholder="e.g. INV-TEX-9921">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Receiving Inspection Notes</label>
+            <input type="text" id="grn-notes" class="form-input" placeholder="e.g. Checked pieces, quality approved">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Confirm & Add to Stock</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Language Picker Modal -->
+    <div class="modal-overlay" id="modal-language-picker">
+      <div class="modal-card" style="max-width: 420px;">
+        <div class="modal-header">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Choose App Language / ભાષા પસંદ કરો</h3>
+          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-language-picker')">&times;</button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 10px; padding-top: 6px;">
+          <div class="lang-option-card ${state.lang === 'en' ? 'selected' : ''}" data-lang="en" onclick="selectLanguage('en')">
+            <span style="font-size: 24px;">🇬🇧</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">English</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Standard Retail Operations</div>
+            </div>
+          </div>
+          <div class="lang-option-card ${state.lang === 'hi' ? 'selected' : ''}" data-lang="hi" onclick="selectLanguage('hi')">
+            <span style="font-size: 24px;">🇮🇳</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">हिन्दी (Hindi)</div>
+              <div style="font-size: 11px; color: var(--text-muted);">भारतीय वस्त्र भंडार एवं बिलिंग</div>
+            </div>
+          </div>
+          <div class="lang-option-card ${state.lang === 'gu' ? 'selected' : ''}" data-lang="gu" onclick="selectLanguage('gu')">
+            <span style="font-size: 24px;">🇮🇳</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">ગુજરાતી (Gujarati)</div>
+              <div style="font-size: 11px; color: var(--text-muted);">સુરત ટેક્સટાઇલ વ્યાપાર અને હિસાબ</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3538,51 +3888,51 @@ async function renderApp() {
       </div>
 
       <div class="mobile-drawer-nav">
-        <a class="mobile-drawer-link active" data-tab="dashboard" onclick="drawerNav('dashboard')">
+        <a class="mobile-drawer-link ${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard" onclick="drawerNav('dashboard')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
           </div>
           <span class="drawer-label">${t.dashboard}</span>
         </a>
-        <a class="mobile-drawer-link" data-tab="inventory" onclick="drawerNav('inventory')">
+        <a class="mobile-drawer-link ${state.activeTab === 'inventory' ? 'active' : ''}" data-tab="inventory" onclick="drawerNav('inventory')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
           </div>
           <span class="drawer-label">${t.inventory}</span>
         </a>
-        <a class="mobile-drawer-link" data-tab="pos" onclick="drawerNav('pos')">
+        <a class="mobile-drawer-link ${state.activeTab === 'pos' ? 'active' : ''}" data-tab="pos" onclick="drawerNav('pos')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
           </div>
           <span class="drawer-label">${t.pos}</span>
         </a>
-        <a class="mobile-drawer-link" data-tab="invoices" onclick="drawerNav('invoices')">
+        <a class="mobile-drawer-link ${state.activeTab === 'invoices' ? 'active' : ''}" data-tab="invoices" onclick="drawerNav('invoices')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
           </div>
           <span class="drawer-label">${t.invoices}</span>
         </a>
         ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
-        <a class="mobile-drawer-link" data-tab="expenses" onclick="drawerNav('expenses')">
+        <a class="mobile-drawer-link ${state.activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses" onclick="drawerNav('expenses')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
           </div>
           <span class="drawer-label">${t.expenses}</span>
         </a>
-        <a class="mobile-drawer-link" data-tab="dealers" onclick="drawerNav('dealers')">
+        <a class="mobile-drawer-link ${state.activeTab === 'dealers' ? 'active' : ''}" data-tab="dealers" onclick="drawerNav('dealers')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
           </div>
           <span class="drawer-label">${t.dealers}</span>
         </a>
-        <a class="mobile-drawer-link" data-tab="users" onclick="drawerNav('users')">
+        <a class="mobile-drawer-link ${state.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="drawerNav('users')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
           </div>
           <span class="drawer-label">${t.team}</span>
         </a>
         ` : ''}
-        <a class="mobile-drawer-link" data-tab="flowcharts" onclick="drawerNav('flowcharts')">
+        <a class="mobile-drawer-link ${state.activeTab === 'flowcharts' ? 'active' : ''}" data-tab="flowcharts" onclick="drawerNav('flowcharts')">
           <div class="mobile-drawer-icon-box">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><path d="M10 6.5h4"></path><path d="M17.5 10v4"></path></svg>
           </div>
@@ -3591,45 +3941,48 @@ async function renderApp() {
       </div>
 
       <div style="padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: auto;">
-        <button onclick="logout()" class="btn btn-secondary" style="width: 100%; border-color: rgba(255,255,255,0.2); color: #FAF8F3;">${t.logout}</button>
+        <button onclick="logout()" class="mobile-drawer-logout-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 8px; background: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.3); color: #ff6b6b; font-weight: 700; cursor: pointer;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <span>${t.logout} (Sign Out)</span>
+        </button>
       </div>
     </aside>
 
     <!-- Mobile Bottom Navigation Bar (Max 5 Actions, Crisp Icons & Clean Non-Overlapping Labels) -->
     <nav class="mobile-bottom-nav">
-      <a class="mobile-nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <a class="mobile-nav-btn ${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard" onclick="switchTab('dashboard')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         </div>
         <span>${t.dashboard}</span>
       </a>
-      <a class="mobile-nav-btn" data-tab="inventory" onclick="switchTab('inventory')">
+      <a class="mobile-nav-btn ${state.activeTab === 'inventory' ? 'active' : ''}" data-tab="inventory" onclick="switchTab('inventory')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
         </div>
         <span>${t.inventory}</span>
       </a>
-      <a class="mobile-nav-btn" data-tab="pos" onclick="switchTab('pos')">
+      <a class="mobile-nav-btn ${state.activeTab === 'pos' ? 'active' : ''}" data-tab="pos" onclick="switchTab('pos')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
         </div>
         <span>${t.pos}</span>
       </a>
       ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
-      <a class="mobile-nav-btn" data-tab="expenses" onclick="switchTab('expenses')">
+      <a class="mobile-nav-btn ${state.activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses" onclick="switchTab('expenses')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
         <span>${t.expenses}</span>
       </a>
-      <a class="mobile-nav-btn" data-tab="users" onclick="switchTab('users')">
+      <a class="mobile-nav-btn ${state.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="switchTab('users')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         </div>
         <span>${t.team}</span>
       </a>
       ` : `
-      <a class="mobile-nav-btn" data-tab="invoices" onclick="switchTab('invoices')">
+      <a class="mobile-nav-btn ${state.activeTab === 'invoices' ? 'active' : ''}" data-tab="invoices" onclick="switchTab('invoices')">
         <div class="mobile-nav-icon-pill">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
         </div>
@@ -3669,10 +4022,33 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+function dismissSplashScreen() {
+  const splash = document.getElementById("vastrenix-splash-screen");
+  if (splash && !splash.classList.contains("splash-fade-out")) {
+    const root = document.getElementById("app");
+    if (root && (!root.innerHTML || root.innerHTML.trim() === "")) {
+      try { renderApp(); } catch (e) { console.error("Fallback renderApp error:", e); }
+    }
+    splash.classList.add("splash-fade-out");
+    setTimeout(() => {
+      if (splash.parentNode) splash.parentNode.removeChild(splash);
+    }, 500);
+  }
+}
+
+// Render immediately upon script evaluation
+try {
+  renderApp();
+} catch (e) {
+  console.error("Initial renderApp error:", e);
+}
+
 if (document.readyState === "complete" || document.readyState === "interactive") {
   setTimeout(renderApp, 1);
+  setTimeout(dismissSplashScreen, 1800);
 } else {
   window.addEventListener("DOMContentLoaded", () => {
     renderApp();
+    setTimeout(dismissSplashScreen, 1800);
   });
 }

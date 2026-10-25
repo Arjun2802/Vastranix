@@ -173,6 +173,16 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler, android.net.http.SslError error) {
+                Log.w(TAG, "SSL Certificate warning for: " + (error.getUrl() != null ? error.getUrl() : "unknown"));
+                if (error.getUrl() != null && (error.getUrl().contains("onrender.com") || error.getUrl().contains("vastrenix-api"))) {
+                    handler.proceed();
+                } else {
+                    handler.cancel();
+                }
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String urlStr = uri.toString();
@@ -336,6 +346,64 @@ public class MainActivity extends Activity {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
             prefs.edit().putString(KEY_SERVER_URL, url).apply();
             Log.d(TAG, "Configured custom Server URL: " + url);
+        }
+
+        @JavascriptInterface
+        public String fetchNative(String urlString, String method, String headersJson, String body) {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(urlString);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod(method != null ? method.toUpperCase() : "GET");
+                conn.setConnectTimeout(65000);
+                conn.setReadTimeout(65000);
+                conn.setDoInput(true);
+                conn.setInstanceFollowRedirects(true);
+
+                if (headersJson != null && !headersJson.trim().isEmpty()) {
+                    org.json.JSONObject headers = new org.json.JSONObject(headersJson);
+                    java.util.Iterator<String> keys = headers.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        conn.setRequestProperty(key, headers.getString(key));
+                    }
+                }
+
+                if (body != null && !body.isEmpty() && !"GET".equalsIgnoreCase(method)) {
+                    conn.setDoOutput(true);
+                    byte[] outputBytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    conn.setFixedLengthStreamingMode(outputBytes.length);
+                    try (java.io.OutputStream os = conn.getOutputStream()) {
+                        os.write(outputBytes);
+                        os.flush();
+                    }
+                }
+
+                int status = conn.getResponseCode();
+                java.io.InputStream is = (status >= 200 && status < 400) ? conn.getInputStream() : conn.getErrorStream();
+                String responseBody = "";
+                if (is != null) {
+                    java.util.Scanner s = new java.util.Scanner(is, "UTF-8").useDelimiter("\\A");
+                    responseBody = s.hasNext() ? s.next() : "";
+                }
+
+                org.json.JSONObject res = new org.json.JSONObject();
+                res.put("status", status);
+                res.put("body", responseBody);
+                return res.toString();
+            } catch (Exception e) {
+                Log.e(TAG, "Native HTTP fetch failed for " + urlString + ": " + e.getMessage(), e);
+                org.json.JSONObject res = new org.json.JSONObject();
+                try {
+                    res.put("status", 0);
+                    res.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
+                } catch (Exception ignored) {}
+                return res.toString();
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
         }
 
         @JavascriptInterface

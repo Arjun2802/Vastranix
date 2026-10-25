@@ -9,20 +9,90 @@
   <title>VASTRENIX — Clothing Business Management Platform</title>
   <link rel="icon" type="image/svg+xml" href="static/brand/favicon.svg">
   <link rel="stylesheet" href="static/css/vastrenix.css">
+  <!-- Asynchronous Google Fonts with native system font fallbacks so DOM rendering is instantaneous -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap">
+  </noscript>
 </head>
 <body>
-  <div id="app">
-    <!-- Immediate branded textile splash screen so screen is never blank -->
-    <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FAF8F3 url('static/images/textile-doodles.svg') repeat; font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;">
-      <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" style="width: 96px; height: 96px; margin-bottom: 16px; filter: drop-shadow(0 14px 28px rgba(25, 43, 58, 0.22));">
-      <h1 style="font-size: 26px; font-weight: 900; letter-spacing: 3px; color: #192B3A; margin: 0 0 6px 0;">VASTRENIX</h1>
-      <p style="color: #218C82; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin: 0 0 24px 0;">Your Business, Beautifully in Sync.</p>
-      <div style="font-size: 12px; color: #697782; font-weight: 500;">Initializing business workspace...</div>
+  <!-- Non-blocking Cloud Wake Banner (shown floating at top when waiting for Render server wake) -->
+  <div id="render-coldstart-overlay" class="cloud-wake-banner" style="display: none;">
+    <div class="cloud-wake-card">
+      <div class="cloud-wake-dot" id="cloud-wake-dot"></div>
+      <div class="cloud-wake-text-group">
+        <div class="cloud-wake-status" id="coldstart-title">Connecting to cloud server (1s)...</div>
+        <div class="cloud-wake-subline" id="coldstart-subline">Offline operations & billing active</div>
+      </div>
+      <button id="coldstart-timeout-action" class="cloud-wake-retry-btn" style="display: none;" onclick="retryColdStartRequest()">↻ Retry</button>
     </div>
   </div>
+
+  <!-- Primary Application Container: Pre-rendered sign-in view so screen is never blank -->
+  <div id="app">
+    <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px;">
+      <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(229, 231, 226, 0.9); border-radius: var(--radius-lg); padding: 40px 36px; width: 100%; max-width: 480px; box-shadow: 0 20px 48px rgba(16, 30, 43, 0.12); position: relative;">
+        <div style="text-align: center; margin-bottom: 26px;">
+          <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" style="width: 82px; height: 82px; margin-bottom: 14px; filter: drop-shadow(0 12px 24px rgba(16, 30, 43, 0.28));">
+          <div style="font-size: 26px; font-weight: 900; letter-spacing: 3.5px; color: var(--navy); margin-bottom: 4px;">VASTRENIX</div>
+          <p style="color: var(--teal); font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">Your Business, Beautifully in Sync.</p>
+        </div>
+
+        <form id="signin-form" onsubmit="handleSignIn(event)">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="login-email" class="form-input" required placeholder="demo@vastrenix.com" value="demo@vastrenix.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="login-password" class="form-input" required placeholder="••••••••" value="VastrenixDemo2026!">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; margin-top: 10px; font-size: 14px;">
+            Enter Business Workspace ➔
+          </button>
+        </form>
+
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border);">
+          <div style="font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; text-align: center;">One-Click Instant Access</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="btn btn-sm btn-navy" onclick="loginDemo('demo@vastrenix.com', 'VastrenixDemo2026!')">
+              👑 Store Owner
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="loginDemo('cashier@vastrenix.com', 'CashierPass123!')">
+              🛒 Cashier POS
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Immediate Launch Splash Screen: strictly auto-dismisses after 1.8-2.0s -->
+  <div id="vastrenix-splash-screen" class="vastrenix-splash-overlay">
+    <div class="vastrenix-splash-content">
+      <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" class="vastrenix-splash-logo">
+      <h1 class="vastrenix-splash-title">VASTRENIX</h1>
+      <p class="vastrenix-splash-tagline">Your Business, Beautifully in Sync.</p>
+      <div class="vastrenix-splash-spinner"></div>
+      <div class="vastrenix-splash-status">Loading business workspace...</div>
+    </div>
+  </div>
+
+  <script>
+    // Failsafe timer: dismiss splash screen within 1.8-2.0s regardless of network
+    setTimeout(function() {
+      var splash = document.getElementById("vastrenix-splash-screen");
+      if (splash && !splash.classList.contains("splash-fade-out")) {
+        splash.classList.add("splash-fade-out");
+        setTimeout(function() {
+          if (splash.parentNode) splash.parentNode.removeChild(splash);
+        }, 500);
+      }
+    }, 1800);
+  </script>
   <script src="static/js/vastrenix.js"></script>
 </body>
 </html>

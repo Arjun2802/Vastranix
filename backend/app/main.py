@@ -12,6 +12,11 @@ from backend.app.api.v1 import (
 
 # Initialize database schema
 Base.metadata.create_all(bind=engine)
+try:
+    from backend.seed_demo import seed_database
+    seed_database()
+except Exception as e:
+    print(f"Auto-seed check: {e}")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -21,10 +26,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS
+# CORS - allow all origins dynamically including WebView file:// and null origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
