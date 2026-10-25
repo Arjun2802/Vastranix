@@ -11,16 +11,21 @@ from backend.app.models.product import ProductVariant, Product
 from backend.app.services.dealer_service import (
     create_dealer_order,
     accept_dealer_order,
+    reject_dealer_order,
+    mark_dealer_order_processing,
+    mark_dealer_order_packed,
     assign_dealer_order_staff,
     dispatch_dealer_order,
-    mark_dealer_order_delivered
+    mark_dealer_order_delivered,
+    close_dealer_order
 )
 from backend.app.schemas.all_schemas import (
     DealerConnectionRequestSchema,
     DealerOrderCreateSchema,
     DealerOrderAcceptSchema,
     DealerOrderAssignStaffSchema,
-    DealerOrderDispatchSchema
+    DealerOrderDispatchSchema,
+    DealerOrderRejectSchema
 )
 from backend.app.core.firebase import firebase_service
 
@@ -309,3 +314,66 @@ def mark_order_delivered(
         user_id=ctx.user.id
     )
     return {"message": "Goods received into stock and order marked delivered", "order_id": order.id, "status": order.status}
+
+@router.post("/orders/{id}/reject")
+def reject_incoming_order(
+    id: int,
+    data: DealerOrderRejectSchema,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "INVENTORY_MGR", "BRANCH_MANAGER"])),
+    db: Session = Depends(get_db)
+):
+    order = reject_dealer_order(
+        db=db,
+        seller_business_id=ctx.business.id,
+        order_id=id,
+        reason=data.reason,
+        user_id=ctx.user.id
+    )
+    return {
+        "message": f"Order rejected with reason: '{data.reason}'",
+        "order_id": order.id,
+        "status": order.status,
+        "rejection_reason": order.rejection_reason
+    }
+
+@router.post("/orders/{id}/processing")
+def mark_order_processing(
+    id: int,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "INVENTORY_MGR", "BRANCH_MANAGER", "STORE_STAFF"])),
+    db: Session = Depends(get_db)
+):
+    order = mark_dealer_order_processing(
+        db=db,
+        seller_business_id=ctx.business.id,
+        order_id=id,
+        user_id=ctx.user.id
+    )
+    return {"message": "Order moved to processing/picking stage", "order_id": order.id, "status": order.status}
+
+@router.post("/orders/{id}/pack")
+def mark_order_packed(
+    id: int,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "INVENTORY_MGR", "BRANCH_MANAGER", "STORE_STAFF"])),
+    db: Session = Depends(get_db)
+):
+    order = mark_dealer_order_packed(
+        db=db,
+        seller_business_id=ctx.business.id,
+        order_id=id,
+        user_id=ctx.user.id
+    )
+    return {"message": "Order marked packed and ready for dispatch", "order_id": order.id, "status": order.status}
+
+@router.post("/orders/{id}/close")
+def close_delivered_order(
+    id: int,
+    ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "PURCHASE_MGR"])),
+    db: Session = Depends(get_db)
+):
+    order = close_dealer_order(
+        db=db,
+        buyer_business_id=ctx.business.id,
+        order_id=id,
+        user_id=ctx.user.id
+    )
+    return {"message": "Dealer order closed and archived", "order_id": order.id, "status": order.status}

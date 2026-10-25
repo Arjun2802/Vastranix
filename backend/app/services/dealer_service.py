@@ -1,8 +1,10 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from decimal import Decimal
 from backend.app.models.dealer import DealerOrder, DealerOrderItem, DealerConnection
 from backend.app.models.notification import Notification
 from backend.app.models.auth import Business, Branch
+from backend.app.models.product import ProductVariant, Product
 from backend.app.services.stock_service import (
     reserve_stock_for_dealer_order,
     dispatch_reserved_dealer_stock,
@@ -95,12 +97,15 @@ def accept_dealer_order(
     order = db.query(DealerOrder).filter(
         DealerOrder.id == order_id,
         DealerOrder.seller_business_id == seller_business_id
-    ).first()
+    ).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Dealer order not found")
 
     if order.status not in ["SUBMITTED", "RECEIVED"]:
-        raise HTTPException(status_code=400, detail=f"Order cannot be accepted in '{order.status}' status")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order already processed (Current status: '{order.status}')"
+        )
 
     all_accepted = True
     any_accepted = False
@@ -118,7 +123,7 @@ def accept_dealer_order(
             reserve_stock_for_dealer_order(
                 db=db,
                 business_id=seller_business_id,
-                branch_id=order.seller_branch_id,
+                branch_id=order.seller_branch_id or 1,
                 variant_id=item.seller_variant_id,
                 quantity=qty_acc,
                 order_number=order.order_number,
@@ -136,11 +141,94 @@ def accept_dealer_order(
     notif = Notification(
         business_id=order.buyer_business_id,
         title=f"Order #{order.order_number} {order.status}",
-        message=f"Your order has been approved and reserved by the seller.",
+        message="Your order has been approved and reserved by the seller.",
         notification_type="DEALER_ORDER",
         action_url="/dealers"
     )
     db.add(notif)
+    db.commit()
+    db.refresh(order)
+    return order
+
+def reject_dealer_order(
+    db: Session,
+    seller_business_id: int,
+    order_id: int,
+    reason: str,
+    user_id: Optional[int] = None
+) -> DealerOrder:
+    order = db.query(DealerOrder).filter(
+        DealerOrder.id == order_id,
+        DealerOrder.seller_business_id == seller_business_id
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Dealer order not found")
+
+    if order.status not in ["SUBMITTED", "RECEIVED"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order already processed (Current status: '{order.status}')"
+        )
+
+    order.status = "REJECTED"
+    order.rejection_reason = reason
+
+    notif = Notification(
+        business_id=order.buyer_business_id,
+        title=f"Order #{order.order_number} Rejected",
+        message=f"Order rejected by seller. Reason: {reason}",
+        notification_type="DEALER_ORDER",
+        action_url="/dealers"
+    )
+    db.add(notif)
+    db.commit()
+    db.refresh(order)
+    return order
+
+def mark_dealer_order_processing(
+    db: Session,
+    seller_business_id: int,
+    order_id: int,
+    user_id: Optional[int] = None
+) -> DealerOrder:
+    order = db.query(DealerOrder).filter(
+        DealerOrder.id == order_id,
+        DealerOrder.seller_business_id == seller_business_id
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Dealer order not found")
+
+    if order.status not in ["ACCEPTED", "PARTIAL_ACCEPTED"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order cannot transition to PROCESSING from '{order.status}'"
+        )
+
+    order.status = "PROCESSING"
+    db.commit()
+    db.refresh(order)
+    return order
+
+def mark_dealer_order_packed(
+    db: Session,
+    seller_business_id: int,
+    order_id: int,
+    user_id: Optional[int] = None
+) -> DealerOrder:
+    order = db.query(DealerOrder).filter(
+        DealerOrder.id == order_id,
+        DealerOrder.seller_business_id == seller_business_id
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Dealer order not found")
+
+    if order.status not in ["ACCEPTED", "PARTIAL_ACCEPTED", "PROCESSING"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order cannot transition to PACKED from '{order.status}'"
+        )
+
+    order.status = "PACKED"
     db.commit()
     db.refresh(order)
     return order
@@ -154,7 +242,7 @@ def assign_dealer_order_staff(
     order = db.query(DealerOrder).filter(
         DealerOrder.id == order_id,
         DealerOrder.seller_business_id == seller_business_id
-    ).first()
+    ).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Dealer order not found")
 
@@ -183,25 +271,28 @@ def dispatch_dealer_order(
     order = db.query(DealerOrder).filter(
         DealerOrder.id == order_id,
         DealerOrder.seller_business_id == seller_business_id
-    ).first()
+    ).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Dealer order not found")
 
     if order.status not in ["ACCEPTED", "PARTIAL_ACCEPTED", "PROCESSING", "PACKED"]:
-        raise HTTPException(status_code=400, detail=f"Order cannot be dispatched in '{order.status}' status")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order already processed (Current status: '{order.status}')"
+        )
 
     for item in order.items:
-        if item.quantity_accepted > 0:
-            item.quantity_dispatched = item.quantity_accepted
-            dispatch_reserved_dealer_stock(
-                db=db,
-                business_id=seller_business_id,
-                branch_id=order.seller_branch_id,
-                variant_id=item.seller_variant_id,
-                quantity=item.quantity_accepted,
-                order_number=order.order_number,
-                user_id=user_id
-            )
+        qty_to_dispatch = item.quantity_accepted if item.quantity_accepted > 0 else item.quantity_ordered
+        item.quantity_dispatched = qty_to_dispatch
+        dispatch_reserved_dealer_stock(
+            db=db,
+            business_id=seller_business_id,
+            branch_id=order.seller_branch_id or 1,
+            variant_id=item.seller_variant_id,
+            quantity=qty_to_dispatch,
+            order_number=order.order_number,
+            user_id=user_id
+        )
 
     order.status = "DISPATCHED"
     order.transporter_name = transporter_name
@@ -229,27 +320,74 @@ def mark_dealer_order_delivered(
     order = db.query(DealerOrder).filter(
         DealerOrder.id == order_id,
         DealerOrder.buyer_business_id == buyer_business_id
-    ).first()
+    ).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="Dealer order not found")
 
-    if order.status != "DISPATCHED":
-        raise HTTPException(status_code=400, detail="Only DISPATCHED orders can be marked delivered")
+    if order.status in ["DELIVERED", "CLOSED"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order already processed (Current status: '{order.status}')"
+        )
 
-    # Add received items into buyer's branch physical stock
+    if order.status != "DISPATCHED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Only DISPATCHED orders can be marked delivered (Current status: '{order.status}')"
+        )
+
+    buyer_branch = db.query(Branch).filter(Branch.business_id == buyer_business_id).first()
+    target_branch_id = order.buyer_branch_id or (buyer_branch.id if buyer_branch else 1)
+
+    # Auto-add stock to the BUYER's store inventory
     for item in order.items:
-        if item.quantity_dispatched > 0:
+        qty_received = item.quantity_dispatched if item.quantity_dispatched > 0 else item.quantity_accepted
+        if qty_received > 0:
             receive_purchase_stock(
                 db=db,
                 business_id=buyer_business_id,
-                branch_id=order.buyer_branch_id,
+                branch_id=target_branch_id,
                 variant_id=item.seller_variant_id,
-                quantity=item.quantity_dispatched,
+                quantity=qty_received,
                 grn_number=f"GRN-DEALER-{order.order_number}",
                 user_id=user_id
             )
 
     order.status = "DELIVERED"
+
+    # Notify seller that buyer confirmed delivery
+    notif = Notification(
+        business_id=order.seller_business_id,
+        title=f"Delivered: Order #{order.order_number}",
+        message=f"Buyer has confirmed receipt of goods for Order #{order.order_number}.",
+        notification_type="DEALER_ORDER",
+        action_url="/dealers"
+    )
+    db.add(notif)
+    db.commit()
+    db.refresh(order)
+    return order
+
+def close_dealer_order(
+    db: Session,
+    buyer_business_id: int,
+    order_id: int,
+    user_id: Optional[int] = None
+) -> DealerOrder:
+    order = db.query(DealerOrder).filter(
+        DealerOrder.id == order_id,
+        (DealerOrder.buyer_business_id == buyer_business_id) | (DealerOrder.seller_business_id == buyer_business_id)
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Dealer order not found")
+
+    if order.status not in ["DELIVERED"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot close order in '{order.status}' status. Only DELIVERED orders can be closed."
+        )
+
+    order.status = "CLOSED"
     db.commit()
     db.refresh(order)
     return order

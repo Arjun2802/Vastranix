@@ -1423,11 +1423,14 @@ let cachedStaff = [];
 
 async function renderDealers() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `<div style="padding: 20px;">Loading B2B dealer orders...</div>`;
-  const incoming = await api("/dealers/orders/incoming");
-  const conns = await api("/dealers/connections");
+  container.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--navy);"><div class="spinner"></div><div style="margin-top: 12px; font-weight: 600;">Loading B2B dealer network & connected orders...</div></div>`;
+  
+  const [incoming, outgoing, conns] = await Promise.all([
+    api("/dealers/orders/incoming").catch(() => []),
+    api("/dealers/orders/outgoing").catch(() => []),
+    api("/dealers/connections").catch(() => [])
+  ]);
 
-  // Load store staff for order assignment
   try {
     cachedStaff = await api("/auth/staff");
   } catch (e) {
@@ -1438,13 +1441,14 @@ async function renderDealers() {
     <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
       <div>
         <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">B2B Dealer Network & Connected Businesses</h2>
-        <p style="color: var(--text-muted); font-size: 13px;">Manage multi-business orders, atomic stock reservations, staff assignment, and dispatch tracking.</p>
+        <p style="color: var(--text-muted); font-size: 13px;">Manage multi-business orders, atomic stock reservations, staff picking/packing, dispatch tracking & delivery receipt.</p>
       </div>
       <div style="background: var(--teal-light); border: 1px solid rgba(33,140,130,0.25); border-radius: var(--radius-sm); padding: 8px 14px; font-size: 12px; color: var(--navy);">
         Store Staff Available: <b>${cachedStaff.length} Members</b>
       </div>
     </div>
 
+    <!-- Connected Business Partners -->
     <div class="panel" style="margin-bottom: 24px;">
       <div class="panel-header">
         <div class="panel-title">Connected Business Partners</div>
@@ -1460,9 +1464,10 @@ async function renderDealers() {
       </div>
     </div>
 
-    <div class="panel">
+    <!-- Incoming Dealer Orders (To Fulfill & Dispatch) -->
+    <div class="panel" style="margin-bottom: 24px;">
       <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="panel-title">Incoming Dealer Orders (To Fulfill & Assign)</div>
+        <div class="panel-title">Incoming Orders from Retailers & Dealers (Seller Fulfill Queue)</div>
         <span class="badge badge-neutral">${incoming ? incoming.length : 0} Orders</span>
       </div>
       <div class="table-responsive">
@@ -1476,19 +1481,28 @@ async function renderDealers() {
               <th>Total Amount</th>
               <th>Assigned Staff</th>
               <th>Status</th>
-              <th>Actions & Assignment</th>
+              <th>Actions & Lifecycle</th>
             </tr>
           </thead>
           <tbody>
             ${incoming && incoming.length > 0 ? incoming.map(o => {
               const isAssignedToMe = state.user && o.assigned_staff_id === state.user.id;
+              let statusBadge = 'badge-neutral';
+              if (o.status === 'SUBMITTED') statusBadge = 'badge-warning';
+              else if (o.status === 'ACCEPTED' || o.status === 'PARTIAL_ACCEPTED') statusBadge = 'badge-primary';
+              else if (o.status === 'PROCESSING') statusBadge = 'badge-info';
+              else if (o.status === 'PACKED') statusBadge = 'badge-warning';
+              else if (o.status === 'DISPATCHED') statusBadge = 'badge-success';
+              else if (o.status === 'DELIVERED' || o.status === 'CLOSED') statusBadge = 'badge-success';
+              else if (o.status === 'REJECTED') statusBadge = 'badge-danger';
+
               return `
               <tr>
                 <td><b>${o.order_number}</b></td>
                 <td>${o.buyer_name}</td>
                 <td>${o.date}</td>
                 <td>${o.items.map(it => `${it.product_name} (${it.size}) × ${it.qty_ordered}`).join(', ')}</td>
-                <td><b>₹${o.total_amount.toFixed(2)}</b></td>
+                <td><b>₹${Number(o.total_amount).toFixed(2)}</b></td>
                 <td>
                   ${o.assigned_staff_id ? `
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -1501,18 +1515,24 @@ async function renderDealers() {
                     <span class="badge badge-neutral" style="color: var(--text-muted); background: #F1F3F5;">Unassigned</span>
                   `}
                 </td>
-                <td><span class="badge ${o.status === 'SUBMITTED' ? 'badge-warning' : (o.status === 'ACCEPTED' ? 'badge-neutral' : 'badge-success')}">${o.status}</span></td>
+                <td><span class="badge ${statusBadge}">${o.status}</span></td>
                 <td>
                   <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                     ${o.status === 'SUBMITTED' ? `
                       <button class="btn btn-sm btn-primary" onclick="acceptDealerOrder(${o.id}, ${o.items[0]?.id}, ${o.items[0]?.qty_ordered})">Accept & Reserve</button>
+                      <button class="btn btn-sm btn-outline-danger" style="border: 1px solid var(--coral); color: var(--coral);" onclick="rejectDealerOrder(${o.id})">Reject</button>
                       <button class="btn btn-sm btn-secondary" onclick="openAssignStaffModal(${o.id}, '${o.order_number}')">👤 Assign Staff</button>
-                    ` : (o.status === 'ACCEPTED' ? `
+                    ` : (o.status === 'ACCEPTED' || o.status === 'PARTIAL_ACCEPTED' ? `
+                      <button class="btn btn-sm btn-secondary" onclick="moveDealerOrderProcessing(${o.id})">Start Picking</button>
                       <button class="btn btn-sm btn-navy" onclick="dispatchDealerOrder(${o.id})">Dispatch (LR)</button>
-                      <button class="btn btn-sm btn-secondary" onclick="openAssignStaffModal(${o.id}, '${o.order_number}')">
-                        ${o.assigned_staff_id ? 'Reassign Staff' : '👤 Assign Staff'}
-                      </button>
-                    ` : `<span style="font-size: 12px; color: var(--text-muted);">${o.transporter_name || 'Dispatched'} (${o.lr_number || ''})</span>`)}
+                      <button class="btn btn-sm btn-secondary" onclick="openAssignStaffModal(${o.id}, '${o.order_number}')">Reassign</button>
+                    ` : (o.status === 'PROCESSING' ? `
+                      <button class="btn btn-sm btn-secondary" onclick="moveDealerOrderPacked(${o.id})">Mark Packed</button>
+                      <button class="btn btn-sm btn-navy" onclick="dispatchDealerOrder(${o.id})">Dispatch (LR)</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openAssignStaffModal(${o.id}, '${o.order_number}')">Reassign</button>
+                    ` : (o.status === 'PACKED' ? `
+                      <button class="btn btn-sm btn-navy" onclick="dispatchDealerOrder(${o.id})">Dispatch (LR)</button>
+                    ` : `<span style="font-size: 12px; color: var(--text-muted);">${o.transporter_name || 'Dispatched'} ${o.lr_number ? `(LR: ${o.lr_number})` : ''}</span>`)))}
                   </div>
                 </td>
               </tr>
@@ -1521,6 +1541,52 @@ async function renderDealers() {
         </table>
       </div>
     </div>
+
+    <!-- Outgoing Dealer Orders (Purchases from Mills & Manufacturers) -->
+    <div class="panel">
+      <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="panel-title">Outgoing Orders to Suppliers (Buyer Procurement & Stock Inward)</div>
+        <span class="badge badge-neutral">${outgoing ? outgoing.length : 0} Orders</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Order Number</th>
+              <th>Seller Supplier</th>
+              <th>Date</th>
+              <th>Items Ordered</th>
+              <th>Total Amount</th>
+              <th>Status</th>
+              <th>Transporter / LR</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${outgoing && outgoing.length > 0 ? outgoing.map(o => `
+              <tr>
+                <td><b>${o.order_number}</b></td>
+                <td>${o.seller_name}</td>
+                <td>${o.date}</td>
+                <td>${o.items.map(it => `${it.product_name} (${it.size}) × ${it.qty_ordered}`).join(', ')}</td>
+                <td><b>₹${Number(o.total_amount).toFixed(2)}</b></td>
+                <td><span class="badge ${o.status === 'DELIVERED' ? 'badge-success' : (o.status === 'DISPATCHED' ? 'badge-warning' : 'badge-neutral')}">${o.status}</span></td>
+                <td>${o.transporter_name ? `${o.transporter_name} (${o.lr_number || ''})` : '<span style="color: var(--text-muted);">Awaiting Dispatch</span>'}</td>
+                <td>
+                  ${o.status === 'DISPATCHED' ? `
+                    <button class="btn btn-sm btn-primary" onclick="confirmDealerOrderDelivered(${o.id})">✓ Confirm Delivery & Inward Stock</button>
+                  ` : (o.status === 'DELIVERED' ? `
+                    <button class="btn btn-sm btn-secondary" onclick="closeDealerOrder(${o.id})">Close & Archive</button>
+                  ` : `<span style="font-size: 12px; color: var(--text-muted);">In Progress</span>`)}
+                </td>
+              </tr>
+            `).join('') : '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No outgoing dealer orders placed yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
   `;
 }
 
@@ -1858,12 +1924,43 @@ async function acceptDealerOrder(orderId, itemId, qty) {
   if (!confirm(`Accept order and atomically reserve ${qty} units of stock?`)) return;
   const accepted = {};
   if (itemId) accepted[itemId] = qty;
-  await api(`/dealers/orders/${orderId}/accept`, {
+  const res = await api(`/dealers/orders/${orderId}/accept`, {
     method: "POST",
     body: JSON.stringify({ accepted_quantities: accepted })
   });
-  alert("Order accepted! Stock has been atomically reserved.");
-  renderDealers();
+  if (res) {
+    alert("Order accepted! Stock has been atomically reserved.");
+    renderDealers();
+  }
+}
+
+async function rejectDealerOrder(orderId) {
+  const reason = prompt("Enter Rejection Reason:", "Fabric or color out of stock at loom");
+  if (!reason) return;
+  const res = await api(`/dealers/orders/${orderId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason })
+  });
+  if (res) {
+    alert(`Order rejected: ${res.rejection_reason || reason}`);
+    renderDealers();
+  }
+}
+
+async function moveDealerOrderProcessing(orderId) {
+  const res = await api(`/dealers/orders/${orderId}/processing`, { method: "POST" });
+  if (res) {
+    alert("Order moved to Processing / Picking stage.");
+    renderDealers();
+  }
+}
+
+async function moveDealerOrderPacked(orderId) {
+  const res = await api(`/dealers/orders/${orderId}/pack`, { method: "POST" });
+  if (res) {
+    alert("Order marked Packed and ready for logistics dispatch.");
+    renderDealers();
+  }
 }
 
 async function dispatchDealerOrder(orderId) {
@@ -1872,12 +1969,31 @@ async function dispatchDealerOrder(orderId) {
   const lr = prompt("Enter Lorry Receipt (LR) Number:", "LR-9988-7711");
   if (!lr) return;
 
-  await api(`/dealers/orders/${orderId}/dispatch`, {
+  const res = await api(`/dealers/orders/${orderId}/dispatch`, {
     method: "POST",
     body: JSON.stringify({ transporter_name: transporter, lr_number: lr })
   });
-  alert("Order dispatched! Stock deducted from inventory and buyer notified.");
-  renderDealers();
+  if (res) {
+    alert("Order dispatched! Stock deducted from inventory and buyer notified.");
+    renderDealers();
+  }
+}
+
+async function confirmDealerOrderDelivered(orderId) {
+  if (!confirm("Confirm delivery of goods? This will automatically receive stock into your store branch inventory.")) return;
+  const res = await api(`/dealers/orders/${orderId}/deliver`, { method: "POST" });
+  if (res) {
+    alert("Delivery confirmed! Goods received and added to your store branch inventory.");
+    renderDealers();
+  }
+}
+
+async function closeDealerOrder(orderId) {
+  const res = await api(`/dealers/orders/${orderId}/close`, { method: "POST" });
+  if (res) {
+    alert("Order closed and archived.");
+    renderDealers();
+  }
 }
 
 async function triggerTestPush() {

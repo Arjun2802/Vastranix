@@ -5,6 +5,7 @@ from backend.app.core.database import get_db
 from backend.app.core.permissions import get_tenant_context, TenantContext, require_roles
 from backend.app.models.inventory import InventoryLevel, StockMovement, StockAdjustment
 from backend.app.models.product import ProductVariant, Product
+from backend.app.models.auth import Branch
 from backend.app.services.stock_service import adjust_stock
 from backend.app.schemas.all_schemas import StockAdjustmentSchema
 
@@ -22,8 +23,10 @@ def get_inventory_levels(
         ProductVariant, InventoryLevel.variant_id == ProductVariant.id
     ).join(
         Product, ProductVariant.product_id == Product.id
+    ).join(
+        Branch, InventoryLevel.branch_id == Branch.id
     ).filter(
-        Product.business_id == ctx.business.id,
+        Branch.business_id == ctx.business.id,
         InventoryLevel.branch_id == target_branch_id
     )
 
@@ -66,8 +69,10 @@ def get_stock_alerts(
         ProductVariant, InventoryLevel.variant_id == ProductVariant.id
     ).join(
         Product, ProductVariant.product_id == Product.id
+    ).join(
+        Branch, InventoryLevel.branch_id == Branch.id
     ).filter(
-        Product.business_id == ctx.business.id,
+        Branch.business_id == ctx.business.id,
         InventoryLevel.branch_id == branch_id
     ).all()
 

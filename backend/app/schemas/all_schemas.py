@@ -208,6 +208,9 @@ class DealerOrderDispatchSchema(BaseModel):
     transporter_name: str
     lr_number: str
 
+class DealerOrderRejectSchema(BaseModel):
+    reason: str
+
 # --- COMMERCE & ONLINE ---
 class OnlineCheckoutSchema(BaseModel):
     storefront_slug: str

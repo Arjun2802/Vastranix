@@ -101,3 +101,9 @@ def test_b2b_dealer_network_lifecycle(client):
     deliver_res = client.post(f"/api/v1/dealers/orders/{order_id}/deliver", headers=buyer_headers)
     assert deliver_res.status_code == 200
     assert deliver_res.json()["status"] == "DELIVERED"
+
+    # Verify buyer inventory now has 20 units on hand
+    buyer_inv = client.get("/api/v1/inventory/levels", headers=buyer_headers).json()
+    assert len(buyer_inv) >= 1
+    assert buyer_inv[0]["on_hand"] == 20
+    assert buyer_inv[0]["available"] == 20

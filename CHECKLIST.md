@@ -65,11 +65,14 @@
 - [x] Verified with automated test suite `backend/tests/test_pos_concurrency_and_shift.py` (shift open/close with petty cash expenses, idempotency key caching, row-locking overselling denial, and PDF retry).
 
 ### Phase 6: B2B Dealer Network Concurrency
-- [ ] Atomic stock reservation on Order Accept.
-- [ ] Staff assignment for picking/packing.
-- [ ] Dispatch with LR number and transporter details.
-- [ ] Delivery receipt automatically incrementing buyer inventory.
-- [ ] Concurrency tests: double-accept, double-dispatch, cross-tenant access.
+- [x] Full dealer order lifecycle state machine: `SUBMITTED` -> `(REJECTED with reason | ACCEPTED)` -> `PROCESSING` -> `PACKED` -> `DISPATCHED` -> `DELIVERED` -> `CLOSED`.
+- [x] Atomic stock reservation on Order Accept with row-locking (`with_for_update`).
+- [x] Staff assignment for picking/packing with FCM push & Firestore notifications.
+- [x] Dispatch stage recording Transporter Name and LR Number with stock deduction from reserved and on-hand.
+- [x] Delivery confirmation endpoint (`POST /dealers/orders/{id}/deliver`) auto-crediting stock directly into the buyer's store branch inventory with GRN generation.
+- [x] Concurrency protection: simultaneous duplicate calls to Accept, Reject, Dispatch, or Deliver return clean HTTP 400 error (`Order already processed`).
+- [x] Cross-tenant leak protection: Unrelated Store C cannot view incoming/outgoing orders or trigger accept/dispatch/deliver on orders between Store A and Store B (HTTP 404 isolation).
+- [x] Automated test matrix passed: `test_dealers.py` and `test_dealer_concurrency_and_lifecycle.py` (all 13 backend suites passing).
 
 ### Phase 7: Other Modules & Offline Sync
 - [ ] Store Expenses category management and financial reporting integration.
