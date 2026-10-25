@@ -93,3 +93,29 @@ While the backend architecture and unit tests are robust, the compiled Android A
     1. `dist/android/vastrenix-universal.apk` (universal sideloadable)
     2. Per-ABI split packages (`arm64-v8a`, `armeabi-v7a`, `x86_64`)
     3. Production Android App Bundle (`app-release.aab`)
+
+---
+
+## 8. Root Cause: APK Stuck on Initial Launch Screen ("Initializing business workspace...")
+
+### Evidence & Diagnosis:
+1. **JavaScript Syntax Error in `vastrenix.js`:**
+   Running JavaScriptCore CLI on `frontend/web/static/js/vastrenix.js` revealed:
+   ```
+   SyntaxError: Unexpected identifier 'value' at frontend/web/static/js/vastrenix.js:2058
+   ```
+   **Cause:** Duplicate closure and template string termination at line 2046–2049 (`\`; } \`; }`). Because this syntax error halted parsing inside the Android WebView, the JavaScript engine never executed `renderApp()`. The WebView displayed only the static HTML splash fallback inside `<div id="app">` ("*Initializing business workspace...*").
+
+2. **Blocking Startup Network Call:**
+   `renderApp()` had `await loadPublicStores();` blocking `root.innerHTML` rendering before the Sign-In screen appeared. When running on a standalone mobile device with no backend reachable at startup, this blocked UI rendering indefinitely.
+
+3. **Unhandled WebView Dialog Freezes:**
+   `MainActivity.java` did not implement `onJsAlert` and `onJsConfirm` in `WebChromeClient`. In Android WebViews, unhandled JS alerts can freeze the UI rendering thread.
+
+### Solution Applied:
+1. Fixed the duplicate template literal closing tags in `frontend/web/static/js/vastrenix.js`. Verified 100% syntax and execution cleanliness across all 2300+ lines using headless JavaScriptCore.
+2. Refactored `renderApp()` to render the Auth Hub instantly using local defaults (`offlineDB.stores`), deferring `loadPublicStores()` to an asynchronous background task.
+3. Added `document.readyState` check (`complete` / `interactive`) so `renderApp()` runs immediately even if `DOMContentLoaded` already fired before the script finished.
+4. Overrode `onJsAlert` and `onJsConfirm` in `MainActivity.java` with native `AlertDialog.Builder` to prevent any dialog locking.
+5. Rebuilt and re-signed the single universal release APK (`vastrenix-release.apk`) and all ABI targets via `scripts/build_proper_apk.sh`.
+

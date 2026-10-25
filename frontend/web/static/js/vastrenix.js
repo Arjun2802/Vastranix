@@ -2045,8 +2045,6 @@ async function renderDealers() {
     </div>
   `;
 }
-  `;
-}
 
 function openAssignStaffModal(orderId, orderNum) {
   document.getElementById("assign-order-id").value = orderId;
@@ -2837,8 +2835,21 @@ async function submitAddProduct(event) {
 // Render Main App or Authentication Gate
 async function renderApp() {
   const root = document.getElementById("app");
+  if (!root) return;
+
   if (!state.token) {
-    await loadPublicStores();
+    if (!state.stores || state.stores.length === 0) {
+      state.stores = offlineDB.stores;
+    }
+    // Background fetch of public stores without blocking UI render
+    loadPublicStores().then(() => {
+      const storeSelect = document.getElementById("reg-staff-store");
+      if (storeSelect && state.stores && state.stores.length > 0) {
+        storeSelect.innerHTML = state.stores.map(s => `
+          <option value="${s.id}">${s.name} (${s.city || 'India'})</option>
+        `).join('');
+      }
+    }).catch(() => {});
 
     root.innerHTML = `
       <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px;">
@@ -3489,6 +3500,10 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-window.addEventListener("DOMContentLoaded", () => {
-  renderApp();
-});
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  setTimeout(renderApp, 1);
+} else {
+  window.addEventListener("DOMContentLoaded", () => {
+    renderApp();
+  });
+}
