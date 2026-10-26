@@ -33,87 +33,126 @@ function getApiBase() {
 
 let _currentInvoiceBlob = null;
 let _currentInvoiceBlobUrl = null;
+let _currentInvoiceId = null;
+let _currentInvoiceNumber = null;
 
 async function viewInvoiceInApp(invoiceId, invoiceNumber) {
+  _currentInvoiceId = invoiceId;
+  _currentInvoiceNumber = invoiceNumber || invoiceId;
+
   const modal = document.getElementById("modal-invoice-viewer");
-  if (!modal) {
-    const directUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
-    window.open(directUrl, "_blank");
-    return;
-  }
+  if (!modal) return;
+
   const title = document.getElementById("invoice-viewer-title");
-  if (title) title.textContent = `${t('invoice_viewer_title', 'Invoice Details')} #${invoiceNumber || invoiceId}`;
+  if (title) title.textContent = `${t('invoice_viewer_title', 'Invoice Details')} #${_currentInvoiceNumber}`;
 
   const body = document.getElementById("invoice-viewer-body");
+  const fileName = `Invoice_${_currentInvoiceNumber}.pdf`;
   const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
-  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
 
+  // 1. Render immediate centralized invoice visual preview in modal dialog
   if (body) {
+    const dummyInv = {
+      invoice_number: _currentInvoiceNumber,
+      date: new Date().toLocaleDateString(),
+      customer_name: "Walk-in Retail Client",
+      total_amount: "0.00",
+      theme: state.selectedPOSTheme || "PREMIUM_BOUTIQUE"
+    };
     body.innerHTML = `
-      <div style="padding: 44px 16px; text-align: center; color: var(--navy);">
-        <div class="spinner"></div>
-        <div style="margin-top: 14px; font-weight: 700; font-size: 14px;">Preparing secure invoice PDF...</div>
-        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Fetching official tax document with verified credentials</div>
+      <div style="padding: 10px 4px;">
+        <div id="invoice-preview-card-wrap">
+          ${InvoiceThemeRegistry.renderInvoiceCard(dummyInv, state.selectedPOSTheme)}
+        </div>
+        <div id="pdf-download-status-banner" style="margin-top: 14px; background: #E8F4F0; border: 1px solid var(--teal-light); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+            <span style="font-size: 12px; color: var(--teal); font-weight: 700;">Preparing verified PDF...</span>
+          </div>
+          <span style="font-size: 11px; color: var(--text-muted);">Cloud Verified</span>
+        </div>
       </div>
     `;
   }
 
+  // 2. Wire popup action buttons
   const shareBtn = document.getElementById("invoice-viewer-share-btn");
   if (shareBtn) {
-    shareBtn.onclick = () => shareInvoicePdf(invoiceId, invoiceNumber);
+    shareBtn.textContent = t("share_pdf_btn", "💬 Share via WhatsApp");
+    shareBtn.onclick = () => shareInvoicePdf(_currentInvoiceId, _currentInvoiceNumber);
   }
 
   const downloadBtn = document.getElementById("invoice-viewer-download-btn");
   if (downloadBtn) {
-    downloadBtn.onclick = () => downloadInvoicePdf(invoiceId, invoiceNumber);
+    downloadBtn.textContent = t("view_system_pdf_btn", "👁️ View PDF (System Viewer)");
+    downloadBtn.onclick = () => openInvoicePdfInNativeViewer(_currentInvoiceId, _currentInvoiceNumber);
   }
 
   modal.classList.add("active");
 
+  // 3. Pre-fetch authenticated PDF bytes in background
   try {
     const headers = {};
     if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
     if (state.business) headers["X-Business-ID"] = state.business.id;
 
-    // Authenticated PDF byte fetch to eliminate "Authentication required" error
     const res = await fetch(pdfUrl, { headers });
-    if (!res.ok) {
-      throw new Error(`Server returned HTTP ${res.status}`);
-    }
+    if (res.ok) {
+      const blob = await res.blob();
+      _currentInvoiceBlob = blob;
+      if (_currentInvoiceBlobUrl) URL.revokeObjectURL(_currentInvoiceBlobUrl);
+      _currentInvoiceBlobUrl = URL.createObjectURL(blob);
 
-    const blob = await res.blob();
-    _currentInvoiceBlob = blob;
-    if (_currentInvoiceBlobUrl) {
-      URL.revokeObjectURL(_currentInvoiceBlobUrl);
-    }
-    _currentInvoiceBlobUrl = URL.createObjectURL(blob);
-
-    if (body) {
-      body.innerHTML = `
-        <iframe src="${_currentInvoiceBlobUrl}#toolbar=1&navpanes=0" style="width: 100%; height: 500px; border: 1px solid var(--border); border-radius: 8px; background: white;" onerror="this.outerHTML='<div style=\\'padding: 30px; text-align: center; color: var(--text-muted);\\'>Preview frame restricted by system. Tap Share or Download below.</div>'"></iframe>
-      `;
+      const banner = document.getElementById("pdf-download-status-banner");
+      if (banner) {
+        banner.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #10B981; font-weight: 800; font-size: 15px;">✓</span>
+            <span style="font-size: 12.5px; color: var(--navy); font-weight: 700;">${t('pdf_popup_title', 'Invoice Document Ready')}</span>
+          </div>
+          <span class="badge badge-success" style="font-size: 10px;">PDF Ready</span>
+        `;
+      }
     }
   } catch (err) {
-    console.warn("[PDF-AUTH-FALLBACK] Direct blob fetch encountered:", err.message);
-    const fallbackUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
-    if (body) {
-      body.innerHTML = `
-        <div style="padding: 36px 16px; text-align: center;">
-          <div style="font-size: 34px; margin-bottom: 8px;">🧾</div>
-          <div style="font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">Invoice Document Ready</div>
-          <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px;">Inline preview unavailable. Tap below to view or share verified document:</div>
-          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-navy" onclick="downloadInvoicePdf(${invoiceId}, '${invoiceNumber}')">Open Document</button>
-            <button class="btn btn-secondary" onclick="shareInvoicePdf(${invoiceId}, '${invoiceNumber}')">Share</button>
-          </div>
-        </div>
-      `;
-    }
+    console.warn("[PDF-FETCH] Pre-fetch error:", err);
   }
 }
 
 function openInvoicePdf(invoiceId, invoiceNumber) {
   viewInvoiceInApp(invoiceId, invoiceNumber);
+}
+
+async function openInvoicePdfInNativeViewer(invoiceId, invoiceNumber) {
+  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+  const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+
+  try {
+    let blob = _currentInvoiceBlob;
+    if (!blob) {
+      const headers = {};
+      if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+      if (state.business) headers["X-Business-ID"] = state.business.id;
+      const res = await fetch(pdfUrl, { headers });
+      if (!res.ok) throw new Error("Could not load PDF bytes");
+      blob = await res.blob();
+      _currentInvoiceBlob = blob;
+    }
+
+    if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        window.VastrenixNative.openPdfUrl(reader.result, fileName);
+      };
+      reader.readAsDataURL(blob);
+    } else {
+      const blobUrl = _currentInvoiceBlobUrl || URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+    }
+  } catch (err) {
+    const directUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
+    window.open(directUrl, "_blank");
+  }
 }
 
 async function shareInvoicePdf(invoiceId, invoiceNumber) {
@@ -132,7 +171,6 @@ async function shareInvoicePdf(invoiceId, invoiceNumber) {
       _currentInvoiceBlob = blob;
     }
 
-    // Convert blob to Base64 Data URL for zero-network native Android sharing
     const reader = new FileReader();
     reader.onloadend = function() {
       const base64data = reader.result;
@@ -154,44 +192,13 @@ async function shareInvoicePdf(invoiceId, invoiceNumber) {
     };
     reader.readAsDataURL(blob);
   } catch (err) {
-    console.error("[SHARE-PDF-FAIL]", err);
-    alert("Unable to share PDF: " + err.message);
+    const directUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent('Invoice #' + (invoiceNumber || invoiceId) + ': ' + directUrl)}`, "_blank");
   }
 }
 
 async function downloadInvoicePdf(invoiceId, invoiceNumber) {
-  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
-  const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
-
-  try {
-    let blob = _currentInvoiceBlob;
-    if (!blob) {
-      const headers = {};
-      if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
-      if (state.business) headers["X-Business-ID"] = state.business.id;
-      const res = await fetch(pdfUrl, { headers });
-      if (!res.ok) throw new Error("Could not retrieve PDF");
-      blob = await res.blob();
-      _currentInvoiceBlob = blob;
-    }
-
-    if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
-      const reader = new FileReader();
-      reader.onloadend = function() {
-        window.VastrenixNative.openPdfUrl(reader.result, fileName);
-      };
-      reader.readAsDataURL(blob);
-    } else {
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = fileName;
-      a.click();
-    }
-  } catch (err) {
-    const directUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
-    window.open(directUrl, "_blank");
-  }
+  await openInvoicePdfInNativeViewer(invoiceId, invoiceNumber);
 }
 
 let isAppInBackground = false;
@@ -445,7 +452,135 @@ const i18n = {
     waking_server: "Waking up store server (Render free-tier cold start, ~30s)...",
     device_offline_msg: "Your device appears to be offline. Check Wi-Fi or mobile data.",
     server_slow_msg: "Store server took longer than expected to respond. Please tap Retry.",
-    server_connected_msg: "✓ Server Connected"
+    server_connected_msg: "✓ Server Connected",
+    // Add Garment Product Modal
+    add_product_title: "Add Garment Product",
+    prod_name_label: "Garment Name",
+    prod_name_placeholder: "e.g. Pure Mulberry Silk Sari",
+    prod_fabric_label: "Fabric / Material",
+    prod_fabric_placeholder: "e.g. Handwoven Mulberry Silk",
+    retail_price_label: "Retail Price (₹)",
+    purchase_cost_label: "Purchase Cost (₹)",
+    size_label: "Size",
+    size_placeholder: "e.g. M or Free",
+    color_label: "Color",
+    color_placeholder: "e.g. Peacock Blue",
+    initial_stock_label: "Initial Stock Quantity",
+    alert_threshold_label: "Stock Alert Threshold",
+    rack_location_label: "Shelf / Rack Location",
+    rack_placeholder: "e.g. Rack A-12, Bin 4",
+    sku_barcode_label: "Barcode / SKU (Optional)",
+    sku_barcode_placeholder: "e.g. VAST-SLK-001",
+    save_add_catalog_btn: "Save & Add to Catalog",
+
+    // Purchase Order Modal (Order More)
+    create_po_title: "Create Purchase Order (Order More)",
+    target_garment_label: "Target Garment",
+    select_supplier_label: "Select Textile Supplier / Weaver",
+    order_qty_label: "Order Quantity (Pieces)",
+    unit_cost_label: "Unit Purchase Cost (₹)",
+    po_notes_label: "PO Notes / Reference",
+    po_notes_placeholder: "e.g. Festival restocking",
+    issue_po_btn: "Issue Purchase Order",
+
+    // Goods Receipt Modal (Receive Stock)
+    receive_goods_title: "Goods Received Note (Receive Stock)",
+    receiving_garment_label: "Receiving Garment",
+    select_po_label: "Select Issued Purchase Order",
+    challan_no_label: "Supplier Invoice / Challan Number",
+    challan_placeholder: "e.g. INV-TEX-9921",
+    inspection_notes_label: "Receiving Inspection Notes",
+    inspection_placeholder: "e.g. Checked pieces, quality approved",
+    confirm_receive_stock_btn: "Confirm & Add to Stock",
+
+    // Store Expenses Screen & Modal
+    expenses_title: "Store Expenses & Overhead Management",
+    expenses_subtitle: "Track daily operational costs, salaries, rent, and packaging.",
+    record_expense_btn: "+ Record New Expense",
+    total_expenses_recorded: "Total Expenses Recorded",
+    expense_entries: "expense entries",
+    total_sales_collections: "Total Sales Collections",
+    cash_upi_card_receipts: "Cash + UPI + Card receipts",
+    net_operating_cashflow: "Net Operating Cash Flow",
+    collections_minus_expenses: "Collections minus expenses",
+    accounts_receivable: "Accounts Receivable",
+    pending_customer_dues: "Pending customer dues",
+    expense_transactions_log: "Expense Transactions Log",
+    filter_category_label: "Filter Category:",
+    all_categories: "All Categories",
+    date_time_col: "Date & Time",
+    category_col: "Category",
+    desc_purpose_col: "Description / Purpose",
+    payment_mode_col: "Payment Mode",
+    receipt_col: "Receipt",
+    amount_col: "Amount (₹)",
+    no_expenses_recorded: "No expenses recorded yet. Click '+ Record New Expense' to log costs.",
+    record_store_expense_title: "Record Store Expense",
+    expense_category_label: "Expense Category",
+    expense_desc_label: "Description / Receipt Note",
+    expense_desc_placeholder: "e.g. 500 custom cotton carry bags for festival rush",
+    attach_receipt_label: "Attach Bill / Receipt Document (Optional)",
+    save_post_expense_btn: "Save & Post Expense",
+    view_receipt_link: "📎 View Receipt",
+    no_receipt_attached: "No receipt attached",
+
+    // Staff & Users Screen & Modal
+    team_title: "Store Team & User Accounts",
+    team_subtitle: "Manage employee roles, counter cashiers, and logistics dispatchers.",
+    add_team_member_btn: "+ Add Team Member",
+    total_store_team: "Total Store Team",
+    members_count_label: "Members",
+    active_cashiers: "Active Cashiers",
+    pos_till_operators: "POS counter till operators",
+    dispatchers_picking: "Dispatchers & Picking",
+    b2b_staff: "B2B order packaging staff",
+    pending_approvals_metric: "Pending Approvals",
+    signups_waiting: "Staff signups waiting",
+    employee_name_col: "Employee Name",
+    contact_email_col: "Contact / Email",
+    role_responsibilities_col: "Role & Responsibilities",
+    store_branch_col: "Store Branch",
+    status_label: "Status",
+    add_staff_title: "Add Store Staff Member",
+    full_name_label: "Full Name",
+    full_name_placeholder: "e.g. Ramesh Patel",
+    email_address_label: "Email Address",
+    email_placeholder: "ramesh@vastrenix-store.com",
+    phone_number_label: "Phone Number",
+    phone_placeholder: "+91 98765 43210",
+    role_responsibility_label: "Role & Responsibility",
+    staff_auth_notice: "Once created, staff will immediately be authorized to sign in to this store location.",
+    create_auth_staff_btn: "Create & Authorize Staff",
+
+    // Close Shift Modal
+    close_shift_title: "Close & Reconcile Cash Shift",
+    opening_float_label: "Opening Cash Float:",
+    cash_sales_collected_label: "Total Cash Sales Collected:",
+    cash_payouts_label: "Cash Payouts / Expenses:",
+    expected_drawer_cash_label: "Expected Drawer Cash:",
+    counted_cash_label: "Counted Physical Cash in Drawer (₹)",
+    counted_cash_placeholder: "Enter total counted notes & coins",
+    closing_notes_label: "Closing Notes / Discrepancy Reason (Optional)",
+    closing_notes_placeholder: "e.g. Verified by head cashier",
+    reconcile_close_btn: "Reconcile & Close Shift",
+
+    // Assign Staff Modal
+    assign_staff_title: "Assign Order to Store Staff",
+    dealer_order_label: "Dealer Order",
+    select_staff_label: "Select Staff Member to Assign",
+    assign_staff_notice: "The assigned staff member will be responsible for item picking, quality check, and packaging for this order.",
+    confirm_assignment_btn: "Confirm Staff Assignment",
+
+    // Dashboard Resilience Fallbacks
+    metrics_load_failed: "Live dashboard metrics could not be loaded.",
+    retry_dashboard_btn: "⟳ Retry Dashboard",
+
+    // PDF Dialog Popup
+    pdf_popup_title: "Invoice Document Ready",
+    pdf_popup_subtitle: "Official GST tax document generated and verified",
+    view_system_pdf_btn: "👁️ View PDF (System Viewer)",
+    share_pdf_btn: "💬 Share via WhatsApp",
+    download_pdf_btn: "⎙ Download / Print PDF",
   },
   hi: {
     welcome: "आपके वस्त्र व्यापार में आपका स्वागत है",
@@ -601,7 +736,135 @@ const i18n = {
     waking_server: "स्टोर सर्वर जागृत हो रहा है (Render कोल्ड स्टार्ट, ~30s)...",
     device_offline_msg: "आपका डिवाइस वर्तमान में ऑफ़लाइन है। कृपया वाई-फाई या मोबाइल डेटा जांचें।",
     server_slow_msg: "स्टोर सर्वर से उत्तर मिलने में सामान्य से अधिक समय लग रहा है। कृपया पुनः प्रयास करें।",
-    server_connected_msg: "✓ सर्वर कनेक्ट हो गया"
+    server_connected_msg: "✓ सर्वर कनेक्ट हो गया",
+    // Add Garment Product Modal
+    add_product_title: "वस्त्र उत्पाद जोड़ें",
+    prod_name_label: "वस्त्र का नाम",
+    prod_name_placeholder: "उदा. शुद्ध मलबरी सिल्क साड़ी",
+    prod_fabric_label: "कपड़ा / सामग्री",
+    prod_fabric_placeholder: "उदा. हथकरघा मलबरी सिल्क",
+    retail_price_label: "खुदरा बिक्री मूल्य (₹)",
+    purchase_cost_label: "खरीद लागत (₹)",
+    size_label: "साइज़",
+    size_placeholder: "उदा. M या Free",
+    color_label: "रंग",
+    color_placeholder: "उदा. मोरपंखी नीला",
+    initial_stock_label: "प्रारंभिक स्टॉक मात्रा",
+    alert_threshold_label: "स्टॉक चेतावनी सीमा",
+    rack_location_label: "रैक / शेल्फ स्थान",
+    rack_placeholder: "उदा. रैक A-12, बिन 4",
+    sku_barcode_label: "बारकोड / एसकेयू (वैकल्पिक)",
+    sku_barcode_placeholder: "उदा. VAST-SLK-001",
+    save_add_catalog_btn: "सहेजें और कैटलॉग में जोड़ें",
+
+    // Purchase Order Modal (Order More)
+    create_po_title: "खरीद आदेश बनाएं (अधिक ऑर्डर)",
+    target_garment_label: "लक्षित वस्त्र",
+    select_supplier_label: "वस्त्र आपूर्तिकर्ता / बुनकर चुनें",
+    order_qty_label: "ऑर्डर मात्रा (संख्या)",
+    unit_cost_label: "प्रति नग खरीद लागत (₹)",
+    po_notes_label: "पीओ नोट्स / संदर्भ",
+    po_notes_placeholder: "उदा. त्योहार का स्टॉक",
+    issue_po_btn: "खरीद आदेश जारी करें",
+
+    // Goods Receipt Modal (Receive Stock)
+    receive_goods_title: "सामान प्राप्ति रसीद (स्टॉक आवक)",
+    receiving_garment_label: "प्राप्त हो रहा वस्त्र",
+    select_po_label: "जारी किया गया खरीद आदेश चुनें",
+    challan_no_label: "आपूर्तिकर्ता बिल / चालान नंबर",
+    challan_placeholder: "उदा. INV-TEX-9921",
+    inspection_notes_label: "निरीक्षण विवरण",
+    inspection_placeholder: "उदा. पीस जांचे गए, गुणवत्ता स्वीकृत",
+    confirm_receive_stock_btn: "पुष्टि करें और स्टॉक में जोड़ें",
+
+    // Store Expenses Screen & Modal
+    expenses_title: "दुकान के खर्च और प्रबंधन",
+    expenses_subtitle: "दैनिक परिचालन लागत, वेतन, किराया और पैकेजिंग का हिसाब रखें।",
+    record_expense_btn: "+ नया खर्च दर्ज करें",
+    total_expenses_recorded: "दर्ज कुल खर्च",
+    expense_entries: "खर्च प्रविष्टियां",
+    total_sales_collections: "कुल बिक्री वसूली",
+    cash_upi_card_receipts: "नकद + यूपीआई + कार्ड प्राप्तियां",
+    net_operating_cashflow: "शुद्ध परिचालन नकदी प्रवाह",
+    collections_minus_expenses: "कुल वसूली में से खर्च घटाकर",
+    accounts_receivable: "प्राप्य खाते / उधारी",
+    pending_customer_dues: "ग्राहकों से बकाया राशि",
+    expense_transactions_log: "खर्च लेन-देन लॉग",
+    filter_category_label: "श्रेणी फ़िल्टर:",
+    all_categories: "सभी श्रेणियां",
+    date_time_col: "दिनांक एवं समय",
+    category_col: "श्रेणी",
+    desc_purpose_col: "विवरण / उद्देश्य",
+    payment_mode_col: "भुगतान माध्यम",
+    receipt_col: "रसीद",
+    amount_col: "राशि (₹)",
+    no_expenses_recorded: "अभी तक कोई खर्च दर्ज नहीं है। खर्च जोड़ने के लिए '+ नया खर्च दर्ज करें' पर क्लिक करें।",
+    record_store_expense_title: "दुकान का खर्च दर्ज करें",
+    expense_category_label: "खर्च की श्रेणी",
+    expense_desc_label: "विवरण / रसीद नोट",
+    expense_desc_placeholder: "उदा. त्योहार के लिए 500 कॉटन कैरी बैग",
+    attach_receipt_label: "बिल / रसीद संलग्न करें (वैकल्पिक)",
+    save_post_expense_btn: "खर्च सहेजें और पोस्ट करें",
+    view_receipt_link: "📎 रसीद देखें",
+    no_receipt_attached: "रसीद संलग्न नहीं है",
+
+    // Staff & Users Screen & Modal
+    team_title: "स्टोर टीम और कर्मचारी खाते",
+    team_subtitle: "कर्मचारियों की भूमिकाएं, काउंटर कैशियर और लॉजिस्टिक्स संभालें।",
+    add_team_member_btn: "+ नया कर्मचारी जोड़ें",
+    total_store_team: "कुल स्टोर टीम",
+    members_count_label: "कर्मचारी",
+    active_cashiers: "सक्रिय कैशियर",
+    pos_till_operators: "बिलिंग काउंटर ऑपरेटर",
+    dispatchers_picking: "डिस्पैच और पैकिंग",
+    b2b_staff: "बी2बी ऑर्डर पैकिंग स्टाफ",
+    pending_approvals_metric: "स्वीकृति लंबित",
+    signups_waiting: "प्रतीक्षारत पंजीकरण",
+    employee_name_col: "कर्मचारी का नाम",
+    contact_email_col: "संपर्क / ईमेल",
+    role_responsibilities_col: "भूमिका और जिम्मेदारियां",
+    store_branch_col: "स्टोर शाखा",
+    status_label: "स्थिति",
+    add_staff_title: "स्टोर कर्मचारी जोड़ें",
+    full_name_label: "पूरा नाम",
+    full_name_placeholder: "उदा. रमेश पटेल",
+    email_address_label: "ईमेल पता",
+    email_placeholder: "ramesh@vastrenix-store.com",
+    phone_number_label: "फ़ोन नंबर",
+    phone_placeholder: "+91 98765 43210",
+    role_responsibility_label: "भूमिका और जिम्मेदारी",
+    staff_auth_notice: "बनाए जाने के बाद कर्मचारी इस स्टोर में तुरंत लॉगिन कर सकेंगे।",
+    create_auth_staff_btn: "कर्मचारी बनाएं और अधिकृत करें",
+
+    // Close Shift Modal
+    close_shift_title: "कैश शिफ्ट बंद एवं समाधान करें",
+    opening_float_label: "प्रारंभिक नकद राशि:",
+    cash_sales_collected_label: "प्राप्त कुल नकद बिक्री:",
+    cash_payouts_label: "नकद खर्च / निकासी:",
+    expected_drawer_cash_label: "अपेक्षित गल्ला नकद:",
+    counted_cash_label: "गल्ले में गिनी गई नकद राशि (₹)",
+    counted_cash_placeholder: "गिने गए नोट और सिक्के दर्ज करें",
+    closing_notes_label: "समापन विवरण / विसंगति कारण (वैकल्पिक)",
+    closing_notes_placeholder: "उदा. मुख्य कैशियर द्वारा सत्यापित",
+    reconcile_close_btn: "समाधान करें और शिफ्ट बंद करें",
+
+    // Assign Staff Modal
+    assign_staff_title: "कर्मचारी को ऑर्डर सौंपें",
+    dealer_order_label: "डीलर ऑर्डर",
+    select_staff_label: "कर्मचारी चुनें",
+    assign_staff_notice: "सौंपा गया कर्मचारी इस ऑर्डर के आइटम चुनने, गुणवत्ता जांच और पैकिंग के लिए जिम्मेदार होगा।",
+    confirm_assignment_btn: "कार्यभार पुष्टि करें",
+
+    // Dashboard Resilience Fallbacks
+    metrics_load_failed: "डैशबोर्ड डेटा लोड नहीं हो सका।",
+    retry_dashboard_btn: "⟳ डैशबोर्ड पुनः प्रयास",
+
+    // PDF Dialog Popup
+    pdf_popup_title: "चालान पीडीएफ तैयार है",
+    pdf_popup_subtitle: "आधिकारिक जीएसटी कर दस्तावेज सत्यापित किया गया",
+    view_system_pdf_btn: "👁️ पीडीएफ देखें (सिस्टम व्यूअर)",
+    share_pdf_btn: "💬 व्हाट्सएप पर साझा करें",
+    download_pdf_btn: "⎙ डाउनलोड / प्रिंट पीडीएफ",
   },
   gu: {
     welcome: "તમારા વસ્ત્ર વ્યાપારમાં આપનું સ્વાગત છે",
@@ -757,7 +1020,135 @@ const i18n = {
     waking_server: "સ્ટોર સર્વર જાગૃત થઈ રહ્યું છે (Render કોલ્ડ સ્ટાર્ટ, ~30s)...",
     device_offline_msg: "તમારું ડિવાઇસ હાલમાં ઑફલાઇન છે. કૃપા કરીને ઇન્ટરનેટ કનેક્શન ચકાસો.",
     server_slow_msg: "સર્વર પ્રતિસાદ આપવામાં સામાન્ય કરતાં વધુ સમય લઈ રહ્યું છે. ફરી પ્રયાસ કરો.",
-    server_connected_msg: "✓ સર્વર કનેક્ટ થઈ ગયું"
+    server_connected_msg: "✓ સર્વર કનેક્ટ થઈ ગયું",
+    // Add Garment Product Modal
+    add_product_title: "નવું વસ્ત્ર ઉત્પાદન ઉમેરો",
+    prod_name_label: "વસ્ત્રનું નામ",
+    prod_name_placeholder: "દા.ત. શુદ્ધ મલબરી સિલ્ક સાડી",
+    prod_fabric_label: "કાપડ / મટિરિયલ",
+    prod_fabric_placeholder: "દા.ત. હેન્ડવુવન મલબરી સિલ્ક",
+    retail_price_label: "છૂટક વેચાણ કિંમત (₹)",
+    purchase_cost_label: "ખરીદ પડતર (₹)",
+    size_label: "સાઇઝ",
+    size_placeholder: "દા.ત. M અથવા ફ્રી",
+    color_label: "રંગ",
+    color_placeholder: "દા.ત. મોરપીંછ વાદળી",
+    initial_stock_label: "પ્રારંભિક સ્ટોક જથ્થો",
+    alert_threshold_label: "સ્ટોક ચેતવણી મર્યાદા",
+    rack_location_label: "શેલ્ફ / રેક લોકેશન",
+    rack_placeholder: "દા.ત. રેક A-12, ખાનું 4",
+    sku_barcode_label: "બારકોડ / એસકેયુ (વૈકલ્પિક)",
+    sku_barcode_placeholder: "દા.ત. VAST-SLK-001",
+    save_add_catalog_btn: "સાચવો અને કેટલોગમાં ઉમેરો",
+
+    // Purchase Order Modal (Order More)
+    create_po_title: "ખરીદ ઓર્ડર બનાવો (વધુ સ્ટોક)",
+    target_garment_label: "લક્ષિત વસ્ત્ર",
+    select_supplier_label: "કાપડ સપ્લાયર / વણકર પસંદ કરો",
+    order_qty_label: "ઓર્ડર જથ્થો (નંગ)",
+    unit_cost_label: "પ્રતિ નંગ ખરીદ કિંમત (₹)",
+    po_notes_label: "ઓર્ડર નોંધ / સંદર્ભ",
+    po_notes_placeholder: "દા.ત. તહેવાર સ્ટોક રિફિલ",
+    issue_po_btn: "ખરીદ ઓર્ડર જારી કરો",
+
+    // Goods Receipt Modal (Receive Stock)
+    receive_goods_title: "માલ પ્રાપ્તિ નોંધ (સ્ટોક આવક)",
+    receiving_garment_label: "પ્રાપ્ત થતું વસ્ત્ર",
+    select_po_label: "જારી કરેલ ખરીદ ઓર્ડર પસંદ કરો",
+    challan_no_label: "સપ્લાયર બિલ / ચલણ નંબર",
+    challan_placeholder: "દા.ત. INV-TEX-9921",
+    inspection_notes_label: "ચકાસણી નોંધ",
+    inspection_placeholder: "દા.ત. માલ ચકાસ્યો, ગુણવત્તા મંજૂર",
+    confirm_receive_stock_btn: "ખાતરી કરો અને સ્ટોકમાં ઉમેરો",
+
+    // Store Expenses Screen & Modal
+    expenses_title: "દુકાનના ખર્ચાઓ અને સંચાલન",
+    expenses_subtitle: "દૈનિક સંચાલન ખર્ચ, પગાર, ભાડું અને પેકિંગનો હિસાબ રાખો.",
+    record_expense_btn: "+ નવો ખર્ચ નોંધો",
+    total_expenses_recorded: "કુલ નોંધાયેલ ખર્ચ",
+    expense_entries: "ખર્ચ એન્ટ્રીઓ",
+    total_sales_collections: "કુલ વેચાણ રોકડ આવક",
+    cash_upi_card_receipts: "રોકડ + યુપીઆઈ + કાર્ડ આવક",
+    net_operating_cashflow: "ચોખ્ખો રોકડ પ્રવાહ",
+    collections_minus_expenses: "આવકમાંથી ખર્ચ બાદ કરતાં",
+    accounts_receivable: "બાકી ઉધારી ખાતા",
+    pending_customer_dues: "ગ્રાહકો પાસેથી લેણી રકમ",
+    expense_transactions_log: "ખર્ચ વ્યવહારોની યાદી",
+    filter_category_label: "કેટેગરી ફિલ્ટર:",
+    all_categories: "બધી કેટેગરીઓ",
+    date_time_col: "તારીખ અને સમય",
+    category_col: "કેટેગરી",
+    desc_purpose_col: "વિગત / હેતુ",
+    payment_mode_col: "ચૂકવણી પદ્ધતિ",
+    receipt_col: "પહોંચ",
+    amount_col: "રકમ (₹)",
+    no_expenses_recorded: "હજુ સુધી કોઈ ખર્ચ નોંધાયેલ નથી. ખર્ચ ઉમેરવા '+ નવો ખર્ચ નોંધો' પર ક્લિક કરો.",
+    record_store_expense_title: "દુકાનનો ખર્ચ નોંધો",
+    expense_category_label: "ખર્ચની કેટેગરી",
+    expense_desc_label: "વિગત / પહોંચ નોંધ",
+    expense_desc_placeholder: "દા.ત. તહેવાર માટે 500 કોટન કેરી બેગ્સ",
+    attach_receipt_label: "બિલ / રસીદ જોડો (વૈકલ્પિક)",
+    save_post_expense_btn: "ખર્ચ સાચવો અને પોસ્ટ કરો",
+    view_receipt_link: "📎 પહોંચ જુઓ",
+    no_receipt_attached: "પહોંચ જોડેલ નથી",
+
+    // Staff & Users Screen & Modal
+    team_title: "સ્ટોર ટીમ અને કર્મચારી ખાતાઓ",
+    team_subtitle: "કર્મચારીઓની ભૂમિકા, કાઉન્ટર કેશિયર અને પેકિંગ સ્ટાફ સંભાળો.",
+    add_team_member_btn: "+ નવો સ્ટાફ ઉમેરો",
+    total_store_team: "કુલ સ્ટોર ટીમ",
+    members_count_label: "કર્મચારીઓ",
+    active_cashiers: "સક્રિય કેશિયર",
+    pos_till_operators: "કાઉન્ટર બિલિંગ ઓપરેટરો",
+    dispatchers_picking: "ડિસ્પેચ અને પેકિંગ",
+    b2b_staff: "બી2બી ઓર્ડર પેકિંગ સ્ટાફ",
+    pending_approvals_metric: "મંજૂરી બાકી",
+    signups_waiting: "રાહ જોતા રજીસ્ટ્રેશન",
+    employee_name_col: "કર્મચારીનું નામ",
+    contact_email_col: "સંપર્ક / ઇમેઇલ",
+    role_responsibilities_col: "હોદ્દો અને જવાબદારી",
+    store_branch_col: "દુકાન શાખા",
+    status_label: "સ્થિતિ",
+    add_staff_title: "નવા કર્મચારીને જોડો",
+    full_name_label: "પૂરું નામ",
+    full_name_placeholder: "દા.ત. રમેશ પટેલ",
+    email_address_label: "ઇમેઇલ એડ્રેસ",
+    email_placeholder: "ramesh@vastrenix-store.com",
+    phone_number_label: "ફોન નંબર",
+    phone_placeholder: "+91 98765 43210",
+    role_responsibility_label: "હોદ્દો અને જવાબદારી",
+    staff_auth_notice: "બનાવ્યા પછી કર્મચારી તરત જ આ દુકાનમાં લૉગિન કરી શકશે.",
+    create_auth_staff_btn: "સ્ટાફ એકાઉન્ટ બનાવો",
+
+    // Close Shift Modal
+    close_shift_title: "કેશ શિફ્ટ બંધ અને મેળવણી કરો",
+    opening_float_label: "પ્રારંભિક રોકડ રકમ:",
+    cash_sales_collected_label: "કુલ રોકડ વેચાણ આવક:",
+    cash_payouts_label: "રોકડ ખર્ચ / ઉપાડ:",
+    expected_drawer_cash_label: "અપેક્ષિત ગલ્લા રોકડ:",
+    counted_cash_label: "ગલ્લામાં ગણેલી રોકડ રકમ (₹)",
+    counted_cash_placeholder: "ગણેલી નોટો અને સિક્કા દાખલ કરો",
+    closing_notes_label: "બંધ નોંધ / તફાવતનું કારણ (વૈકલ્પિક)",
+    closing_notes_placeholder: "દા.ત. હેડ કેશિયર દ્વારા વેરિફાઇડ",
+    reconcile_close_btn: "મેળવણી કરો અને શિફ્ટ બંધ કરો",
+
+    // Assign Staff Modal
+    assign_staff_title: "કર્મચારીને ઓર્ડર સોંપો",
+    dealer_order_label: "ડીલર ઓર્ડર",
+    select_staff_label: "કર્મચારી પસંદ કરો",
+    assign_staff_notice: "સોંપેલ કર્મચારી આ ઓર્ડરની માલ પસંદગી, ગુણવત્તા ચકાસણી અને પેકિંગ માટે જવાબદાર રહેશે.",
+    confirm_assignment_btn: "જવાબદારી મંજૂર કરો",
+
+    // Dashboard Resilience Fallbacks
+    metrics_load_failed: "ડેશબોર્ડ ડેટા લોડ થઈ શક્યો નથી.",
+    retry_dashboard_btn: "⟳ ડેશબોર્ડ ફરી પ્રયાસ",
+
+    // PDF Dialog Popup
+    pdf_popup_title: "બિલ પીડીએફ તૈયાર છે",
+    pdf_popup_subtitle: "સત્તાવાર જીએસટી ટેક્સ દસ્તાવેજ ચકાસાયેલ છે",
+    view_system_pdf_btn: "👁️ પીડીએફ જુઓ (સિસ્ટમ વ્યુઅર)",
+    share_pdf_btn: "💬 વોટ્સએપ પર શેર કરો",
+    download_pdf_btn: "⎙ ડાઉનલોડ / પ્રિન્ટ પીડીએફ",
   }
 };
 
@@ -1671,186 +2062,221 @@ function logout() {
   renderApp();
 }
 
-// Render Dashboard
+// Render Dashboard with Zero-Stuck Loading & Independent Section Fault-Tolerance (Part 1)
 async function renderDashboard() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `
-    <div style="margin-bottom: 24px;">
-      <div class="skeleton skeleton-text" style="width: 220px; height: 26px; margin-bottom: 12px;"></div>
-      <div class="skeleton skeleton-text" style="width: 320px; height: 16px;"></div>
-    </div>
-    ${getSkeletonCardsHTML()}
-  `;
+  if (!container) return;
 
-  const t = i18n[state.lang] || i18n.en;
-  const metrics = await api("/reports/dashboard");
-  if (!metrics) return;
+  const t = (k, fb) => i18n[state.lang]?.[k] || i18n.en[k] || fb || k;
+  const bizName = state.storeName || (state.business && state.business.name) || "VASTRENIX Store";
 
-  // If Store Owner/Admin, check for pending staff approvals
-  let pendingStaff = [];
-  if (!state.isStaff) {
-    try {
-      pendingStaff = await api("/auth/pending-staff");
-    } catch (e) {
-      pendingStaff = [];
-    }
-  }
-
+  // 1. Render immediate visual shell so Home NEVER sits in a blank or infinite skeleton state
   container.innerHTML = `
     <!-- Top Greeting Banner -->
     <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
       <div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-          <h2 style="font-size: 22px; font-weight: 800; color: var(--navy);">${metrics.business_name}</h2>
+          <h2 style="font-size: 22px; font-weight: 800; color: var(--navy);">${bizName}</h2>
           ${state.isStaff ? `<span class="badge badge-success" style="font-size: 11px;">Staff View</span>` : `<span class="badge badge-neutral" style="font-size: 11px;">Store Admin</span>`}
         </div>
-        <p style="color: var(--text-muted); font-size: 13.5px;">${t.welcome} • <b>${metrics.branch_name}</b></p>
+        <p style="color: var(--text-muted); font-size: 13.5px;">${t("welcome", "Welcome to your clothing operations")} • <b>Main Branch</b></p>
       </div>
 
       ${state.isStaff ? `
         <div style="background: var(--teal-light); border: 1px solid rgba(33,140,130,0.2); border-radius: var(--radius-sm); padding: 8px 16px;">
           <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Assigned Store</div>
-          <div style="font-size: 14px; font-weight: 800; color: var(--navy);">${state.storeName || metrics.business_name}</div>
-          <div style="font-size: 11.5px; color: var(--text-muted);">Logged in as: <b>${state.user.full_name} (${state.business.role})</b></div>
+          <div style="font-size: 14px; font-weight: 800; color: var(--navy);">${bizName}</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Logged in as: <b>${state.user ? state.user.full_name : 'Staff'} (${state.business ? state.business.role : 'STAFF'})</b></div>
         </div>
       ` : ''}
     </div>
 
-    <!-- Pending Staff Approvals Notice (Visible to Store Owner/Admin) -->
-    ${pendingStaff && pendingStaff.length > 0 ? `
-      <div style="background: #FEF8ED; border: 1px solid var(--amber); border-radius: var(--radius-md); padding: 18px 24px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="background: var(--amber); color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">!</span>
-            <h3 style="font-size: 15px; font-weight: 700; color: #8A5A1B; margin: 0;">${t("pending_staff_title", "Pending Staff Signups Requiring Approval")} (${pendingStaff.length})</h3>
-          </div>
-        </div>
-        <p style="font-size: 13px; color: #735022; margin-bottom: 14px;">The following employees have signed up under your store '<b>${metrics.business_name}</b>' and cannot log in until you approve them:</p>
-        
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          ${pendingStaff.map(s => `
-            <div style="background: white; border: 1px solid #EADBCA; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-left: 4px solid var(--amber);">
-              <div>
-                <div style="font-weight: 700; font-size: 13.5px; color: var(--navy);">${s.full_name}</div>
-                <div style="font-size: 12px; color: var(--text-muted);">${s.email} • Role Requested: <span class="badge badge-neutral">${s.role}</span> • Phone: ${s.phone || 'N/A'}</div>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <button class="btn btn-sm btn-primary" onclick="approveStaffMember(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">${t("approve_staff_btn", "✓ Approve Staff")}</button>
-                <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">${t("reject_staff_btn", "✕ Reject")}</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
+    <!-- Independent Pending Staff Approvals Container (Owner/Admin) -->
+    <div id="dashboard-pending-staff-container"></div>
 
-    ${Number(metrics.pending_credit_dues || 0) > 0 ? `
-      <div style="background: #FFF5F5; border: 1px solid #FEB2B2; border-radius: var(--radius-md); padding: 14px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 24px;">📅</span>
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: #9B2C2C;">${t("month_end_banner_title", "Month-End Credit Payment Reminders Active")}</div>
-            <div style="font-size: 12.5px; color: #C53030;">₹${Number(metrics.pending_credit_dues).toFixed(2)} total outstanding Store Credit due for collection before month-end.</div>
-          </div>
-        </div>
-        <button class="btn btn-sm btn-navy" onclick="switchTab('invoices')">${t("review_dues_btn", "Review Dues in Invoices")}</button>
-      </div>
-    ` : ''}
+    <!-- Month-End Dues Banner Container -->
+    <div id="dashboard-dues-banner-container"></div>
 
+    <!-- Metrics Grid Cards (Load and fail independently) -->
     <div class="grid-cards" style="margin-bottom: 24px;">
-      <div class="stat-card stagger-1">
-        <div class="stat-label">${t.today_sales}</div>
+      <div class="stat-card stagger-1" id="dash-card-sales">
+        <div class="stat-label">${t("today_sales", "Today's Gross Sales")}</div>
         <div class="stat-value" id="dash-val-sales" style="color: var(--teal);">₹0.00</div>
         <div class="stat-meta"><span id="dash-val-orders">0</span> ${t("tx_completed", "transactions completed")}</div>
       </div>
-      <div class="stat-card stagger-2">
-        <div class="stat-label">${t.low_stock_items}</div>
-        <div class="stat-value ${metrics.low_stock_count > 0 ? 'badge-low-stock-pulse' : ''}" id="dash-val-lowstock" style="color: ${metrics.low_stock_count > 0 ? 'var(--amber)' : 'var(--teal)'};">
-          ${metrics.low_stock_count > 0 ? '▲ ' : '● '}${metrics.low_stock_count}
-        </div>
-        <div class="stat-meta">${metrics.low_stock_count > 0 ? 'Sizes requiring reorder' : 'All inventory healthy'}</div>
+      <div class="stat-card stagger-2" id="dash-card-lowstock">
+        <div class="stat-label">${t("low_stock_items", "Low Stock Items")}</div>
+        <div class="stat-value" id="dash-val-lowstock" style="color: var(--teal);">● 0</div>
+        <div class="stat-meta" id="dash-meta-lowstock">${t("all_healthy", "All inventory healthy")}</div>
       </div>
-      <div class="stat-card stagger-3">
-        <div class="stat-label">${t.pending_dealer_orders}</div>
+      <div class="stat-card stagger-3" id="dash-card-dealers">
+        <div class="stat-label">${t("pending_dealer_orders", "Pending Dealer Orders")}</div>
         <div class="stat-value" id="dash-val-dealers" style="color: var(--amber);">0</div>
-        <div class="stat-meta">B2B orders awaiting action</div>
+        <div class="stat-meta">${t("b2b_awaiting", "B2B orders awaiting action")}</div>
       </div>
       ${(!state.isStaff || (state.business && state.business.role !== 'CASHIER')) ? `
-      <div class="stat-card stagger-4">
-        <div class="stat-label">${t.total_revenue}</div>
+      <div class="stat-card stagger-4" id="dash-card-revenue">
+        <div class="stat-label">${t("total_revenue", "Total Net Revenue")}</div>
         <div class="stat-value" id="dash-val-revenue" style="color: var(--navy);">₹0.00</div>
-        <div class="stat-meta">Authoritative posted invoices</div>
-      </div>
-      ` : ''}
-      ${Number(metrics.pending_credit_dues || 0) > 0 ? `
-      <div class="stat-card stagger-5" style="border-left: 4px solid var(--coral);">
-        <div class="stat-label">Month-End Credit Dues</div>
-        <div class="stat-value" style="color: var(--coral);">₹${Number(metrics.pending_credit_dues).toFixed(2)}</div>
-        <div class="stat-meta">Pending customer receivables</div>
+        <div class="stat-meta">${t("posted_invoices", "Authoritative posted invoices")}</div>
       </div>
       ` : ''}
     </div>
 
-    <!-- Quick Actions Banner -->
+    <!-- Quick Actions Banner (Always clickable immediately, never blocked) -->
     <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
       <button class="btn btn-primary" onclick="switchTab('pos')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        New POS Sale
+        ${t("new_pos_sale", "+ New POS Sale")}
       </button>
       <button class="btn btn-secondary" onclick="openAddProductModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-        Add Garment Product
+        ${t("add_garment_prod", "+ Add Garment Product")}
       </button>
       <button class="btn btn-secondary" onclick="switchTab('dealers')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-        Dealer Orders (${metrics.pending_dealer_orders})
+        ${t("dealer_orders_btn", "Dealer Orders")}
       </button>
     </div>
 
     <!-- Low Stock Alert Panel -->
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">Urgent Low Stock Warnings</div>
-        <button class="btn btn-sm btn-secondary" onclick="switchTab('inventory')">View All Inventory</button>
+        <div class="panel-title">${t("urgent_low_stock", "Urgent Low Stock Warnings")}</div>
+        <button class="btn btn-sm btn-secondary" onclick="switchTab('inventory')">${t("view_all_inventory", "View All Inventory")}</button>
       </div>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Garment Product</th>
-              <th>SKU</th>
-              <th>Size / Color</th>
-              <th>Available Qty</th>
-              <th>Threshold</th>
-              <th>Action</th>
+              <th>${t("garment_product", "Garment Product")}</th>
+              <th>${t("sku", "SKU")}</th>
+              <th>${t("size_color", "Size / Color")}</th>
+              <th>${t("available_qty", "Available Qty")}</th>
+              <th>${t("threshold", "Threshold")}</th>
+              <th>${t("action", "Action")}</th>
             </tr>
           </thead>
-          <tbody>
-            ${metrics.top_low_stock && metrics.top_low_stock.length > 0 ? metrics.top_low_stock.map(item => `
-              <tr>
-                <td><b>${item.name}</b></td>
-                <td><code>${item.sku}</code></td>
-                <td>${item.size} / ${item.color}</td>
-                <td><b style="color: ${item.available <= 0 ? 'var(--coral)' : 'var(--amber)'};">${item.available} units</b></td>
-                <td>${item.threshold}</td>
-                <td><button class="btn btn-sm btn-secondary" onclick="switchTab('inventory')">Manage Stock</button></td>
-              </tr>
-            `).join('') : `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">${t.all_healthy} All variants have sufficient inventory.</td></tr>`}
+          <tbody id="dash-lowstock-tbody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">${t("all_healthy", "All inventory healthy")}</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   `;
 
-  // Trigger Number Tweens for Boutique Feel
-  animateNumber(document.getElementById("dash-val-sales"), 0, Number(metrics.today_sales || 0), 700, "₹", "", 2);
-  animateNumber(document.getElementById("dash-val-orders"), 0, Number(metrics.today_orders_count || 0), 500);
-  animateNumber(document.getElementById("dash-val-dealers"), 0, Number(metrics.pending_dealer_orders || 0), 500);
-  const revEl = document.getElementById("dash-val-revenue");
-  if (revEl) {
-    animateNumber(revEl, 0, Number(metrics.total_revenue || 0), 800, "₹", "", 2);
+  // 2. Fetch Dashboard Metrics with a strict 8s timeout to guarantee ZERO infinite loading
+  try {
+    const metrics = await api("/reports/dashboard", { timeout: 8000 });
+    if (metrics) {
+      // Save last successful metrics in cache for instant resume
+      state.cachedDashboard = metrics;
+
+      const salesEl = document.getElementById("dash-val-sales");
+      if (salesEl) animateNumber(salesEl, 0, Number(metrics.today_sales || 0), 600, "₹", "", 2);
+
+      const ordersEl = document.getElementById("dash-val-orders");
+      if (ordersEl) animateNumber(ordersEl, 0, Number(metrics.today_orders_count || 0), 400);
+
+      const dealersEl = document.getElementById("dash-val-dealers");
+      if (dealersEl) animateNumber(dealersEl, 0, Number(metrics.pending_dealer_orders || 0), 400);
+
+      const revEl = document.getElementById("dash-val-revenue");
+      if (revEl) animateNumber(revEl, 0, Number(metrics.total_revenue || 0), 700, "₹", "", 2);
+
+      const lowEl = document.getElementById("dash-val-lowstock");
+      const lowMeta = document.getElementById("dash-meta-lowstock");
+      const lowCount = Number(metrics.low_stock_count || 0);
+      if (lowEl) {
+        lowEl.innerHTML = `${lowCount > 0 ? '▲ ' : '● '}${lowCount}`;
+        lowEl.style.color = lowCount > 0 ? 'var(--amber)' : 'var(--teal)';
+      }
+      if (lowMeta) {
+        lowMeta.textContent = lowCount > 0 ? t("sizes_reorder", "Sizes requiring reorder") : t("all_healthy", "All inventory healthy");
+      }
+
+      // Populate low stock table rows
+      const tbody = document.getElementById("dash-lowstock-tbody");
+      if (tbody && metrics.top_low_stock && metrics.top_low_stock.length > 0) {
+        tbody.innerHTML = metrics.top_low_stock.map(item => `
+          <tr>
+            <td><b>${item.name}</b></td>
+            <td><code>${item.sku}</code></td>
+            <td>${item.size} / ${item.color}</td>
+            <td><b style="color: ${item.available <= 0 ? 'var(--coral)' : 'var(--amber)'};">${item.available} units</b></td>
+            <td>${item.threshold}</td>
+            <td><button class="btn btn-sm btn-secondary" onclick="switchTab('inventory')">${t("manage_stock", "Manage Stock")}</button></td>
+          </tr>
+        `).join('');
+      }
+
+      // Populate Month-end dues banner if any
+      const duesContainer = document.getElementById("dashboard-dues-banner-container");
+      const duesTotal = Number(metrics.total_credit_due || 0);
+      if (duesContainer && duesTotal > 0) {
+        duesContainer.innerHTML = `
+          <div style="background: #FFF5F5; border: 1px solid #FEB2B2; border-radius: var(--radius-md); padding: 14px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 24px;">📅</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 800; color: #9B2C2C;">${t("month_end_banner_title", "Month-End Credit Payment Reminders Active")}</div>
+                <div style="font-size: 12.5px; color: #C53030;">₹${duesTotal.toFixed(2)} ${t("month_end_banner_desc", "total outstanding Store Credit due for collection before month-end.")}</div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-navy" onclick="switchTab('invoices')">${t("review_dues_btn", "Review Dues in Invoices")}</button>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.warn("[DASHBOARD] Metrics fetch failed, showing fallback state:", err.message);
+    const duesContainer = document.getElementById("dashboard-dues-banner-container");
+    if (duesContainer) {
+      duesContainer.innerHTML = `
+        <div style="background: #FFF9ED; border: 1px solid var(--amber); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #8A5A1B;">
+          <span>⚠️ ${t("metrics_load_failed", "Live dashboard metrics could not be loaded.")}</span>
+          <button class="btn btn-sm btn-primary" onclick="renderDashboard()" style="padding: 4px 10px; font-size: 11.5px;">${t("retry_dashboard_btn", "⟳ Retry Dashboard")}</button>
+        </div>
+      `;
+    }
   }
+
+  // 3. Independent Background Fetch for Pending Staff (Owner/Admin only)
+  if (!state.isStaff) {
+    api("/auth/pending-staff", { silent: true, timeout: 4000 }).then(pendingStaff => {
+      const staffContainer = document.getElementById("dashboard-pending-staff-container");
+      if (staffContainer && pendingStaff && pendingStaff.length > 0) {
+        staffContainer.innerHTML = `
+          <div style="background: #FEF8ED; border: 1px solid var(--amber); border-radius: var(--radius-md); padding: 18px 24px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="background: var(--amber); color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">!</span>
+                <h3 style="font-size: 15px; font-weight: 700; color: #8A5A1B; margin: 0;">${t("pending_staff_title", "Pending Staff Signups Requiring Approval")} (${pendingStaff.length})</h3>
+              </div>
+            </div>
+            <p style="font-size: 13px; color: #735022; margin-bottom: 14px;">The following employees have signed up under your store and require authorization:</p>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              ${pendingStaff.map(s => `
+                <div style="background: white; border: 1px solid #EADBCA; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-left: 4px solid var(--amber);">
+                  <div>
+                    <div style="font-weight: 700; font-size: 13.5px; color: var(--navy);">${s.full_name}</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${s.email} • Role: <span class="badge badge-neutral">${s.role}</span> • Phone: ${s.phone || 'N/A'}</div>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-sm btn-primary" onclick="approveStaffMember(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">${t("approve_staff_btn", "✓ Approve Staff")}</button>
+                    <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">${t("reject_staff_btn", "✕ Reject")}</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }).catch(() => {});
+  }
+  return;
 }
+
 
 async function approveStaffMember(membershipId, name) {
   if (!confirm(`Approve staff member '${name}' to access store '${state.storeName || state.business.name}'?`)) return;
@@ -2191,33 +2617,178 @@ async function renderPOS() {
   updateCartTotals();
 }
 
-const posThemesData = [
-  { id: "CLASSIC_GST", name: "Classic GST", tag: "GST Standard", color: "#1E3A8A" },
-  { id: "MODERN_MINIMAL", name: "Modern Minimal", tag: "Modern Retail", color: "#0D9488" },
-  { id: "PREMIUM_BOUTIQUE", name: "Premium Boutique", tag: "High Fashion", color: "#B45309" },
-  { id: "WHOLESALE_DEALER", name: "Wholesale & Dealer", tag: "B2B Wholesale", color: "#4B5563" },
-  { id: "COMPACT_THERMAL", name: "Compact Thermal", tag: "Counter POS", color: "#1F2937" },
-  { id: "INTERNATIONAL_COMMERCIAL", name: "Global Commercial", tag: "Global Trade", color: "#4338CA" }
-];
+// ==============================================================================
+// CENTRALIZED INVOICE THEMES & BILL DESIGN REGISTRY (Part 4 - Single Source of Truth)
+// ==============================================================================
+const InvoiceThemeRegistry = {
+  themes: [
+    {
+      id: "CLASSIC_GST",
+      name: "Classic GST",
+      tag: "GST Standard",
+      badge: "Tax Standard",
+      desc: "Official HSN/SAC & CGST/SGST tax breakdown tables.",
+      color: "#1E3A8A",
+      accent: "#3B82F6",
+      icon: "🏛️",
+      docTitle: "TAX INVOICE / બિલ"
+    },
+    {
+      id: "MODERN_MINIMAL",
+      name: "Modern Minimal",
+      tag: "Modern Retail",
+      badge: "Modern Retail",
+      desc: "Airy editorial spacing with subtle teal divider lines.",
+      color: "#0D9488",
+      accent: "#14B8A6",
+      icon: "✨",
+      docTitle: "RETAIL SALES MEMO"
+    },
+    {
+      id: "PREMIUM_BOUTIQUE",
+      name: "Premium Boutique",
+      tag: "High Fashion",
+      badge: "High Fashion",
+      desc: "Gold ribbon header with luxury atelier receipt feel.",
+      color: "#B45309",
+      accent: "#D97706",
+      icon: "👑",
+      docTitle: "BOUTIQUE ATELIER RECEIPT"
+    },
+    {
+      id: "WHOLESALE_DEALER",
+      name: "Wholesale & Dealer",
+      tag: "B2B Wholesale",
+      badge: "B2B Wholesale",
+      desc: "Garment size/color matrix with dispatch memo header.",
+      color: "#4B5563",
+      accent: "#6B7280",
+      icon: "📦",
+      docTitle: "WHOLESALE DISPATCH MEMO"
+    },
+    {
+      id: "COMPACT_THERMAL",
+      name: "Compact Thermal",
+      tag: "Counter POS",
+      badge: "Counter POS",
+      desc: "80mm continuous roll slip with dynamic item length.",
+      color: "#1F2937",
+      accent: "#374151",
+      icon: "🧾",
+      docTitle: "CASH COUNTER TILL RECEIPT"
+    },
+    {
+      id: "INTERNATIONAL_COMMERCIAL",
+      name: "Global Commercial",
+      tag: "Global Trade",
+      badge: "Global Trade",
+      desc: "Port of discharge, currency conversion & export declaration.",
+      color: "#4338CA",
+      accent: "#6366F1",
+      icon: "🌐",
+      docTitle: "COMMERCIAL EXPORT INVOICE"
+    }
+  ],
+
+  get(themeId) {
+    return this.themes.find(t => t.id === themeId) || this.themes[2];
+  },
+
+  getAll() {
+    return this.themes;
+  },
+
+  renderInvoiceCard(invoice, themeId) {
+    const theme = this.get(themeId || (invoice && invoice.theme) || "PREMIUM_BOUTIQUE");
+    const num = (invoice && invoice.invoice_number) || "INV-SAMPLE";
+    const date = (invoice && (invoice.date || invoice.invoice_date)) || new Date().toLocaleDateString();
+    const store = state.storeName || (state.business && state.business.name) || "VASTRENIX Flagship";
+    const customer = (invoice && invoice.customer_name) || "Walk-in Retail Client";
+    const total = Number((invoice && invoice.total_amount) || 0).toFixed(2);
+    const subtotal = Number((invoice && invoice.subtotal) || (total / 1.05)).toFixed(2);
+    const tax = Number((invoice && invoice.tax_amount) || (total - subtotal)).toFixed(2);
+    const mode = (invoice && invoice.payment_mode) || state.defaultPaymentMode || "CASH";
+
+    return `
+      <div class="centralized-invoice-card" style="border-top: 5px solid ${theme.color}; background: #FFF; border-radius: 12px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; border-bottom: 1px solid #F0EFEA; padding-bottom: 12px;">
+          <div>
+            <div style="font-size: 16px; font-weight: 800; color: ${theme.color}; letter-spacing: 0.5px;">${store}</div>
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-top: 2px;">${theme.docTitle}</div>
+          </div>
+          <div style="text-align: right;">
+            <span class="badge" style="background: ${theme.color}; color: white; font-size: 10px; font-weight: 700;">${theme.name}</span>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${date}</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 12px; background: #FAF9F6; padding: 8px 12px; border-radius: 6px;">
+          <div><span style="color: var(--text-muted);">Invoice No:</span> <b style="color: var(--navy);">${num}</b></div>
+          <div><span style="color: var(--text-muted);">Customer:</span> <b style="color: var(--navy);">${customer}</b></div>
+        </div>
+
+        <div style="border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: var(--text-muted);">
+            <span>Subtotal:</span>
+            <span>₹${subtotal}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: var(--text-muted);">
+            <span>GST (5%):</span>
+            <span>₹${tax}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: var(--navy); margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px;">
+            <span>Grand Total:</span>
+            <span style="color: ${theme.color};">₹${total}</span>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 11px; color: var(--text-muted); background: #F8FAFC; padding: 6px 10px; border-radius: 4px;">
+          <span>Payment: <b>${mode}</b></span>
+          <span style="color: #10B981; font-weight: 700;">● Official Authenticated Tax Record</span>
+        </div>
+      </div>
+    `;
+  },
+
+  renderPOSThumbnail(th, isActive) {
+    return `
+      <div class="pos-theme-thumb ${isActive ? 'active' : ''}" onclick="selectPOSTheme('${th.id}')" title="${th.name}">
+        <div class="pos-theme-thumb-preview" style="border-top: 3px solid ${th.color};">
+          <div style="height: 4px; width: 60%; background: ${th.color}; margin-bottom: 2px; border-radius: 1px;"></div>
+          <div style="height: 2px; width: 90%; background: #E5E7EB; margin-bottom: 2px;"></div>
+          <div style="height: 2px; width: 75%; background: #E5E7EB; margin-bottom: 2px;"></div>
+          <div style="height: 3px; width: 45%; background: ${th.color}; margin-top: 3px; border-radius: 1px;"></div>
+        </div>
+        <div class="pos-theme-thumb-name">${th.tag}</div>
+      </div>
+    `;
+  },
+
+  renderCarouselCard(th, isDefault) {
+    return `
+      <div class="invoice-carousel-card ${isDefault ? 'active' : ''}" onclick="selectStoreDefaultTheme('${th.id}')">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 20px;">${th.icon}</span>
+          <span class="badge ${isDefault ? 'badge-primary' : 'badge-neutral'}" style="font-size: 10px; background: ${isDefault ? th.color : ''}; color: ${isDefault ? '#FFF' : ''};">${th.badge}</span>
+        </div>
+        <div style="font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">${th.name}</div>
+        <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4; flex: 1; margin-bottom: 12px;">${th.desc}</div>
+        <div style="font-size: 11.5px; font-weight: 700; color: ${isDefault ? th.color : 'var(--text-muted)'}; display: flex; align-items: center; gap: 4px;">
+          ${isDefault ? t('store_default_badge', '✓ Store Default') : t('set_default_label', 'Tap to set default')}
+        </div>
+      </div>
+    `;
+  }
+};
 
 function getThemeName(themeId) {
-  const t = posThemesData.find(x => x.id === themeId);
+  const t = InvoiceThemeRegistry.get(themeId);
   return t ? t.name : "Premium Boutique";
 }
 
 function renderThemeThumbnails() {
   const active = state.selectedPOSTheme || "PREMIUM_BOUTIQUE";
-  return posThemesData.map(th => `
-    <div class="pos-theme-thumb ${th.id === active ? 'active' : ''}" onclick="selectPOSTheme('${th.id}')" title="${th.name}">
-      <div class="pos-theme-thumb-preview" style="border-top: 3px solid ${th.color};">
-        <div style="height: 4px; width: 60%; background: ${th.color}; margin-bottom: 2px; border-radius: 1px;"></div>
-        <div style="height: 2px; width: 90%; background: #E5E7EB; margin-bottom: 2px;"></div>
-        <div style="height: 2px; width: 75%; background: #E5E7EB; margin-bottom: 2px;"></div>
-        <div style="height: 3px; width: 45%; background: ${th.color}; margin-top: 3px; border-radius: 1px;"></div>
-      </div>
-      <div class="pos-theme-thumb-name">${th.tag}</div>
-    </div>
-  `).join('');
+  return InvoiceThemeRegistry.getAll().map(th => InvoiceThemeRegistry.renderPOSThumbnail(th, th.id === active)).join('');
 }
 
 function selectPOSTheme(themeId) {
@@ -2855,19 +3426,7 @@ async function renderInvoices() {
         <span style="font-size: 11.5px; color: var(--teal); font-weight: 600;">${t("active_theme_label", "Active")}: <b>${currentDefaultTheme}</b></span>
       </div>
       <div class="invoice-carousel-container">
-        ${themesData.map(th => `
-          <div class="invoice-carousel-card ${th.id === currentDefaultTheme ? 'active' : ''}" onclick="selectStoreDefaultTheme('${th.id}')">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 20px;">${th.icon}</span>
-              <span class="badge ${th.id === currentDefaultTheme ? 'badge-primary' : 'badge-neutral'}" style="font-size: 10px;">${th.tag}</span>
-            </div>
-            <div style="font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">${th.name}</div>
-            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4; flex: 1; margin-bottom: 12px;">${th.desc}</div>
-            <div style="font-size: 11.5px; font-weight: 700; color: ${th.id === currentDefaultTheme ? 'var(--teal)' : 'var(--text-muted)'}; display: flex; align-items: center; gap: 4px;">
-              ${th.id === currentDefaultTheme ? t('store_default_badge', '✓ Store Default') : t('set_default_label', 'Tap to set default')}
-            </div>
-          </div>
-        `).join('')}
+        ${InvoiceThemeRegistry.getAll().map(th => InvoiceThemeRegistry.renderCarouselCard(th, th.id === currentDefaultTheme)).join('')}
       </div>
     </div>
 
@@ -3219,46 +3778,46 @@ async function renderExpenses() {
   container.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div>
-        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">Store Expenses & Overhead Management</h2>
-        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • Track daily operational costs, salaries, rent, and packaging.</p>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">${t("expenses_title", "Store Expenses & Overhead Management")}</h2>
+        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • ${t("expenses_subtitle", "Track daily operational costs, salaries, rent, and packaging.")}</p>
       </div>
-      <button class="btn btn-primary" onclick="openAddExpenseModal()">+ Record New Expense</button>
+      <button class="btn btn-primary" onclick="openAddExpenseModal()">${t("record_expense_btn", "+ Record New Expense")}</button>
     </div>
 
     <!-- Expense Metrics Cards -->
     <div class="grid-cards" style="margin-bottom: 24px;">
       <div class="stat-card">
-        <div class="stat-label">Total Expenses Recorded</div>
+        <div class="stat-label">${t("total_expenses_recorded", "Total Expenses Recorded")}</div>
         <div class="stat-value" style="color: var(--coral);">₹${totalExp.toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
-        <div class="stat-meta">${allExpenses.length} expense entries</div>
+        <div class="stat-meta">${allExpenses.length} ${t("expense_entries", "expense entries")}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Sales Collections</div>
+        <div class="stat-label">${t("total_sales_collections", "Total Sales Collections")}</div>
         <div class="stat-value" style="color: var(--teal);">₹${(summary ? summary.total_collected : 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
-        <div class="stat-meta">Cash + UPI + Card receipts</div>
+        <div class="stat-meta">${t("cash_upi_card_receipts", "Cash + UPI + Card receipts")}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Net Operating Cash Flow</div>
+        <div class="stat-label">${t("net_operating_cashflow", "Net Operating Cash Flow")}</div>
         <div class="stat-value" style="color: ${(summary && summary.net_cash_flow >= 0) ? 'var(--teal)' : 'var(--coral)'};">
           ₹${(summary ? summary.net_cash_flow : 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
         </div>
-        <div class="stat-meta">Collections minus expenses</div>
+        <div class="stat-meta">${t("collections_minus_expenses", "Collections minus expenses")}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Accounts Receivable</div>
+        <div class="stat-label">${t("accounts_receivable", "Accounts Receivable")}</div>
         <div class="stat-value" style="color: var(--amber);">₹${(summary ? summary.total_receivables : 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
-        <div class="stat-meta">Pending customer dues</div>
+        <div class="stat-meta">${t("pending_customer_dues", "Pending customer dues")}</div>
       </div>
     </div>
 
     <!-- Expenses Table Panel -->
     <div class="panel">
       <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div class="panel-title">Expense Transactions Log</div>
+        <div class="panel-title">${t("expense_transactions_log", "Expense Transactions Log")}</div>
         <div style="display: flex; gap: 10px; align-items: center;">
-          <label style="font-size: 12px; color: var(--text-muted);">Filter Category:</label>
+          <label style="font-size: 12px; color: var(--text-muted);">${t("filter_category_label", "Filter Category:")}</label>
           <select id="expense-cat-filter" class="form-select" style="width: auto; padding: 4px 10px; font-size: 12.5px;" onchange="filterExpenses(this.value)">
-            <option value="ALL">All Categories</option>
+            <option value="ALL">${t("all_categories", "All Categories")}</option>
             <option value="RENT">Rent & Premises</option>
             <option value="SALARY">Salaries & Wages</option>
             <option value="TEA_SNACKS">Tea, Snacks & Hospitality</option>
@@ -3275,12 +3834,12 @@ async function renderExpenses() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Date & Time</th>
-              <th>Category</th>
-              <th>Description / Purpose</th>
-              <th>Payment Mode</th>
-              <th>Receipt</th>
-              <th style="text-align: right;">Amount (₹)</th>
+              <th>${t("date_time_col", "Date & Time")}</th>
+              <th>${t("category_col", "Category")}</th>
+              <th>${t("desc_purpose_col", "Description / Purpose")}</th>
+              <th>${t("payment_mode_col", "Payment Mode")}</th>
+              <th>${t("receipt_col", "Receipt")}</th>
+              <th style="text-align: right;">${t("amount_col", "Amount (₹)")}</th>
             </tr>
           </thead>
           <tbody id="expenses-table-body">
@@ -3294,7 +3853,7 @@ async function renderExpenses() {
 
 function renderExpenseRows(list) {
   if (!list || list.length === 0) {
-    return '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">No expenses recorded yet. Click "+ Record New Expense" to log costs.</td></tr>';
+    return `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">${t("no_expenses_recorded", "No expenses recorded yet. Click '+ Record New Expense' to log costs.")}</td></tr>`;
   }
   return list.map(e => `
     <tr>
@@ -3634,33 +4193,33 @@ async function renderUsers() {
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 14px;">
       <div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-          <h2 style="font-size: 22px; font-weight: 800; color: var(--navy);">Store Team & User Accounts</h2>
-          <span class="badge badge-success">${list.length} Members</span>
+          <h2 style="font-size: 22px; font-weight: 800; color: var(--navy);">${t("team_title", "Store Team & User Accounts")}</h2>
+          <span class="badge badge-success">${list.length} ${t("members_count_label", "Members")}</span>
         </div>
-        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • Manage employee roles, counter cashiers, and logistics dispatchers.</p>
+        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • ${t("team_subtitle", "Manage employee roles, counter cashiers, and logistics dispatchers.")}</p>
       </div>
-      <button class="btn btn-primary" onclick="openAddStaffModal()">+ Add Team Member</button>
+      <button class="btn btn-primary" onclick="openAddStaffModal()">${t("add_team_member_btn", "+ Add Team Member")}</button>
     </div>
 
     <!-- Staff Summary Metrics -->
     <div class="grid-cards" style="margin-bottom: 24px;">
       <div class="stat-card">
-        <div class="stat-label">Total Store Team</div>
+        <div class="stat-label">${t("total_store_team", "Total Store Team")}</div>
         <div class="stat-value" style="color: var(--navy);">${list.length}</div>
         <div class="stat-meta">Active registered accounts</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">POS Counter Cashiers</div>
+        <div class="stat-label">${t("active_cashiers", "POS Counter Cashiers")}</div>
         <div class="stat-value" style="color: var(--teal);">${cashiersCount}</div>
-        <div class="stat-meta">Cash shift & billing access</div>
+        <div class="stat-meta">${t("pos_till_operators", "POS counter till operators")}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Logistics & Dispatch</div>
+        <div class="stat-label">${t("dispatchers_picking", "Logistics & Dispatch")}</div>
         <div class="stat-value" style="color: #0284C7;">${dispatchersCount}</div>
-        <div class="stat-meta">Order packing & LR dispatch</div>
+        <div class="stat-meta">${t("b2b_staff", "Order packing & LR dispatch")}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Pending Registrations</div>
+        <div class="stat-label">${t("pending_approvals_metric", "Pending Registrations")}</div>
         <div class="stat-value" style="color: ${pending.length > 0 ? 'var(--amber)' : 'var(--teal)'};">${pending.length}</div>
         <div class="stat-meta">${pending.length > 0 ? 'Requires admin approval' : 'All accounts approved'}</div>
       </div>
@@ -4587,43 +5146,43 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-add-product">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Add Garment Product</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("add_product_title", "Add Garment Product")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-product')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitAddProduct(event)">
           <div class="form-group">
-            <label class="form-label">Garment Name</label>
-            <input type="text" id="prod-name" class="form-input" required placeholder="e.g. Pure Mulberry Silk Sari">
+            <label class="form-label">${t("prod_name_label", "Garment Name")}</label>
+            <input type="text" id="prod-name" class="form-input" required placeholder="${t('prod_name_placeholder', 'e.g. Pure Mulberry Silk Sari')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Fabric / Material</label>
-            <input type="text" id="prod-fabric" class="form-input" required placeholder="e.g. Handwoven Mulberry Silk">
+            <label class="form-label">${t("prod_fabric_label", "Fabric / Material")}</label>
+            <input type="text" id="prod-fabric" class="form-input" required placeholder="${t('prod_fabric_placeholder', 'e.g. Handwoven Mulberry Silk')}">
           </div>
           <div class="modal-responsive-grid">
             <div class="form-group">
-              <label class="form-label">Retail Price (₹)</label>
+              <label class="form-label">${t("retail_price_label", "Retail Price (₹)")}</label>
               <input type="number" step="0.01" id="prod-price" class="form-input" required placeholder="3490.00">
             </div>
             <div class="form-group">
-              <label class="form-label">Purchase Cost (₹)</label>
+              <label class="form-label">${t("purchase_cost_label", "Purchase Cost (₹)")}</label>
               <input type="number" step="0.01" id="prod-cost" class="form-input" required placeholder="1400.00">
             </div>
           </div>
           <div class="modal-responsive-grid-3">
             <div class="form-group">
-              <label class="form-label">Size</label>
-              <input type="text" id="prod-size" class="form-input" required placeholder="M or Free">
+              <label class="form-label">${t("size_label", "Size")}</label>
+              <input type="text" id="prod-size" class="form-input" required placeholder="${t('size_placeholder', 'M or Free')}">
             </div>
             <div class="form-group">
-              <label class="form-label">Color</label>
-              <input type="text" id="prod-color" class="form-input" required placeholder="Peacock Blue">
+              <label class="form-label">${t("color_label", "Color")}</label>
+              <input type="text" id="prod-color" class="form-input" required placeholder="${t('color_placeholder', 'Peacock Blue')}">
             </div>
             <div class="form-group">
-              <label class="form-label">Initial Stock</label>
+              <label class="form-label">${t("initial_stock_label", "Initial Stock")}</label>
               <input type="number" id="prod-stock" class="form-input" required placeholder="20">
             </div>
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Save & Create Garment</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("save_add_catalog_btn", "Save & Add to Catalog")}</button>
         </form>
       </div>
     </div>
@@ -4632,33 +5191,33 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-purchase-order">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Create Purchase Order (Order More)</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("create_po_title", "Create Purchase Order (Order More)")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-purchase-order')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitPurchaseOrder(event)">
           <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Garment Target</div>
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">${t("target_garment_label", "Garment Target")}</div>
             <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="po-product-display">Garment Variant</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Select Textile Supplier / Weaver</label>
+            <label class="form-label">${t("select_supplier_label", "Select Textile Supplier / Weaver")}</label>
             <select id="po-supplier-select" class="form-select" required></select>
           </div>
           <div class="modal-responsive-grid">
             <div class="form-group">
-              <label class="form-label">Order Quantity (Pieces)</label>
+              <label class="form-label">${t("order_qty_label", "Order Quantity (Pieces)")}</label>
               <input type="number" id="po-quantity" class="form-input" min="1" required placeholder="20">
             </div>
             <div class="form-group">
-              <label class="form-label">Unit Purchase Cost (₹)</label>
+              <label class="form-label">${t("unit_cost_label", "Unit Purchase Cost (₹)")}</label>
               <input type="number" step="0.01" id="po-unit-cost" class="form-input" required placeholder="1200.00">
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">PO Notes / Reference</label>
-            <input type="text" id="po-notes" class="form-input" placeholder="e.g. Festival restocking">
+            <label class="form-label">${t("po_notes_label", "PO Notes / Reference")}</label>
+            <input type="text" id="po-notes" class="form-input" placeholder="${t('po_notes_placeholder', 'e.g. Festival restocking')}">
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Issue Purchase Order</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("issue_po_btn", "Issue Purchase Order")}</button>
         </form>
       </div>
     </div>
@@ -4667,27 +5226,27 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-receive-goods">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Goods Received Note (Receive Stock)</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("receive_goods_title", "Goods Received Note (Receive Stock)")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-receive-goods')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitReceiveGoods(event)">
           <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Receiving Garment</div>
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">${t("receiving_garment_label", "Receiving Garment")}</div>
             <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="grn-product-display">Garment Variant</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Select Issued Purchase Order</label>
+            <label class="form-label">${t("select_po_label", "Select Issued Purchase Order")}</label>
             <select id="grn-po-select" class="form-select" required></select>
           </div>
           <div class="form-group">
-            <label class="form-label">Supplier Invoice / Challan Number</label>
-            <input type="text" id="grn-invoice-no" class="form-input" required placeholder="e.g. INV-TEX-9921">
+            <label class="form-label">${t("challan_no_label", "Supplier Invoice / Challan Number")}</label>
+            <input type="text" id="grn-invoice-no" class="form-input" required placeholder="${t('challan_placeholder', 'e.g. INV-TEX-9921')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Receiving Inspection Notes</label>
-            <input type="text" id="grn-notes" class="form-input" placeholder="e.g. Checked pieces, quality approved">
+            <label class="form-label">${t("inspection_notes_label", "Receiving Inspection Notes")}</label>
+            <input type="text" id="grn-notes" class="form-input" placeholder="${t('inspection_placeholder', 'e.g. Checked pieces, quality approved')}">
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Confirm & Add to Stock</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("confirm_receive_stock_btn", "Confirm & Add to Stock")}</button>
         </form>
       </div>
     </div>
@@ -4752,12 +5311,12 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-add-expense">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Record Store Expense</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("record_store_expense_title", "Record Store Expense")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-expense')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitAddExpense(event)">
           <div class="form-group">
-            <label class="form-label">Expense Category</label>
+            <label class="form-label">${t("expense_category_label", "Expense Category")}</label>
             <select id="exp-category" class="form-select" required>
               <option value="RENT">Rent & Store Premises</option>
               <option value="SALARY">Staff Salaries & Advances</option>
@@ -4772,11 +5331,11 @@ async function renderApp() {
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">Amount (₹)</label>
+              <label class="form-label">${t("amount_col", "Amount (₹)")}</label>
               <input type="number" step="0.01" id="exp-amount" class="form-input" required placeholder="1500.00">
             </div>
             <div class="form-group">
-              <label class="form-label">Payment Mode</label>
+              <label class="form-label">${t("payment_mode_col", "Payment Mode")}</label>
               <select id="exp-payment-mode" class="form-select" required>
                 <option value="CASH">Cash (From Store Till)</option>
                 <option value="UPI">UPI (Google Pay / PhonePe)</option>
@@ -4786,14 +5345,14 @@ async function renderApp() {
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Description / Receipt Note</label>
-            <input type="text" id="exp-description" class="form-input" required placeholder="e.g. 500 custom cotton carry bags for festival rush">
+            <label class="form-label">${t("expense_desc_label", "Description / Receipt Note")}</label>
+            <input type="text" id="exp-description" class="form-input" required placeholder="${t('expense_desc_placeholder', 'e.g. 500 custom cotton carry bags for festival rush')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Attach Bill / Receipt Document (Optional)</label>
+            <label class="form-label">${t("attach_receipt_label", "Attach Bill / Receipt Document (Optional)")}</label>
             <input type="file" id="exp-receipt-file" class="form-input" accept="image/*,application/pdf">
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">Save & Post Expense</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("save_post_expense_btn", "Save & Post Expense")}</button>
         </form>
       </div>
     </div>
@@ -4802,24 +5361,24 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-add-staff">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Add Store Staff Member</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("add_staff_title", "Add Store Staff Member")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-staff')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitAddStaff(event)">
           <div class="form-group">
-            <label class="form-label">Full Name</label>
-            <input type="text" id="staff-name" class="form-input" required placeholder="e.g. Ramesh Patel">
+            <label class="form-label">${t("full_name_label", "Full Name")}</label>
+            <input type="text" id="staff-name" class="form-input" required placeholder="${t('full_name_placeholder', 'e.g. Ramesh Patel')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Email Address</label>
-            <input type="email" id="staff-email" class="form-input" required placeholder="ramesh@vastrenix-store.com">
+            <label class="form-label">${t("email_address_label", "Email Address")}</label>
+            <input type="email" id="staff-email" class="form-input" required placeholder="${t('email_placeholder', 'ramesh@vastrenix-store.com')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Phone Number</label>
-            <input type="text" id="staff-phone" class="form-input" required placeholder="+91 98765 43210">
+            <label class="form-label">${t("phone_number_label", "Phone Number")}</label>
+            <input type="text" id="staff-phone" class="form-input" required placeholder="${t('phone_placeholder', '+91 98765 43210')}">
           </div>
           <div class="form-group">
-            <label class="form-label">Role & Responsibility</label>
+            <label class="form-label">${t("role_responsibility_label", "Role & Responsibility")}</label>
             <select id="staff-role" class="form-select" required>
               <option value="SALES">Sales Associate / Till Operator</option>
               <option value="INVENTORY_MANAGER">Inventory & Warehouse Manager</option>
@@ -4828,8 +5387,8 @@ async function renderApp() {
               <option value="ADMIN">Assistant Store Admin</option>
             </select>
           </div>
-          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">Once created, staff will immediately be authorized to sign in to this store location.</p>
-          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">Create & Authorize Staff</button>
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">${t("staff_auth_notice", "Once created, staff will immediately be authorized to sign in to this store location.")}</p>
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">${t("create_auth_staff_btn", "Create & Authorize Staff")}</button>
         </form>
       </div>
     </div>
@@ -4838,44 +5397,44 @@ async function renderApp() {
     <div class="modal-overlay" id="modal-close-shift">
       <div class="modal-card" style="max-width: 480px;">
         <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Close & Reconcile Cash Shift</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("close_shift_title", "Close & Reconcile Cash Shift")}</h3>
           <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-close-shift')">&times;</button>
         </div>
         <form class="modal-body" onsubmit="submitCloseShift(event)">
           <div style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">Opening Cash Float:</span>
+              <span style="color: var(--text-muted);">${t("opening_float_label", "Opening Cash Float:")}</span>
               <b id="close-shift-opening">₹0.00</b>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">Total Cash Sales Collected:</span>
+              <span style="color: var(--text-muted);">${t("cash_sales_collected_label", "Total Cash Sales Collected:")}</span>
               <b id="close-shift-sales" style="color: var(--teal);">+₹0.00</b>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">Cash Payouts / Expenses:</span>
+              <span style="color: var(--text-muted);">${t("cash_payouts_label", "Cash Payouts / Expenses:")}</span>
               <b id="close-shift-expenses" style="color: var(--coral);">-₹0.00</b>
             </div>
             <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 14px;">
-              <b>Expected Drawer Cash:</b>
+              <b>${t("expected_drawer_cash_label", "Expected Drawer Cash:")}</b>
               <b id="close-shift-expected" style="color: var(--navy);">₹0.00</b>
             </div>
           </div>
 
           <div class="form-group" style="margin-bottom: 14px;">
-            <label class="form-label" style="font-weight: 700;">Counted Physical Cash in Drawer (₹)</label>
-            <input type="number" step="0.01" id="close-shift-actual" class="form-input" required placeholder="Enter total counted notes & coins" oninput="recalcShiftDifference()" style="font-size: 16px; font-weight: 700;">
+            <label class="form-label" style="font-weight: 700;">${t("counted_cash_label", "Counted Physical Cash in Drawer (₹)")}</label>
+            <input type="number" step="0.01" id="close-shift-actual" class="form-input" required placeholder="${t('counted_cash_placeholder', 'Enter total counted notes & coins')}" oninput="recalcShiftDifference()" style="font-size: 16px; font-weight: 700;">
           </div>
 
           <div id="close-shift-diff-box" style="margin-bottom: 16px; padding: 10px; border-radius: var(--radius-sm); text-align: center; font-weight: 700; font-size: 13px; display: none;">
           </div>
 
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">Closing Notes / Discrepancy Reason (Optional)</label>
-            <input type="text" id="close-shift-notes" class="form-input" placeholder="e.g. Verified by head cashier">
+            <label class="form-label">${t("closing_notes_label", "Closing Notes / Discrepancy Reason (Optional)")}</label>
+            <input type="text" id="close-shift-notes" class="form-input" placeholder="${t('closing_notes_placeholder', 'e.g. Verified by head cashier')}">
           </div>
 
           <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-weight: 700;">
-            Reconcile & Close Shift
+            ${t("reconcile_close_btn", "Reconcile & Close Shift")}
           </button>
         </form>
       </div>
@@ -5066,24 +5625,23 @@ function setAppState(newState, metadata = {}) {
     if (spinner) spinner.style.display = "block";
     if (actionContainer) actionContainer.style.display = "none";
     if (statusText) {
-      statusText.textContent = metadata.title || t("connecting_cloud", "Connecting to cloud server...");
-      statusText.style.color = "#FFF";
+      statusText.textContent = metadata.title || "Connecting to server...";
+      statusText.style.color = "#192B3A";
     }
     if (subText) {
-      subText.textContent = metadata.sub || t("checking_server_availability", "Checking server availability & secure session");
-      subText.style.color = "rgba(255, 255, 255, 0.85)";
+      subText.textContent = metadata.sub || "";
+      subText.style.color = "#697782";
     }
   } else if (newState === AppState.CONNECTED) {
     if (launchColdStartTimer) clearTimeout(launchColdStartTimer);
     if (launchColdStartInterval) clearInterval(launchColdStartInterval);
     if (spinner) spinner.style.display = "none";
     if (statusText) {
-      statusText.textContent = t("server_connected_msg", "✓ Server Connected");
+      statusText.textContent = "✓ Connected to server";
       statusText.style.color = "#10B981";
     }
     if (subText) {
-      subText.textContent = "Opening your store workspace...";
-      subText.style.color = "rgba(255, 255, 255, 0.9)";
+      subText.textContent = "";
     }
     if (actionContainer) actionContainer.style.display = "none";
 
@@ -5096,22 +5654,22 @@ function setAppState(newState, metadata = {}) {
     if (launchColdStartInterval) clearInterval(launchColdStartInterval);
     if (spinner) spinner.style.display = "none";
     if (statusText) {
-      statusText.textContent = t("cant_reach_title", "Can't reach VASTRENIX right now");
+      statusText.textContent = "Can't connect to server";
       statusText.style.color = "#EF4444";
     }
     if (subText) {
       subText.textContent = metadata.error || "Unable to establish connection to the cloud server.";
-      subText.style.color = "rgba(255, 255, 255, 0.85)";
+      subText.style.color = "#697782";
     }
     if (actionContainer) {
       actionContainer.style.display = "flex";
       actionContainer.style.flexDirection = "column";
       actionContainer.style.gap = "10px";
       actionContainer.innerHTML = `
-        <button type="button" class="btn btn-primary" onclick="startAppLaunchSequence()" style="width: 100%; padding: 12px; font-weight: 700; background: #E65100; border: none; box-shadow: 0 4px 14px rgba(230,81,0,0.4); border-radius: 8px; color: #FFF; font-size: 14px; cursor: pointer;">
+        <button type="button" class="btn btn-primary" onclick="startAppLaunchSequence()" style="width: 100%; padding: 12px; font-weight: 700; background: #E65100; border: none; box-shadow: 0 4px 14px rgba(230,81,0,0.3); border-radius: 8px; color: #FFF; font-size: 14px; cursor: pointer;">
           ⟳ ${t("retry_conn_btn", "Retry Connection")}
         </button>
-        <button type="button" class="btn btn-secondary" onclick="enterOfflineTillMode()" style="width: 100%; padding: 10px; font-size: 13px; background: rgba(255,255,255,0.12); color: #FFF; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; cursor: pointer;">
+        <button type="button" class="btn btn-secondary" onclick="enterOfflineTillMode()" style="width: 100%; padding: 10px; font-size: 13px; background: #F3F4F6; color: #192B3A; border: 1px solid #D1D5DB; border-radius: 8px; cursor: pointer;">
           ${t("use_offline_till", "Open Offline POS Till")}
         </button>
       `;
@@ -5121,8 +5679,8 @@ function setAppState(newState, metadata = {}) {
 
 async function startAppLaunchSequence() {
   setAppState(AppState.CONNECTING, {
-    title: t("connecting_cloud", "Connecting to cloud server..."),
-    sub: t("checking_server_availability", "Checking server availability & secure session")
+    title: "Connecting to server...",
+    sub: ""
   });
 
   launchElapsedSeconds = 0;
@@ -5131,12 +5689,12 @@ async function startAppLaunchSequence() {
     launchElapsedSeconds++;
     const statusText = document.getElementById("splash-status-text");
     const subText = document.getElementById("splash-sub-text");
-    if (launchElapsedSeconds >= 4) {
+    if (launchElapsedSeconds >= 6) {
       if (statusText) {
-        statusText.textContent = `Waking up your store's server... (${launchElapsedSeconds}s)`;
+        statusText.textContent = "Connecting to server...";
       }
       if (subText) {
-        subText.textContent = "Render free-tier cold-start can take ~30-50s. Please hold on...";
+        subText.textContent = `Waking up cloud server (${launchElapsedSeconds}s)...`;
       }
     }
   }, 1000);

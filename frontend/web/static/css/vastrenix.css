@@ -1499,49 +1499,65 @@ body {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px;
+  padding: 36px 28px;
+  max-width: 380px;
+  width: 88%;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 24px;
+  border: 1px solid rgba(25, 43, 58, 0.08);
+  box-shadow: 0 20px 48px rgba(25, 43, 58, 0.1), 0 4px 12px rgba(25, 43, 58, 0.04);
 }
 
 .vastrenix-splash-logo {
-  width: 96px;
-  height: 96px;
-  margin-bottom: 16px;
-  filter: drop-shadow(0 14px 28px rgba(25, 43, 58, 0.22));
-  animation: splashPulse 2s infinite ease-in-out;
+  width: 90px;
+  height: 90px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 12px 24px rgba(25, 43, 58, 0.16));
+  animation: splashPulse 2.4s infinite ease-in-out;
 }
 
 @keyframes splashPulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+  50% { transform: scale(1.035); }
 }
 
 .vastrenix-splash-title {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 900;
   letter-spacing: 3px;
   color: #192B3A;
-  margin: 0 0 6px 0;
+  margin: 0 0 4px 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
 }
 
 .vastrenix-splash-tagline {
   color: #218C82;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
   margin: 0 0 24px 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
 }
 
+.vastrenix-splash-spinner-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
 .vastrenix-splash-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid rgba(33, 140, 130, 0.2);
+  width: 36px;
+  height: 36px;
+  border: 3.5px solid rgba(33, 140, 130, 0.15);
   border-top-color: #218C82;
+  border-right-color: #218C82;
   border-radius: 50%;
-  animation: splashSpin 0.8s linear infinite;
-  margin-bottom: 12px;
+  animation: splashSpin 0.85s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+  box-shadow: 0 0 14px rgba(33, 140, 130, 0.18);
 }
 
 @keyframes splashSpin {
@@ -1549,10 +1565,23 @@ body {
 }
 
 .vastrenix-splash-status {
+  font-size: 14.5px;
+  color: #192B3A;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  line-height: 1.3;
+}
+
+.vastrenix-splash-sub {
   font-size: 12px;
   color: #697782;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  margin-top: 6px;
+  max-width: 290px;
+  line-height: 1.4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
 }
 
 /* ==========================================================================
