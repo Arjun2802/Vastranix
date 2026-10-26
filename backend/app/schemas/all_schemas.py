@@ -122,6 +122,8 @@ class POSSaleCreateSchema(BaseModel):
     payment_mode: str = "CASH" # CASH, UPI, CARD, BANK_TRANSFER, SPLIT, CREDIT
     paid_amount: Optional[Decimal] = None
     invoice_theme: Optional[str] = None
+    transaction_reference: Optional[str] = None
+    reference_number: Optional[str] = None
     notes: Optional[str] = None
 
 class CustomerCreateSchema(BaseModel):

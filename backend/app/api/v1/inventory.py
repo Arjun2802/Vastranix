@@ -18,7 +18,12 @@ def get_inventory_levels(
     ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
-    target_branch_id = branch_id or (ctx.branch.id if ctx.branch else 1)
+    target_branch = ctx.branch
+    if not target_branch:
+        target_branch = db.query(Branch).filter(Branch.business_id == ctx.business.id).first()
+    target_branch_id = branch_id or (target_branch.id if target_branch else None)
+    if not target_branch_id:
+        return []
     query = db.query(InventoryLevel, ProductVariant, Product).join(
         ProductVariant, InventoryLevel.variant_id == ProductVariant.id
     ).join(

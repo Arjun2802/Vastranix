@@ -31,29 +31,245 @@ function getApiBase() {
   return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
 }
 
+let _currentInvoiceBlob = null;
+let _currentInvoiceBlobUrl = null;
+
+async function viewInvoiceInApp(invoiceId, invoiceNumber) {
+  const modal = document.getElementById("modal-invoice-viewer");
+  if (!modal) {
+    const directUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
+    window.open(directUrl, "_blank");
+    return;
+  }
+  const title = document.getElementById("invoice-viewer-title");
+  if (title) title.textContent = `${t('invoice_viewer_title', 'Invoice Details')} #${invoiceNumber || invoiceId}`;
+
+  const body = document.getElementById("invoice-viewer-body");
+  const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+
+  if (body) {
+    body.innerHTML = `
+      <div style="padding: 44px 16px; text-align: center; color: var(--navy);">
+        <div class="spinner"></div>
+        <div style="margin-top: 14px; font-weight: 700; font-size: 14px;">Preparing secure invoice PDF...</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Fetching official tax document with verified credentials</div>
+      </div>
+    `;
+  }
+
+  const shareBtn = document.getElementById("invoice-viewer-share-btn");
+  if (shareBtn) {
+    shareBtn.onclick = () => shareInvoicePdf(invoiceId, invoiceNumber);
+  }
+
+  const downloadBtn = document.getElementById("invoice-viewer-download-btn");
+  if (downloadBtn) {
+    downloadBtn.onclick = () => downloadInvoicePdf(invoiceId, invoiceNumber);
+  }
+
+  modal.classList.add("active");
+
+  try {
+    const headers = {};
+    if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+    if (state.business) headers["X-Business-ID"] = state.business.id;
+
+    // Authenticated PDF byte fetch to eliminate "Authentication required" error
+    const res = await fetch(pdfUrl, { headers });
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    _currentInvoiceBlob = blob;
+    if (_currentInvoiceBlobUrl) {
+      URL.revokeObjectURL(_currentInvoiceBlobUrl);
+    }
+    _currentInvoiceBlobUrl = URL.createObjectURL(blob);
+
+    if (body) {
+      body.innerHTML = `
+        <iframe src="${_currentInvoiceBlobUrl}#toolbar=1&navpanes=0" style="width: 100%; height: 500px; border: 1px solid var(--border); border-radius: 8px; background: white;" onerror="this.outerHTML='<div style=\\'padding: 30px; text-align: center; color: var(--text-muted);\\'>Preview frame restricted by system. Tap Share or Download below.</div>'"></iframe>
+      `;
+    }
+  } catch (err) {
+    console.warn("[PDF-AUTH-FALLBACK] Direct blob fetch encountered:", err.message);
+    const fallbackUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
+    if (body) {
+      body.innerHTML = `
+        <div style="padding: 36px 16px; text-align: center;">
+          <div style="font-size: 34px; margin-bottom: 8px;">🧾</div>
+          <div style="font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">Invoice Document Ready</div>
+          <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px;">Inline preview unavailable. Tap below to view or share verified document:</div>
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-navy" onclick="downloadInvoicePdf(${invoiceId}, '${invoiceNumber}')">Open Document</button>
+            <button class="btn btn-secondary" onclick="shareInvoicePdf(${invoiceId}, '${invoiceNumber}')">Share</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
 function openInvoicePdf(invoiceId, invoiceNumber) {
-  const fullUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
-  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+  viewInvoiceInApp(invoiceId, invoiceNumber);
+}
 
-  if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
-    window.VastrenixNative.openPdfUrl(fullUrl, fileName);
-  } else {
-    window.open(fullUrl, "_blank");
+async function shareInvoicePdf(invoiceId, invoiceNumber) {
+  const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+  const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+
+  try {
+    let blob = _currentInvoiceBlob;
+    if (!blob) {
+      const headers = {};
+      if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+      if (state.business) headers["X-Business-ID"] = state.business.id;
+      const res = await fetch(pdfUrl, { headers });
+      if (!res.ok) throw new Error("Could not retrieve PDF");
+      blob = await res.blob();
+      _currentInvoiceBlob = blob;
+    }
+
+    // Convert blob to Base64 Data URL for zero-network native Android sharing
+    const reader = new FileReader();
+    reader.onloadend = function() {
+      const base64data = reader.result;
+      if (window.VastrenixNative && typeof window.VastrenixNative.sharePdfUrl === "function") {
+        window.VastrenixNative.sharePdfUrl(base64data, fileName);
+      } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'application/pdf' })] })) {
+        navigator.share({
+          title: `Invoice ${invoiceNumber}`,
+          text: `Tax Invoice ${invoiceNumber} from ${state.storeName || (state.business && state.business.name) || 'Vastrenix'}`,
+          files: [new File([blob], fileName, { type: 'application/pdf' })]
+        }).catch(e => console.log("Share cancelled", e));
+      } else {
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.click();
+      }
+    };
+    reader.readAsDataURL(blob);
+  } catch (err) {
+    console.error("[SHARE-PDF-FAIL]", err);
+    alert("Unable to share PDF: " + err.message);
   }
 }
 
-function shareInvoicePdf(invoiceId, invoiceNumber) {
-  const fullUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
+async function downloadInvoicePdf(invoiceId, invoiceNumber) {
   const fileName = `Invoice_${invoiceNumber || invoiceId}.pdf`;
+  const pdfUrl = `${getApiBase()}/pos/invoices/${invoiceId}/pdf`;
 
-  if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
-    window.VastrenixNative.openPdfUrl(fullUrl, fileName);
-  } else if (navigator.share) {
-    navigator.share({ title: `Invoice ${invoiceNumber}`, url: fullUrl });
-  } else {
-    window.open(fullUrl, "_blank");
+  try {
+    let blob = _currentInvoiceBlob;
+    if (!blob) {
+      const headers = {};
+      if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+      if (state.business) headers["X-Business-ID"] = state.business.id;
+      const res = await fetch(pdfUrl, { headers });
+      if (!res.ok) throw new Error("Could not retrieve PDF");
+      blob = await res.blob();
+      _currentInvoiceBlob = blob;
+    }
+
+    if (window.VastrenixNative && typeof window.VastrenixNative.openPdfUrl === "function") {
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        window.VastrenixNative.openPdfUrl(reader.result, fileName);
+      };
+      reader.readAsDataURL(blob);
+    } else {
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      a.click();
+    }
+  } catch (err) {
+    const directUrl = `${pdfUrl}?token=${encodeURIComponent(state.token || '')}&business_id=${state.business ? state.business.id : ''}`;
+    window.open(directUrl, "_blank");
   }
 }
+
+let isAppInBackground = false;
+let pendingReconnectTimer = null;
+
+function handleAppBackground() {
+  console.log("[LIFECYCLE] App backgrounded - pausing polling and suppressing reconnect loops");
+  isAppInBackground = true;
+  if (coldStartTimer) { clearTimeout(coldStartTimer); coldStartTimer = null; }
+  if (coldStartTimeoutTimer) { clearTimeout(coldStartTimeoutTimer); coldStartTimeoutTimer = null; }
+  if (coldStartInterval) { clearInterval(coldStartInterval); coldStartInterval = null; }
+  if (pendingReconnectTimer) { clearTimeout(pendingReconnectTimer); pendingReconnectTimer = null; }
+}
+
+function handleAppResume() {
+  console.log("[LIFECYCLE] App resumed");
+  isAppInBackground = false;
+  const now = Date.now();
+  if (now - (state.lastResumeTime || 0) < 30000) {
+    console.log("[LIFECYCLE] Throttled resume refresh (last refreshed < 30s ago)");
+    return;
+  }
+  state.lastResumeTime = now;
+  performCleanResumeSync();
+}
+
+if (typeof window !== "undefined") {
+  window.onAppBackground = handleAppBackground;
+  window.onAppResume = handleAppResume;
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      handleAppBackground();
+    } else {
+      handleAppResume();
+    }
+  });
+}
+
+async function performCleanResumeSync() {
+  try {
+    if (!state.token) return;
+    // Silent check, do not show cold-start or reconnect overlays
+    await api("/sync/firebase/status", { silent: true, timeout: 5000 });
+    state.reconnectAttempts = 0;
+    // Silent token refresh if it has been > 40 minutes since last refresh
+    const now = Date.now();
+    if (now - (state.lastTokenRefreshTime || 0) > 40 * 60 * 1000) {
+      silentTokenRefresh();
+    }
+  } catch (err) {
+    console.log("[LIFECYCLE] Resume sync check skipped or offline");
+  }
+}
+
+async function silentTokenRefresh() {
+  if (!state.token || isAppInBackground) return;
+  try {
+    const res = await api("/auth/refresh", { method: "POST", silent: true, timeout: 10000 });
+    if (res && res.access_token) {
+      state.token = res.access_token;
+      localStorage.setItem("vastrenix_token", res.access_token);
+      state.lastTokenRefreshTime = Date.now();
+      console.log("[AUTH] Silent token refresh succeeded");
+    }
+  } catch (err) {
+    console.warn("[AUTH] Silent token refresh skipped: " + err.message);
+  }
+}
+
+// Background silent token refresh every 45 minutes
+setInterval(() => {
+  if (!isAppInBackground && state.token) {
+    silentTokenRefresh();
+  }
+}, 45 * 60 * 1000);
 
 const state = {
   token: localStorage.getItem("vastrenix_token") || null,
@@ -61,6 +277,11 @@ const state = {
   business: JSON.parse(localStorage.getItem("vastrenix_business") || "null"),
   storeName: localStorage.getItem("vastrenix_store_name") || null,
   isStaff: localStorage.getItem("vastrenix_is_staff") === "true",
+  defaultPaymentMode: localStorage.getItem("vastrenix_default_payment_mode") || "CASH",
+  selectedPOSTheme: localStorage.getItem("vastrenix_pos_theme") || "PREMIUM_BOUTIQUE",
+  tabCache: {},
+  lastResumeTime: 0,
+  reconnectAttempts: 0,
   activeTab: "dashboard",
   cart: [],
   products: [],
@@ -80,24 +301,151 @@ const i18n = {
     dealers: "Dealer B2B Network",
     team: "Users & Staff",
     flowcharts: "Architecture Flowcharts",
+    settings: "Settings",
+    logout: "Sign Out",
+    current_store: "Current Store",
+    flagship_store: "Flagship Store",
+    store_admin: "Store Admin",
+    staff_view: "Staff View",
+    assigned_store: "Assigned Store",
+    logged_in_as: "Logged in as",
     today_sales: "Today's Gross Sales",
     today_orders: "Today's Orders",
     total_revenue: "Total Net Revenue",
     low_stock_items: "Low Stock Items",
     pending_approvals: "Pending Staff Approvals",
     pending_dealer_orders: "Pending Dealer Orders",
-    add_product: "+ Add New Garment",
-    adjust_stock: "Adjust Stock",
-    search_placeholder: "Search garment by name, fabric, or SKU...",
-    record_expense: "Record Store Expense",
-    open_shift: "Open Cash Shift",
-    close_shift: "Close Cash Shift",
-    server_settings: "Server URL Settings",
-    logout: "Sign Out",
-    quick_bill: "Quick POS Billing Till",
-    save_changes: "Save Changes",
-    current_store: "Current Store",
-    flagship_store: "Flagship Store"
+    month_end_dues: "Month-End Credit Dues",
+    sizes_reorder: "Sizes requiring reorder",
+    all_healthy: "All inventory healthy",
+    b2b_awaiting: "B2B orders awaiting action",
+    posted_invoices: "Authoritative posted invoices",
+    pending_receivables: "Pending customer receivables",
+    tx_completed: "transactions completed",
+    new_pos_sale: "+ New POS Sale",
+    add_garment_prod: "+ Add Garment Product",
+    dealer_orders_btn: "Dealer Orders",
+    urgent_low_stock: "Urgent Low Stock Warnings",
+    view_all_inventory: "View All Inventory",
+    garment_product: "Garment Product",
+    sku: "SKU",
+    size_color: "Size / Color",
+    available_qty: "Available Qty",
+    threshold: "Threshold",
+    action: "Action",
+    manage_stock: "Manage Stock",
+    month_end_banner_title: "Month-End Credit Payment Reminders Active",
+    month_end_banner_desc: "total outstanding Store Credit due for collection before month-end.",
+    review_dues_btn: "Review Dues in Invoices",
+    pending_staff_title: "Pending Staff Signups Requiring Approval",
+    approve_staff_btn: "✓ Approve Staff",
+    reject_staff_btn: "✕ Reject",
+    inventory_title: "Garment Inventory & Warehouse Stock",
+    inventory_desc: "Track on-hand vs available retail stock by size and color variant.",
+    search_garment_placeholder: "Search by garment name, SKU, or fabric...",
+    product_name_col: "Product Name",
+    fabric_col: "Fabric",
+    size_col: "Size",
+    color_col: "Color",
+    rack_location_col: "Rack Location",
+    on_hand_col: "On-Hand",
+    reserved_col: "Reserved",
+    available_col: "Available",
+    status_col: "Status",
+    stock_ops_col: "Stock Operations",
+    in_stock_label: "in stock",
+    out_of_stock_label: "Out of stock",
+    adjust_stock_btn: "Adjust Stock",
+    no_inventory_title: "Garment Catalog is Empty",
+    no_inventory_desc: "Add your first garment product with size/color variants to start tracking on-hand stock and billing on the POS.",
+    pos_terminal_title: "POS Counter Till",
+    store_counter: "Store Counter",
+    cashier: "Cashier",
+    shift_active: "Shift Active",
+    float_label: "Float",
+    close_shift: "Close Shift",
+    open_shift: "Open Shift",
+    scan_search_placeholder: "Scan barcode or search name/fabric (F2)...",
+    custom_item_btn: "+ Custom Item",
+    customer_details_title: "1. Customer Details (Optional for Cash/UPI, Required for Store Credit)",
+    customer_name_placeholder: "Customer Name",
+    mobile_no_placeholder: "Mobile No. (10 Digits)",
+    invoice_theme_title: "2. Invoice Theme",
+    payment_mode_title: "3. Payment Mode",
+    pay_cash: "Cash",
+    pay_upi: "UPI QR",
+    pay_card: "Card",
+    pay_split: "Split",
+    pay_credit: "Store Credit",
+    sale_cart: "Sale Cart",
+    clear_cart: "Clear (F8)",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    tax_gst: "GST (5%)",
+    grand_total: "Grand Total",
+    complete_sale_btn: "Complete Sale & Generate Invoice (F4)",
+    add_btn: "+ Add",
+    line_total: "Line Total",
+    cart_empty: "Cart is empty. Scan barcodes, click '+ Add', or add a Custom Item.",
+    custom_badge: "Custom",
+    shift_req_title: "Cash Register Shift Required",
+    shift_req_desc: "To begin processing retail sales with tamper-proof financial reconciliation, please count and enter the opening cash float in the drawer.",
+    open_float_label: "Opening Cash Float (₹)",
+    open_shift_btn: "Open Shift & Unlock Counter",
+    upi_modal_title: "UPI Counter Payment",
+    upi_modal_subtitle: "Scan with Google Pay, PhonePe, Paytm, or BHIM",
+    customer_paid_btn: "✓ Customer Has Paid",
+    utr_label: "UPI UTR / Reference No. (Optional for reconciliation)",
+    utr_placeholder: "e.g. 429381920394",
+    confirm_invoice_btn: "Confirm & Print Invoice",
+    skip_utr_btn: "Skip UTR",
+    custom_modal_title: "+ Add Custom Item to Cart",
+    item_desc_label: "Item Description / Name",
+    item_desc_placeholder: "e.g. Alteration & Fitting, Matching Border Dupatta",
+    unit_price_label: "Unit Price (₹)",
+    qty_label: "Quantity",
+    add_line_item_btn: "Add Line Item to Cart",
+    invoices_title: "Authoritative Invoices & Billing Records",
+    invoices_desc: "View posted invoices, verify tax compliance, and download PDFs.",
+    refresh_invoices_btn: "↻ Refresh Invoices",
+    six_themes_title: "6 Invoice Themes (Swipe to Preview & Select Default)",
+    active_theme_label: "Active",
+    set_default_label: "Tap to set default",
+    store_default_badge: "✓ Store Default",
+    no_invoices_title: "No Invoices Posted Yet",
+    no_invoices_desc: "Invoices are immutable business records. Complete your first garment sale on the POS Till to generate a GST invoice with instant PDF download.",
+    open_pos_till_btn: "Open POS Billing Till ➔",
+    invoice_number_col: "Invoice Number",
+    date_col: "Date",
+    customer_col: "Customer",
+    theme_col: "Theme",
+    total_amount_col: "Total Amount",
+    paid_col: "Paid",
+    actions_col: "Actions",
+    pdf_btn: "PDF",
+    share_btn: "Share",
+    retry_btn: "Retry",
+    invoice_viewer_title: "Invoice Details",
+    share_whatsapp_btn: "Share Invoice (WhatsApp)",
+    download_print_btn: "⎙ Download / Print PDF",
+    close_btn: "Close",
+    settings_modal_title: "Store & POS Settings",
+    default_pay_mode_label: "Default POS Payment Mode",
+    default_theme_label: "Default Invoice Theme",
+    cloud_server_connection: "Cloud Server Connection",
+    connected_status: "Connected to VASTRENIX Cloud",
+    disconnected_status: "Disconnected (Offline / Reconnecting)",
+    conn_active_meta: "All store operations and real-time syncing are active.",
+    check_status_btn: "Check Status",
+    done_btn: "Done",
+    cant_reach_title: "Can't reach VASTRENIX right now",
+    retry_conn_btn: "Retry Connection",
+    use_offline_till: "Open Offline POS Till",
+    connecting_cloud: "Connecting to VASTRENIX Cloud Server...",
+    waking_server: "Waking up store server (Render free-tier cold start, ~30s)...",
+    device_offline_msg: "Your device appears to be offline. Check Wi-Fi or mobile data.",
+    server_slow_msg: "Store server took longer than expected to respond. Please tap Retry.",
+    server_connected_msg: "✓ Server Connected"
   },
   hi: {
     welcome: "आपके वस्त्र व्यापार में आपका स्वागत है",
@@ -109,55 +457,320 @@ const i18n = {
     dealers: "डीलर बी2बी नेटवर्क",
     team: "कर्मचारी और टीम",
     flowcharts: "सिस्टम फ्लोचार्ट्स",
+    settings: "सेटिंग्स",
+    logout: "साइन आउट",
+    current_store: "वर्तमान दुकान",
+    flagship_store: "प्रमुख दुकान",
+    store_admin: "स्टोर एडमिन",
+    staff_view: "स्टाफ व्यू",
+    assigned_store: "आवंटित दुकान",
+    logged_in_as: "लॉगिन उपयोगकर्ता",
     today_sales: "आज की कुल बिक्री",
     today_orders: "आज के ऑर्डर्स",
-    total_revenue: "कुल राजस्व",
+    total_revenue: "कुल शुद्ध राजस्व",
     low_stock_items: "कम स्टॉक वाले वस्त्र",
     pending_approvals: "लंबित कर्मचारी स्वीकृतियां",
     pending_dealer_orders: "लंबित डीलर ऑर्डर्स",
-    add_product: "+ नया वस्त्र जोड़ें",
-    adjust_stock: "स्टॉक समायोजित करें",
-    search_placeholder: "वस्त्र का नाम, फैब्रिक या SKU खोजें...",
-    record_expense: "दुकान खर्च दर्ज करें",
-    open_shift: "कैश शिफ्ट खोलें",
-    close_shift: "कैश शिफ्ट बंद करें",
-    server_settings: "सर्वर सेटिंग्स",
-    logout: "साइन आउट",
-    quick_bill: "त्वरित बिलिंग काउंटर",
-    save_changes: "परिवर्तन सहेजें",
-    current_store: "वर्तमान दुकान",
-    flagship_store: "प्रमुख दुकान"
+    month_end_dues: "माह-अंत क्रेडिट बकाया",
+    sizes_reorder: "पुनः ऑर्डर योग्य साइज़",
+    all_healthy: "सभी स्टॉक पर्याप्त है",
+    b2b_awaiting: "कार्रवाई हेतु प्रतीक्षारत बी2बी ऑर्डर्स",
+    posted_invoices: "आधिकारिक पोस्ट किए गए चालान",
+    pending_receivables: "लंबित ग्राहक प्राप्य राशि",
+    tx_completed: "लेन-देन पूर्ण",
+    new_pos_sale: "+ नई पीओएस बिक्री",
+    add_garment_prod: "+ नया वस्त्र जोड़ें",
+    dealer_orders_btn: "डीलर ऑर्डर्स",
+    urgent_low_stock: "महत्वपूर्ण कम स्टॉक चेतावनी",
+    view_all_inventory: "पूरी इन्वेंटरी देखें",
+    garment_product: "वस्त्र उत्पाद",
+    sku: "एसकेयू",
+    size_color: "साइज़ / रंग",
+    available_qty: "उपलब्ध मात्रा",
+    threshold: "न्यूनतम सीमा",
+    action: "कार्रवाई",
+    manage_stock: "स्टॉक प्रबंधन",
+    month_end_banner_title: "माह-अंत क्रेडिट भुगतान अनुस्मारक सक्रिय",
+    month_end_banner_desc: "माह-अंत से पहले वसूली हेतु कुल बकाया स्टोर क्रेडिट।",
+    review_dues_btn: "चालानों में बकाया देखें",
+    pending_staff_title: "अनुमोदन की प्रतीक्षा में कर्मचारी साइनअप",
+    approve_staff_btn: "✓ कर्मचारी स्वीकृत करें",
+    reject_staff_btn: "✕ अस्वीकार करें",
+    inventory_title: "वस्त्र इन्वेंटरी और गोदाम स्टॉक",
+    inventory_desc: "साइज़ और रंग के अनुसार उपलब्ध खुदरा स्टॉक ट्रैक करें।",
+    search_garment_placeholder: "वस्त्र का नाम, एसकेयू या फैब्रिक खोजें...",
+    product_name_col: "उत्पाद का नाम",
+    fabric_col: "कपड़ा / फैब्रिक",
+    size_col: "साइज़",
+    color_col: "रंग",
+    rack_location_col: "रैक स्थान",
+    on_hand_col: "मौजूद स्टॉक",
+    reserved_col: "आरक्षित",
+    available_col: "उपलब्ध",
+    status_col: "स्थिति",
+    stock_ops_col: "स्टॉक संचालन",
+    in_stock_label: "स्टॉक में उपलब्ध",
+    out_of_stock_label: "स्टॉक समाप्त",
+    adjust_stock_btn: "स्टॉक समायोजित करें",
+    no_inventory_title: "वस्त्र कैटलॉग खाली है",
+    no_inventory_desc: "स्टॉक ट्रैक करने और पीओएस पर बिलिंग शुरू करने के लिए अपना पहला वस्त्र जोड़ें।",
+    pos_terminal_title: "पीओएस काउंटर बिलिंग",
+    store_counter: "स्टोर काउंटर",
+    cashier: "कैशियर",
+    shift_active: "शिफ्ट सक्रिय",
+    float_label: "कैश फ्लोट",
+    close_shift: "शिफ्ट बंद करें",
+    open_shift: "शिफ्ट खोलें",
+    scan_search_placeholder: "बारकोड स्कैन करें या नाम/फैब्रिक खोजें (F2)...",
+    custom_item_btn: "+ कस्टम आइटम",
+    customer_details_title: "1. ग्राहक विवरण (कैश/यूपीआई के लिए वैकल्पिक, क्रेडिट हेतु अनिवार्य)",
+    customer_name_placeholder: "ग्राहक का नाम",
+    mobile_no_placeholder: "मोबाइल नंबर (10 अंक)",
+    invoice_theme_title: "2. चालान थीम",
+    payment_mode_title: "3. भुगतान माध्यम",
+    pay_cash: "नकद (कैश)",
+    pay_upi: "यूपीआई क्यूआर",
+    pay_card: "कार्ड",
+    pay_split: "विभाजित भुगतान",
+    pay_credit: "स्टोर क्रेडिट (खाता)",
+    sale_cart: "बिक्री कार्ट",
+    clear_cart: "साफ़ करें (F8)",
+    subtotal: "उप-कुल",
+    discount: "छूट",
+    tax_gst: "जीएसटी (5%)",
+    grand_total: "कुल देय राशि",
+    complete_sale_btn: "बिक्री पूर्ण करें और बिल बनाएं (F4)",
+    add_btn: "+ जोड़ें",
+    line_total: "लाइन कुल",
+    cart_empty: "कार्ट खाली है। बारकोड स्कैन करें या '+ जोड़ें' दबाएं।",
+    custom_badge: "कस्टम",
+    shift_req_title: "कैश रजिस्टर शिफ्ट आवश्यक है",
+    shift_req_desc: "वित्तीय समाधान के साथ खुदरा बिक्री शुरू करने के लिए गल्ले में मौजूद प्रारंभिक नकद दर्ज करें।",
+    open_float_label: "प्रारंभिक कैश फ्लोट (₹)",
+    open_shift_btn: "शिफ्ट खोलें और काउंटर अनलॉक करें",
+    upi_modal_title: "यूपीआई काउंटर भुगतान",
+    upi_modal_subtitle: "Google Pay, PhonePe, Paytm, या BHIM से स्कैन करें",
+    customer_paid_btn: "✓ ग्राहक ने भुगतान कर दिया",
+    utr_label: "यूपीआई यूटीआर / संदर्भ संख्या (समाधान हेतु वैकल्पिक)",
+    utr_placeholder: "उदा. 429381920394",
+    confirm_invoice_btn: "पुष्टि करें और बिल प्रिंट करें",
+    skip_utr_btn: "यूटीआर छोड़ें",
+    custom_modal_title: "+ कार्ट में कस्टम आइटम जोड़ें",
+    item_desc_label: "आइटम विवरण / नाम",
+    item_desc_placeholder: "उदा. सिलाई व फिटिंग, मैचिंग दुपट्टा",
+    unit_price_label: "इकाई मूल्य (₹)",
+    qty_label: "मात्रा",
+    add_line_item_btn: "कार्ट में जोड़ें",
+    invoices_title: "आधिकारिक चालान और बिल रिकॉर्ड्स",
+    invoices_desc: "पोस्ट किए गए बिल देखें, कर अनुपालन जांचें और पीडीएफ डाउनलोड करें।",
+    refresh_invoices_btn: "↻ चालान रीफ्रेश करें",
+    six_themes_title: "6 चालान थीम्स (पूर्वावलोकन और डिफ़ॉल्ट चुनने के लिए स्वाइप करें)",
+    active_theme_label: "सक्रिय",
+    set_default_label: "डिफ़ॉल्ट सेट करने के लिए टैप करें",
+    store_default_badge: "✓ स्टोर डिफ़ॉल्ट",
+    no_invoices_title: "अभी तक कोई चालान पोस्ट नहीं हुआ",
+    no_invoices_desc: "चालान अपरिवर्तनीय व्यावसायिक रिकॉर्ड हैं। तुरंत जीएसटी बिल बनाने के लिए पीओएस पर अपनी पहली बिक्री पूरी करें।",
+    open_pos_till_btn: "पीओएस बिलिंग टिल खोलें ➔",
+    invoice_number_col: "चालान संख्या",
+    date_col: "तारीख",
+    customer_col: "ग्राहक",
+    theme_col: "थीम",
+    total_amount_col: "कुल राशि",
+    paid_col: "प्राप्त राशि",
+    actions_col: "कार्रवाइयां",
+    pdf_btn: "पीडीएफ",
+    share_btn: "शेयर करें",
+    retry_btn: "पुनः प्रयास",
+    invoice_viewer_title: "चालान विवरण",
+    share_whatsapp_btn: "व्हाट्सएप पर शेयर करें",
+    download_print_btn: "⎙ डाउनलोड / प्रिंट पीडीएफ",
+    close_btn: "बंद करें",
+    settings_modal_title: "दुकान और पीओएस सेटिंग्स",
+    default_pay_mode_label: "डिफ़ॉल्ट पीओएस भुगतान माध्यम",
+    default_theme_label: "डिफ़ॉल्ट चालान थीम",
+    cloud_server_connection: "क्लाउड सर्वर कनेक्शन",
+    connected_status: "वस्त्रनिक्स क्लाउड से सफलतापूर्वक जुड़ा है",
+    disconnected_status: "डिस्कनेक्ट (ऑफ़लाइन / पुनः कनेक्ट हो रहा है)",
+    conn_active_meta: "सभी दुकान संचालन और रीयल-टाइम सिंक सक्रिय हैं।",
+    check_status_btn: "स्थिति जांचें",
+    done_btn: "पूर्ण",
+    cant_reach_title: "इस समय वस्त्रनिक्स से संपर्क नहीं हो पा रहा",
+    retry_conn_btn: "पुनः कनेक्ट करें",
+    use_offline_till: "ऑफ़लाइन बिलिंग काउंटर खोलें",
+    connecting_cloud: "वस्त्रनिक्स क्लाउड सर्वर से जुड़ रहे हैं...",
+    waking_server: "स्टोर सर्वर जागृत हो रहा है (Render कोल्ड स्टार्ट, ~30s)...",
+    device_offline_msg: "आपका डिवाइस वर्तमान में ऑफ़लाइन है। कृपया वाई-फाई या मोबाइल डेटा जांचें।",
+    server_slow_msg: "स्टोर सर्वर से उत्तर मिलने में सामान्य से अधिक समय लग रहा है। कृपया पुनः प्रयास करें।",
+    server_connected_msg: "✓ सर्वर कनेक्ट हो गया"
   },
   gu: {
     welcome: "તમારા વસ્ત્ર વ્યાપારમાં આપનું સ્વાગત છે",
     dashboard: "ડેશબોર્ડ",
     inventory: "ઇન્વેન્ટરી અને કેટલોગ",
-    pos: "પીઓએસ બિલિંગ કાઉન્ટર",
+    pos: "પીઓએસ બિલિંગ",
     invoices: "બિલ અને થીમ્સ",
     expenses: "દુકાનના ખર્ચાઓ",
     dealers: "ડીલર બી2બી નેટવર્ક",
     team: "સ્ટાફ અને ટીમ",
     flowcharts: "સિસ્ટમ ફ્લોચાર્ટ",
+    settings: "સેટિંગ્સ",
+    logout: "લોગ આઉટ",
+    current_store: "ચાલુ શોરૂમ",
+    flagship_store: "મુખ્ય શોરૂમ",
+    store_admin: "સ્ટોર એડમિન",
+    staff_view: "સ્ટાફ વ્યૂ",
+    assigned_store: "સોંપેલ દુકાન",
+    logged_in_as: "લોગિન યુઝર",
     today_sales: "આજનું કુલ વેચાણ",
     today_orders: "આજના ઓર્ડર્સ",
-    total_revenue: "કુલ આવક",
+    total_revenue: "કુલ ચોખ્ખી આવક",
     low_stock_items: "ઓછો સ્ટોક ધરાવતા વસ્ત્રો",
     pending_approvals: "બાકી સ્ટાફ મંજૂરીઓ",
     pending_dealer_orders: "બાકી ડીલર ઓર્ડર્સ",
-    add_product: "+ નવો ડ્રેસ/કપડાં ઉમેરો",
-    adjust_stock: "સ્ટોક એડજસ્ટ કરો",
-    search_placeholder: "કપડાંનું નામ, કાપડ અથવા SKU શોધો...",
-    record_expense: "દુકાનનો ખર્ચ નોંધો",
-    open_shift: "રોકડ શિફ્ટ શરૂ કરો",
-    close_shift: "રોકડ શિફ્ટ સમાપ્ત કરો",
-    server_settings: "સર્વર સેટિંગ્સ",
-    logout: "લોગ આઉટ",
-    quick_bill: "ઝડપી બિલિંગ ટિલ",
-    save_changes: "સાચવો",
-    current_store: "ચાલુ સ્ટોર",
-    flagship_store: "મુખ્ય શોરૂમ"
+    month_end_dues: "મહિનાના અંતનું બાકી ઉધાર",
+    sizes_reorder: "ફરી ઓર્ડર કરવા યોગ્ય સાઇઝ",
+    all_healthy: "બધો સ્ટોક પૂરતો છે",
+    b2b_awaiting: "બાકી બી2બી ઓર્ડર્સ",
+    posted_invoices: "માન્ય સેવ કરેલા બિલ",
+    pending_receivables: "ગ્રાહકો પાસેથી બાકી લેણી રકમ",
+    tx_completed: "ટ્રાન્ઝેક્શન પૂર્ણ",
+    new_pos_sale: "+ નવું વેચાણ",
+    add_garment_prod: "+ નવો ડ્રેસ ઉમેરો",
+    dealer_orders_btn: "ડીલર ઓર્ડર્સ",
+    urgent_low_stock: "ઓછા સ્ટોકની ચેતવણી",
+    view_all_inventory: "આખી ઇન્વેન્ટરી જુઓ",
+    garment_product: "કપડાંનું નામ",
+    sku: "એસકેયુ",
+    size_color: "સાઇઝ / કલર",
+    available_qty: "ઉપલબ્ધ જથ્થો",
+    threshold: "ન્યૂનતમ મર્યાદા",
+    action: "ક્રિયા",
+    manage_stock: "સ્ટોક મેનેજમેન્ટ",
+    month_end_banner_title: "મહિનાના અંતના ઉધાર પેમેન્ટ રીમાઇન્ડર સક્રિય",
+    month_end_banner_desc: "મહિનાના અંત પહેલા ઉઘરાવવા પાત્ર કુલ સ્ટોર ક્રેડિટ.",
+    review_dues_btn: "બિલમાં બાકી રકમ જુઓ",
+    pending_staff_title: "મંજૂરી માટે બાકી સ્ટાફ નોંધણી",
+    approve_staff_btn: "✓ સ્ટાફ મંજૂર કરો",
+    reject_staff_btn: "✕ નામંજૂર કરો",
+    inventory_title: "વસ્ત્ર ઇન્વેન્ટરી અને ગોડાઉન સ્ટોક",
+    inventory_desc: "સાઇઝ અને કલર મુજબ ઉપલબ્ધ સ્ટોક ટ્રૅક કરો.",
+    search_garment_placeholder: "કપડાંનું નામ, એસકેયુ અથવા કાપડ શોધો...",
+    product_name_col: "પ્રોડક્ટનું નામ",
+    fabric_col: "કાપડ / મટિરિયલ",
+    size_col: "સાઇઝ",
+    color_col: "કલર",
+    rack_location_col: "રેક લોકેશન",
+    on_hand_col: "હાજર સ્ટોક",
+    reserved_col: "રિઝર્વ",
+    available_col: "ઉપલબ્ધ",
+    status_col: "સ્થિતિ",
+    stock_ops_col: "સ્ટોક કામગીરી",
+    in_stock_label: "સ્ટોકમાં ઉપલબ્ધ",
+    out_of_stock_label: "સ્ટોક ખાલી",
+    adjust_stock_btn: "સ્ટોક એડજસ્ટ કરો",
+    no_inventory_title: "કપડાંનો કેટલોગ ખાલી છે",
+    no_inventory_desc: "સ્ટોક ટ્રેક કરવા અને કાઉન્ટર પર બિલિંગ શરૂ કરવા માટે પહેલી પ્રોડક્ટ ઉમેરો.",
+    pos_terminal_title: "પીઓએસ કાઉન્ટર ટિલ",
+    store_counter: "સ્ટોર કાઉન્ટર",
+    cashier: "કેશિયર",
+    shift_active: "શિફ્ટ ચાલુ",
+    float_label: "કેશ ફ્લોટ",
+    close_shift: "શિફ્ટ બંધ કરો",
+    open_shift: "શિફ્ટ શરૂ કરો",
+    scan_search_placeholder: "બારકોડ સ્કેન કરો અથવા નામ/કાપડ શોધો (F2)...",
+    custom_item_btn: "+ કસ્ટમ આઇટમ",
+    customer_details_title: "1. ગ્રાહકની વિગતો (રોકડ/યુપીઆઈ માટે વૈકલ્પિક, ઉધાર માટે ફરજિયાત)",
+    customer_name_placeholder: "ગ્રાહકનું નામ",
+    mobile_no_placeholder: "મોબાઇલ નંબર (10 આંકડા)",
+    invoice_theme_title: "2. બિલિંગ થીમ",
+    payment_mode_title: "3. ચુકવણી પદ્ધતિ (પેમેન્ટ મોડ)",
+    pay_cash: "રોકડ (કેશ)",
+    pay_upi: "યુપીઆઈ ક્યૂઆર",
+    pay_card: "કાર્ડ",
+    pay_split: "સ્પ્લિટ પેમેન્ટ",
+    pay_credit: "દુકાન ઉધાર (ખાતાવહી)",
+    sale_cart: "સેલ કાર્ટ",
+    clear_cart: "ખાલી કરો (F8)",
+    subtotal: "સબટોટલ",
+    discount: "ડિસ્કાઉન્ટ",
+    tax_gst: "જીએસટી (5%)",
+    grand_total: "કુલ રકમ",
+    complete_sale_btn: "બિલ બનાવો અને સાચવો (F4)",
+    add_btn: "+ ઉમેરો",
+    line_total: "કુલ રકમ",
+    cart_empty: "કાર્ટ ખાલી છે. બારકોડ સ્કેન કરો અથવા '+ ઉમેરો' દબાવો.",
+    custom_badge: "કસ્ટમ",
+    shift_req_title: "રોકડ રજીસ્ટર શિફ્ટ જરૂરી છે",
+    shift_req_desc: "હિસાબી મેળ સાથે વેચાણ શરૂ કરવા માટે કાઉન્ટરમાં મૂકેલ પ્રારંભિક રોકડ રકમ દાખલ કરો.",
+    open_float_label: "પ્રારંભિક રોકડ રકમ (₹)",
+    open_shift_btn: "શિફ્ટ શરૂ કરો અને કાઉન્ટર ખોલો",
+    upi_modal_title: "યુપીઆઈ કાઉન્ટર પેમેન્ટ",
+    upi_modal_subtitle: "Google Pay, PhonePe, Paytm, અથવા BHIM થી સ્કેન કરો",
+    customer_paid_btn: "✓ ગ્રાહકે પૈસા ચૂકવી દીધા",
+    utr_label: "યુપીઆઈ યુટીઆર / રેફરન્સ નંબર (વૈકલ્પિક)",
+    utr_placeholder: "દા.ત. 429381920394",
+    confirm_invoice_btn: "કન્ફર્મ કરો અને બિલ પ્રિન્ટ કરો",
+    skip_utr_btn: "યુટીઆર સ્કીપ કરો",
+    custom_modal_title: "+ કાર્ટમાં કસ્ટમ આઇટમ ઉમેરો",
+    item_desc_label: "વિગત / નામ",
+    item_desc_placeholder: "દા.ત. સિલાઈ અને ફિટિંગ, મેચિંગ દુપટ્ટો",
+    unit_price_label: "ભાવ (₹)",
+    qty_label: "જથ્થો",
+    add_line_item_btn: "કાર્ટમાં ઉમેરો",
+    invoices_title: "માન્ય બિલ અને હિસાબી રેકોર્ડ્સ",
+    invoices_desc: "બનાવેલા બિલ જુઓ, જીએસટી તપાસો અને પીડીએફ ડાઉનલોડ કરો.",
+    refresh_invoices_btn: "↻ બિલ રિફ્રેશ કરો",
+    six_themes_title: "6 ઇનવોઇસ થીમ્સ (પસંદ કરવા માટે સ્વાઇપ કરો)",
+    active_theme_label: "સક્રિય",
+    set_default_label: "ડિફોલ્ટ સેટ કરવા ક્લિક કરો",
+    store_default_badge: "✓ સ્ટોર ડિફોલ્ટ",
+    no_invoices_title: "હજી સુધી કોઈ બિલ બન્યા નથી",
+    no_invoices_desc: "બિલ એ કાયમી વેપાર રેકોર્ડ છે. જીએસટી બિલ બનાવવા માટે કાઉન્ટર પર પહેલું વેચાણ કરો.",
+    open_pos_till_btn: "પીઓએસ બિલિંગ કાઉન્ટર ખોલો ➔",
+    invoice_number_col: "બિલ નંબર",
+    date_col: "તારીખ",
+    customer_col: "ગ્રાહક",
+    theme_col: "થીમ",
+    total_amount_col: "કુલ રકમ",
+    paid_col: "ચૂકવેલ",
+    actions_col: "કામગીરી",
+    pdf_btn: "પીડીએફ",
+    share_btn: "શેર કરો",
+    retry_btn: "ફરી પ્રયાસ",
+    invoice_viewer_title: "બિલની વિગત",
+    share_whatsapp_btn: "વોટ્સએપ પર શેર કરો",
+    download_print_btn: "⎙ ડાઉનલોડ / પ્રિન્ટ પીડીએફ",
+    close_btn: "બંધ કરો",
+    settings_modal_title: "દુકાન અને પીઓએસ સેટિંગ્સ",
+    default_pay_mode_label: "ડિફોલ્ટ પીઓએસ પેમેન્ટ પદ્ધતિ",
+    default_theme_label: "ડિફોલ્ટ બિલિંગ થીમ",
+    cloud_server_connection: "ક્લાઉડ સર્વર કનેક્શન",
+    connected_status: "વસ્ત્રનિક્સ ક્લાઉડ સાથે જોડાયેલ છે",
+    disconnected_status: "ડિસ્કનેક્ટ (ઓફલાઇન / પુનઃપ્રયાસ)",
+    conn_active_meta: "તમામ સ્ટોર કામગીરી અને રિયલ-ટાઇમ સિંક ચાલુ છે.",
+    check_status_btn: "સ્થિતિ ચકાસો",
+    done_btn: "પૂર્ણ",
+    cant_reach_title: "હાલમાં વસ્ત્રનિક્સ સાથે કનેક્શન થતું નથી",
+    retry_conn_btn: "ફરી કનેક્ટ કરો",
+    use_offline_till: "ઓફલાઇન બિલિંગ ટિલ ખોલો",
+    connecting_cloud: "વસ્ત્રનિક્સ ક્લાઉડ સર્વર સાથે કનેક્ટ થઈ રહ્યું છે...",
+    waking_server: "સ્ટોર સર્વર જાગૃત થઈ રહ્યું છે (Render કોલ્ડ સ્ટાર્ટ, ~30s)...",
+    device_offline_msg: "તમારું ડિવાઇસ હાલમાં ઑફલાઇન છે. કૃપા કરીને ઇન્ટરનેટ કનેક્શન ચકાસો.",
+    server_slow_msg: "સર્વર પ્રતિસાદ આપવામાં સામાન્ય કરતાં વધુ સમય લઈ રહ્યું છે. ફરી પ્રયાસ કરો.",
+    server_connected_msg: "✓ સર્વર કનેક્ટ થઈ ગયું"
   }
 };
+
+function t(key, fallback = "") {
+  const currentLang = state.lang || "en";
+  if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
+    return i18n[currentLang][key];
+  }
+  if (i18n.en && i18n.en[key] !== undefined) {
+    return i18n.en[key];
+  }
+  return fallback || key;
+}
 
 // Robust offline database to guarantee ZERO blank screen on Android APK / offline devices
 const offlineDB = {
@@ -245,20 +858,40 @@ const offlineDB = {
 
 function handleOfflineMock(endpoint, options = {}) {
   const method = (options.method || "GET").toUpperCase();
+  const isDemoStore = (state.user && state.user.email === "demo@vastrenix.com") || (state.business && Number(state.business.id) === 1);
 
   if (endpoint.includes("/auth/public-stores")) return offlineDB.stores;
-  if (endpoint.includes("/reports/dashboard")) return offlineDB.dashboard;
-  if (endpoint.includes("/products/")) return offlineDB.products;
-  if (endpoint.includes("/inventory/levels")) return offlineDB.inventory;
-  if (endpoint.includes("/finance/expenses") && method === "GET") return offlineDB.expenses;
-  if (endpoint.includes("/finance/summary")) return { total_collected: 68450.00, total_expenses: 28680.00, net_cash_flow: 39770.00, total_receivables: 12400.00 };
-  if (endpoint.includes("/pos/invoices")) return offlineDB.invoices;
-  if (endpoint.includes("/dealers/orders/incoming")) return offlineDB.incomingOrders;
-  if (endpoint.includes("/dealers/connections")) return offlineDB.connections;
-  if (endpoint.includes("/auth/staff")) return offlineDB.staff;
+  if (endpoint.includes("/reports/dashboard")) {
+    if (!isDemoStore) {
+      return {
+        today_sales: 0,
+        today_orders: 0,
+        total_revenue: 0,
+        low_stock_items: 0,
+        low_stock_count: 0,
+        pending_approvals: 0,
+        pending_dealer_orders: 0,
+        pending_credit_dues: 0,
+        business_name: (state.business && state.business.name) || (state.storeName) || "My Store",
+        branch_name: state.storeName || "Main Counter",
+        recent_sales: []
+      };
+    }
+    return offlineDB.dashboard;
+  }
+  if (endpoint.includes("/products/")) return isDemoStore ? offlineDB.products : [];
+  if (endpoint.includes("/inventory/levels")) return isDemoStore ? offlineDB.inventory : [];
+  if (endpoint.includes("/finance/expenses") && method === "GET") return isDemoStore ? offlineDB.expenses : [];
+  if (endpoint.includes("/finance/summary")) {
+    return isDemoStore ? { total_collected: 68450.00, total_expenses: 28680.00, net_cash_flow: 39770.00, total_receivables: 12400.00 } : { total_collected: 0, total_expenses: 0, net_cash_flow: 0, total_receivables: 0 };
+  }
+  if (endpoint.includes("/pos/invoices")) return isDemoStore ? offlineDB.invoices : [];
+  if (endpoint.includes("/dealers/orders/incoming")) return isDemoStore ? offlineDB.incomingOrders : [];
+  if (endpoint.includes("/dealers/connections")) return isDemoStore ? offlineDB.connections : [];
+  if (endpoint.includes("/auth/staff")) return isDemoStore ? offlineDB.staff : [];
   if (endpoint.includes("/auth/pending-staff")) return [];
-  if (endpoint.includes("/purchases/suppliers")) return offlineDB.suppliers;
-  if (endpoint.includes("/purchases/orders") && method === "GET") return offlineDB.purchaseOrders;
+  if (endpoint.includes("/purchases/suppliers")) return isDemoStore ? offlineDB.suppliers : [];
+  if (endpoint.includes("/purchases/orders") && method === "GET") return isDemoStore ? offlineDB.purchaseOrders : [];
   if (endpoint.includes("/purchases/orders") && method === "POST") {
     const payload = JSON.parse(options.body || "{}");
     const num = `PO-${Date.now().toString().slice(-4)}`;
@@ -669,10 +1302,14 @@ async function api(endpoint, options = {}) {
   const timeoutMs = options.timeout || 65000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // If request takes > 1.8s (typical of Render sleeping), display reassuring branded wake screen
-  coldStartTimer = setTimeout(() => {
-    showColdStartOverlay();
-  }, 1800);
+  // Show reassuring branded wake screen only on cold start if server is not yet warm
+  if (!options.silent && !isServerWarm && !isAppInBackground) {
+    coldStartTimer = setTimeout(() => {
+      if (!isServerWarm && !isAppInBackground) {
+        showColdStartOverlay();
+      }
+    }, 3000);
+  }
 
   let resStatus = 0;
   let resData = null;
@@ -1085,7 +1722,7 @@ async function renderDashboard() {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="background: var(--amber); color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">!</span>
-            <h3 style="font-size: 15px; font-weight: 700; color: #8A5A1B; margin: 0;">Pending Staff Signups Requiring Approval (${pendingStaff.length})</h3>
+            <h3 style="font-size: 15px; font-weight: 700; color: #8A5A1B; margin: 0;">${t("pending_staff_title", "Pending Staff Signups Requiring Approval")} (${pendingStaff.length})</h3>
           </div>
         </div>
         <p style="font-size: 13px; color: #735022; margin-bottom: 14px;">The following employees have signed up under your store '<b>${metrics.business_name}</b>' and cannot log in until you approve them:</p>
@@ -1098,8 +1735,8 @@ async function renderDashboard() {
                 <div style="font-size: 12px; color: var(--text-muted);">${s.email} • Role Requested: <span class="badge badge-neutral">${s.role}</span> • Phone: ${s.phone || 'N/A'}</div>
               </div>
               <div style="display: flex; gap: 8px;">
-                <button class="btn btn-sm btn-primary" onclick="approveStaffMember(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">✓ Approve Staff</button>
-                <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">✕ Reject</button>
+                <button class="btn btn-sm btn-primary" onclick="approveStaffMember(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">${t("approve_staff_btn", "✓ Approve Staff")}</button>
+                <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">${t("reject_staff_btn", "✕ Reject")}</button>
               </div>
             </div>
           `).join('')}
@@ -1107,11 +1744,24 @@ async function renderDashboard() {
       </div>
     ` : ''}
 
+    ${Number(metrics.pending_credit_dues || 0) > 0 ? `
+      <div style="background: #FFF5F5; border: 1px solid #FEB2B2; border-radius: var(--radius-md); padding: 14px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 24px;">📅</span>
+          <div>
+            <div style="font-size: 14px; font-weight: 800; color: #9B2C2C;">${t("month_end_banner_title", "Month-End Credit Payment Reminders Active")}</div>
+            <div style="font-size: 12.5px; color: #C53030;">₹${Number(metrics.pending_credit_dues).toFixed(2)} total outstanding Store Credit due for collection before month-end.</div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-navy" onclick="switchTab('invoices')">${t("review_dues_btn", "Review Dues in Invoices")}</button>
+      </div>
+    ` : ''}
+
     <div class="grid-cards" style="margin-bottom: 24px;">
       <div class="stat-card stagger-1">
         <div class="stat-label">${t.today_sales}</div>
         <div class="stat-value" id="dash-val-sales" style="color: var(--teal);">₹0.00</div>
-        <div class="stat-meta"><span id="dash-val-orders">0</span> transactions completed</div>
+        <div class="stat-meta"><span id="dash-val-orders">0</span> ${t("tx_completed", "transactions completed")}</div>
       </div>
       <div class="stat-card stagger-2">
         <div class="stat-label">${t.low_stock_items}</div>
@@ -1130,6 +1780,13 @@ async function renderDashboard() {
         <div class="stat-label">${t.total_revenue}</div>
         <div class="stat-value" id="dash-val-revenue" style="color: var(--navy);">₹0.00</div>
         <div class="stat-meta">Authoritative posted invoices</div>
+      </div>
+      ` : ''}
+      ${Number(metrics.pending_credit_dues || 0) > 0 ? `
+      <div class="stat-card stagger-5" style="border-left: 4px solid var(--coral);">
+        <div class="stat-label">Month-End Credit Dues</div>
+        <div class="stat-value" style="color: var(--coral);">₹${Number(metrics.pending_credit_dues).toFixed(2)}</div>
+        <div class="stat-meta">Pending customer receivables</div>
       </div>
       ` : ''}
     </div>
@@ -1284,7 +1941,7 @@ async function renderInventory() {
   container.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div>
-        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">Garment Inventory & Warehouse Stock</h2>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">${t("inventory_title", "Garment Inventory & Warehouse Stock")}</h2>
         <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • Authoritative size/color matrix.</p>
       </div>
       ${(!state.isStaff || (state.business && (state.business.role === 'INVENTORY_MGR' || state.business.role === 'ADMIN' || state.business.role === 'OWNER'))) ? `
@@ -1296,7 +1953,7 @@ async function renderInventory() {
       ${items.length === 0 ? `
         <div style="text-align: center; padding: 48px 16px;">
           <div style="font-size: 38px; margin-bottom: 10px;">👗</div>
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">Garment Catalog is Empty</h3>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">${t("no_inventory_title", "Garment Catalog is Empty")}</h3>
           <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
             Add your first garment product with size/color variants to start tracking on-hand stock and billing on the POS.
           </p>
@@ -1307,7 +1964,7 @@ async function renderInventory() {
       ` : `
         <div style="padding: 14px 18px 0 18px;">
           <div style="position: relative; max-width: 440px;">
-            <input type="text" id="inventory-search-input" class="form-input" placeholder="Search by garment name, SKU, or fabric..." oninput="filterInventoryCatalog(this.value)" style="padding-left: 36px; font-size: 13px;">
+            <input type="text" id="inventory-search-input" class="form-input" placeholder="${t('search_garment_placeholder', 'Search by garment name, SKU, or fabric...')}" oninput="filterInventoryCatalog(this.value)" style="padding-left: 36px; font-size: 13px;">
             <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5;">🔍</span>
           </div>
         </div>
@@ -1315,17 +1972,17 @@ async function renderInventory() {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Product Name</th>
-                <th>Fabric</th>
-                <th>SKU</th>
-                <th>Size</th>
-                <th>Color</th>
-                <th>Rack Location</th>
-                <th>On-Hand</th>
-                <th>Reserved</th>
-                <th>Available</th>
-                <th>Status</th>
-                <th>Stock Operations</th>
+                <th>${t("product_name_col", "Product Name")}</th>
+                <th>${t("fabric_col", "Fabric")}</th>
+                <th>${t("sku", "SKU")}</th>
+                <th>${t("size_col", "Size")}</th>
+                <th>${t("color_col", "Color")}</th>
+                <th>${t("rack_location_col", "Rack Location")}</th>
+                <th>${t("on_hand_col", "On-Hand")}</th>
+                <th>${t("reserved_col", "Reserved")}</th>
+                <th>${t("available_col", "Available")}</th>
+                <th>${t("status_col", "Status")}</th>
+                <th>${t("stock_ops_col", "Stock Operations")}</th>
               </tr>
             </thead>
             <tbody id="inventory-table-body">
@@ -1374,14 +2031,14 @@ async function renderPOS() {
         <div style="width: 64px; height: 64px; border-radius: 50%; background: #E8F4F0; color: var(--teal); font-size: 30px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
           💼
         </div>
-        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 8px;">Cash Register Shift Required</h2>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 8px;">${t("shift_req_title", "Cash Register Shift Required")}</h2>
         <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px;">
-          To begin processing retail sales with tamper-proof financial reconciliation, please count and enter the opening cash float in the drawer.
+          ${t("shift_req_desc", "To begin processing retail sales with tamper-proof financial reconciliation, please count and enter the opening cash float in the drawer.")}
         </p>
 
         <form onsubmit="submitOpenShift(event)" style="text-align: left;">
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label" style="font-weight: 700;">Opening Cash Float (₹)</label>
+            <label class="form-label" style="font-weight: 700;">${t("open_float_label", "Opening Cash Float (₹)")}</label>
             <input type="number" step="0.01" id="shift-open-float" class="form-input" required value="2000.00" placeholder="e.g. 2000.00" style="font-size: 16px; font-weight: 700;">
             <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 4px;">Initial physical currency & coins placed into the store till.</small>
           </div>
@@ -1390,7 +2047,7 @@ async function renderPOS() {
             <input type="text" id="shift-open-notes" class="form-input" placeholder="e.g. Morning Counter Shift #1">
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 14.5px;">
-            Open Shift & Unlock Counter
+            ${t("open_shift_btn", "Open Shift & Unlock Counter")}
           </button>
         </form>
       </div>
@@ -1408,18 +2065,18 @@ async function renderPOS() {
     <!-- Counter Header & Shift Pill -->
     <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
       <div style="font-size: 13.5px; color: var(--navy); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span>Store Counter: <b>${state.storeName || state.business.name}</b></span>
+        <span>${t("store_counter", "Store Counter")}: <b>${state.storeName || state.business.name}</b></span>
         <span>•</span>
-        <span>Cashier: <b>${state.user.full_name} (${state.business.role})</b></span>
+        <span>${t("cashier", "Cashier")}: <b>${state.user.full_name} (${state.business.role})</b></span>
       </div>
 
       <div style="display: flex; align-items: center; gap: 10px;">
         <div style="background: #E8F4F0; border: 1px solid var(--teal-light); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--teal); font-weight: 700; display: flex; align-items: center; gap: 6px;">
           <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--teal); display: inline-block;"></span>
-          Shift #${state.currentShift.id} Active • Float: ₹${Number(state.currentShift.opening_cash).toFixed(2)}
+          ${t("shift_active", "Shift Active")} #${state.currentShift.id} • ${t("float_label", "Float")}: ₹${Number(state.currentShift.opening_cash).toFixed(2)}
         </div>
         <button class="btn btn-sm btn-outline" style="border-color: var(--coral); color: var(--coral); font-weight: 700;" onclick="openCloseShiftModal()">
-          Close Shift
+          ${t("close_shift", "Close Shift")}
         </button>
       </div>
     </div>
@@ -1427,13 +2084,13 @@ async function renderPOS() {
     <div class="pos-container">
       <!-- Left: Catalog & Size Selector -->
       <div class="pos-catalog">
-        <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+        <div style="display: flex; gap: 10px; margin-bottom: 14px; align-items: center;">
           <div style="position: relative; flex: 1;">
-            <input type="text" id="pos-search" class="form-input" placeholder="Scan barcode or search name/fabric (Press Enter or F2)..." oninput="filterPOSCatalog(this.value)" onkeydown="handlePOSSearchKeyDown(event)" style="padding-right: 40px;">
+            <input type="text" id="pos-search" class="form-input" placeholder="${t('scan_search_placeholder', 'Scan barcode or search name/fabric (F2)...')}" oninput="handlePOSSearchInput(this.value)" onkeydown="handlePOSSearchKeyDown(event)" style="padding-right: 40px;">
             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; opacity: 0.5;">🔍</span>
           </div>
-          <button class="btn btn-secondary" onclick="document.getElementById('pos-search').focus();" title="Keyboard Shortcut: F2">
-            F2 Focus
+          <button class="btn btn-secondary" onclick="openCustomItemModal()" title="Add ad-hoc garment or alteration">
+            ${t("custom_item_btn", "+ Custom Item")}
           </button>
         </div>
 
@@ -1442,75 +2099,64 @@ async function renderPOS() {
         </div>
       </div>
 
-      <!-- Right: POS Cart & Checkout -->
+      <!-- Right: POS Cart & Checkout (Billing-First Flow) -->
       <div class="pos-cart">
-        <div style="padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 15px; font-weight: 700; color: var(--navy); margin: 0;">Sale Cart</h3>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm btn-secondary" onclick="clearCart()" title="Keyboard Shortcut: F8">Clear (F8)</button>
-          </div>
+        <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #fff;">
+          <h3 style="font-size: 15px; font-weight: 800; color: var(--navy); margin: 0;">${t("pos_terminal_title", "POS Counter Till")}</h3>
+          <button class="btn btn-sm btn-secondary" onclick="clearCart()" title="Keyboard Shortcut: F8">${t("clear_cart", "Clear (F8)")}</button>
         </div>
 
-        <div class="cart-items" id="cart-items-list">
+        <div style="padding: 14px 16px; border-bottom: 1px solid var(--border); background: #FAF9F6;">
+          <!-- 1. Customer Name field FIRST at the top -->
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+            ${t("customer_details_title", "1. Customer Details (Optional for Cash/UPI, Required for Store Credit)")}
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+            <input type="text" id="pos-cust-name" class="form-input" placeholder="${t('customer_name_placeholder', 'Customer Name')}" style="font-size: 12.5px; padding: 7px 10px;">
+            <input type="tel" id="pos-cust-phone" class="form-input" placeholder="${t('mobile_no_placeholder', 'Mobile No. (10 Digits)')}" style="font-size: 12.5px; padding: 7px 10px;">
+          </div>
+
+          <!-- 2. Invoice Theme Compact Thumbnail Row -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+              ${t("invoice_theme_title", "2. Invoice Theme")}
+            </span>
+            <span id="pos-theme-name-display" style="font-size: 11px; color: var(--teal); font-weight: 700;">${getThemeName(state.selectedPOSTheme)}</span>
+          </div>
+          <div class="pos-theme-mini-row" id="pos-theme-mini-row">
+            ${renderThemeThumbnails()}
+          </div>
+          <input type="hidden" id="pos-theme-select" value="${state.selectedPOSTheme || 'PREMIUM_BOUTIQUE'}">
+
+          <!-- 3. Payment Mode Selector: Cash / UPI / Card / Split / Store Credit -->
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; margin-top: 12px; letter-spacing: 0.5px;">
+            ${t("payment_mode_title", "3. Payment Mode")} (${state.defaultPaymentMode})
+          </div>
+          <div class="pos-payment-segmented">
+            <button type="button" class="pos-pay-pill ${state.defaultPaymentMode === 'CASH' ? 'active' : ''}" data-mode="CASH" onclick="selectPaymentMode('CASH')">${t("pay_cash", "Cash")}</button>
+            <button type="button" class="pos-pay-pill ${state.defaultPaymentMode === 'UPI' ? 'active' : ''}" data-mode="UPI" onclick="selectPaymentMode('UPI')">${t("pay_upi", "UPI QR")}</button>
+            <button type="button" class="pos-pay-pill ${state.defaultPaymentMode === 'CARD' ? 'active' : ''}" data-mode="CARD" onclick="selectPaymentMode('CARD')">${t("pay_card", "Card")}</button>
+            <button type="button" class="pos-pay-pill ${state.defaultPaymentMode === 'SPLIT' ? 'active' : ''}" data-mode="SPLIT" onclick="selectPaymentMode('SPLIT')">${t("pay_split", "Split")}</button>
+            <button type="button" class="pos-pay-pill ${state.defaultPaymentMode === 'CREDIT' ? 'active' : ''}" data-mode="CREDIT" onclick="selectPaymentMode('CREDIT')">${t("pay_credit", "Store Credit")}</button>
+          </div>
+          <input type="hidden" id="pos-payment-mode" value="${state.defaultPaymentMode || 'CASH'}">
+        </div>
+
+        <!-- Cart Items List -->
+        <div class="cart-items" id="cart-items-list" style="flex: 1; overflow-y: auto; max-height: 260px; padding: 10px 16px;">
           ${renderCartItems()}
         </div>
 
-        <div class="cart-summary" style="padding: 16px 18px;">
-          <!-- Customer info -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
-            <input type="text" id="pos-cust-name" class="form-input" placeholder="Customer Name (optional)" style="font-size: 12px; padding: 6px 10px;">
-            <input type="text" id="pos-cust-phone" class="form-input" placeholder="Mobile No. (optional)" style="font-size: 12px; padding: 6px 10px;">
-          </div>
-
-          <!-- Theme selector -->
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label class="form-label" style="font-size: 11.5px; font-weight: 700;">Invoice Theme (6 Configurable Themes)</label>
-            <select id="pos-theme-select" class="form-select" style="font-size: 12.5px;">
-              <option value="CLASSIC_GST">1. Classic GST (HSN/Tax breakdown)</option>
-              <option value="MODERN_MINIMAL">2. Modern Minimal (Editorial typography)</option>
-              <option value="PREMIUM_BOUTIQUE" selected>3. Premium Boutique (Luxury Atelier)</option>
-              <option value="WHOLESALE_DEALER">4. Wholesale & Dealer (Size matrix)</option>
-              <option value="COMPACT_THERMAL">5. Compact Thermal (80mm POS Roll)</option>
-              <option value="INTERNATIONAL_COMMERCIAL">6. International Commercial (Export)</option>
-            </select>
-          </div>
-
-          <!-- Payment Mode -->
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label class="form-label" style="font-size: 11.5px; font-weight: 700;">Payment Mode</label>
-            <select id="pos-payment-mode" class="form-select" style="font-size: 12.5px;" onchange="onPaymentModeChange(this.value)">
-              <option value="UPI">UPI (QR Scan / Instant)</option>
-              <option value="CASH">Cash (Drawer Till)</option>
-              <option value="CARD">Debit / Credit Card</option>
-              <option value="SPLIT">Split Payment</option>
-              <option value="CREDIT">Store Credit / Khata</option>
-            </select>
-          </div>
-
-          <!-- UPI Verification Section -->
-          <div id="pos-upi-box" style="background: #F0F9F8; border: 1px solid var(--teal-light); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 11.5px; font-weight: 700; color: var(--teal); text-transform: uppercase;">UPI Instant Pay</span>
-              <span id="pos-upi-amount-display" style="font-size: 13px; font-weight: 800; color: var(--navy);">₹0.00</span>
-            </div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
-              UPI VPA: <b>${(state.business.name || 'vastrenix').toLowerCase().replace(/[^a-z0-9]/g, '')}@upi</b>
-            </div>
-            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; font-weight: 600; color: var(--navy); cursor: pointer; user-select: none;">
-              <input type="checkbox" id="pos-upi-verified" style="margin-top: 2px;">
-              <span>Mark as verified (Payment received on Soundbox / App)</span>
-            </label>
-          </div>
-
+        <div class="cart-summary" style="padding: 14px 16px; border-top: 1px solid var(--border); background: #fff;">
           <!-- Cart Totals & Discount -->
           <div class="cart-row">
-            <span>Subtotal:</span>
+            <span>${t("subtotal", "Subtotal")}:</span>
             <span id="pos-subtotal">₹0.00</span>
           </div>
 
           <div class="cart-row" style="align-items: center;">
             <span style="display: flex; align-items: center; gap: 4px;">
-              Discount:
+              ${t("discount", "Discount")}:
               ${canDiscount ? '' : '<small style="color: var(--text-muted);">(Locked)</small>'}
             </span>
             <div>
@@ -1526,17 +2172,17 @@ async function renderPOS() {
           </div>
 
           <div class="cart-row">
-            <span>GST (5%):</span>
+            <span>${t("tax_gst", "GST (5%)")}:</span>
             <span id="pos-tax">₹0.00</span>
           </div>
 
           <div class="cart-total-row">
-            <span>Grand Total:</span>
+            <span>${t("grand_total", "Grand Total")}:</span>
             <span id="pos-total" style="font-size: 18px; font-weight: 800; color: var(--navy);">₹0.00</span>
           </div>
 
           <button id="pos-complete-sale-btn" class="btn btn-primary" style="width: 100%; margin-top: 14px; padding: 13px; font-weight: 700; font-size: 14px;" onclick="completePOSSale()">
-            Complete Sale & Generate Invoice (F4)
+            ${t("complete_sale_btn", "Complete Sale & Generate Invoice (F4)")}
           </button>
         </div>
       </div>
@@ -1545,11 +2191,63 @@ async function renderPOS() {
   updateCartTotals();
 }
 
-function onPaymentModeChange(mode) {
-  const upiBox = document.getElementById("pos-upi-box");
-  if (upiBox) {
-    upiBox.style.display = (mode === "UPI") ? "block" : "none";
-  }
+const posThemesData = [
+  { id: "CLASSIC_GST", name: "Classic GST", tag: "GST Standard", color: "#1E3A8A" },
+  { id: "MODERN_MINIMAL", name: "Modern Minimal", tag: "Modern Retail", color: "#0D9488" },
+  { id: "PREMIUM_BOUTIQUE", name: "Premium Boutique", tag: "High Fashion", color: "#B45309" },
+  { id: "WHOLESALE_DEALER", name: "Wholesale & Dealer", tag: "B2B Wholesale", color: "#4B5563" },
+  { id: "COMPACT_THERMAL", name: "Compact Thermal", tag: "Counter POS", color: "#1F2937" },
+  { id: "INTERNATIONAL_COMMERCIAL", name: "Global Commercial", tag: "Global Trade", color: "#4338CA" }
+];
+
+function getThemeName(themeId) {
+  const t = posThemesData.find(x => x.id === themeId);
+  return t ? t.name : "Premium Boutique";
+}
+
+function renderThemeThumbnails() {
+  const active = state.selectedPOSTheme || "PREMIUM_BOUTIQUE";
+  return posThemesData.map(th => `
+    <div class="pos-theme-thumb ${th.id === active ? 'active' : ''}" onclick="selectPOSTheme('${th.id}')" title="${th.name}">
+      <div class="pos-theme-thumb-preview" style="border-top: 3px solid ${th.color};">
+        <div style="height: 4px; width: 60%; background: ${th.color}; margin-bottom: 2px; border-radius: 1px;"></div>
+        <div style="height: 2px; width: 90%; background: #E5E7EB; margin-bottom: 2px;"></div>
+        <div style="height: 2px; width: 75%; background: #E5E7EB; margin-bottom: 2px;"></div>
+        <div style="height: 3px; width: 45%; background: ${th.color}; margin-top: 3px; border-radius: 1px;"></div>
+      </div>
+      <div class="pos-theme-thumb-name">${th.tag}</div>
+    </div>
+  `).join('');
+}
+
+function selectPOSTheme(themeId) {
+  triggerHaptic("tick");
+  state.selectedPOSTheme = themeId;
+  localStorage.setItem("vastrenix_pos_theme", themeId);
+  const container = document.getElementById("pos-theme-mini-row");
+  if (container) container.innerHTML = renderThemeThumbnails();
+  const themeInput = document.getElementById("pos-theme-select");
+  if (themeInput) themeInput.value = themeId;
+  const nameDisplay = document.getElementById("pos-theme-name-display");
+  if (nameDisplay) nameDisplay.textContent = getThemeName(themeId);
+}
+
+function selectPaymentMode(mode) {
+  triggerHaptic("tick");
+  const hiddenInput = document.getElementById("pos-payment-mode");
+  if (hiddenInput) hiddenInput.value = mode;
+
+  document.querySelectorAll(".pos-pay-pill").forEach(pill => {
+    pill.classList.toggle("active", pill.getAttribute("data-mode") === mode);
+  });
+}
+
+let posSearchDebounceTimer = null;
+function handlePOSSearchInput(val) {
+  if (posSearchDebounceTimer) clearTimeout(posSearchDebounceTimer);
+  posSearchDebounceTimer = setTimeout(() => {
+    filterPOSCatalog(val);
+  }, 250);
 }
 
 function handlePOSSearchKeyDown(e) {
@@ -1558,9 +2256,8 @@ function handlePOSSearchKeyDown(e) {
     const query = e.target.value.trim().toLowerCase();
     if (!query) return;
 
-    // Direct exact match on SKU or Barcode
     for (const p of state.products) {
-      for (const v of p.variants) {
+      for (const v of (p.variants || [])) {
         if (v.sku.toLowerCase() === query || (v.barcode && v.barcode.toLowerCase() === query)) {
           if (v.available <= 0) {
             alert(`SKU ${v.sku} (${p.name}) is out of stock!`);
@@ -1574,10 +2271,9 @@ function handlePOSSearchKeyDown(e) {
       }
     }
 
-    // Partial search match if only one product/variant matches
     const matches = [];
     state.products.forEach(p => {
-      p.variants.forEach(v => {
+      (p.variants || []).forEach(v => {
         if (v.sku.toLowerCase().includes(query) || p.name.toLowerCase().includes(query)) {
           matches.push({ p, v });
         }
@@ -1592,7 +2288,7 @@ function handlePOSSearchKeyDown(e) {
   }
 }
 
-const debouncedFilterPOSCatalog = debounce((query) => {
+function filterPOSCatalog(query) {
   const container = document.getElementById("pos-items-grid");
   if (!container) return;
   const q = (query || "").trim().toLowerCase();
@@ -1602,7 +2298,7 @@ const debouncedFilterPOSCatalog = debounce((query) => {
   }
   const filtered = [];
   state.products.forEach(p => {
-    const matchingVariants = p.variants.filter(v => 
+    const matchingVariants = (p.variants || []).filter(v => 
       v.sku.toLowerCase().includes(q) || 
       p.name.toLowerCase().includes(q) || 
       (p.fabric && p.fabric.toLowerCase().includes(q)) || 
@@ -1618,18 +2314,16 @@ const debouncedFilterPOSCatalog = debounce((query) => {
   } else {
     container.innerHTML = renderPOSItems(filtered);
   }
-}, 250);
-
-function filterPOSCatalog(query) {
-  debouncedFilterPOSCatalog(query);
 }
 
 function renderPOSItems(products) {
   let html = "";
-  products.forEach(p => {
-    p.variants.forEach(v => {
+  (products || []).forEach(p => {
+    (p.variants || []).forEach(v => {
+      const inCart = state.cart.find(c => c.variantId === v.id);
+      const qtyInCart = inCart ? inCart.quantity : 0;
       html += `
-        <div style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="pos-item-card" style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
           <div>
             <div style="font-size: 11px; color: var(--text-muted);">${p.fabric || 'Textile'}</div>
             <div style="font-weight: 700; font-size: 13.5px; color: var(--navy); margin: 2px 0;">${p.name}</div>
@@ -1643,9 +2337,17 @@ function renderPOSItems(products) {
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
             <div style="font-weight: 800; font-size: 14px; color: var(--navy);">₹${v.retail_price.toFixed(2)}</div>
-            <button class="btn btn-sm btn-navy" ${v.available <= 0 ? 'disabled' : ''} onclick="addToCart(${v.id}, '${p.name.replace(/'/g, "\\'")}', '${v.size}', '${v.color}', ${v.retail_price}, '${v.sku}')">
-              + Add
-            </button>
+            ${qtyInCart > 0 ? `
+              <div class="pos-inline-stepper">
+                <button type="button" class="btn-step" onclick="stepItemCartQty(${v.id}, -1)">−</button>
+                <span class="qty-badge">${qtyInCart}</span>
+                <button type="button" class="btn-step" ${v.available <= qtyInCart ? 'disabled' : ''} onclick="stepItemCartQty(${v.id}, 1)">+</button>
+              </div>
+            ` : `
+              <button class="btn btn-sm btn-navy" ${v.available <= 0 ? 'disabled' : ''} onclick="addToCart(${v.id}, '${p.name.replace(/'/g, "\\'")}', '${v.size}', '${v.color}', ${v.retail_price}, '${v.sku}')">
+                + Add
+              </button>
+            `}
           </div>
         </div>
       `;
@@ -1660,30 +2362,102 @@ function addToCart(variantId, name, size, color, price, sku) {
   if (existing) {
     existing.quantity += 1;
   } else {
-    state.cart.push({ variantId, name, size, color, price, sku, quantity: 1 });
+    state.cart.push({ variantId, name, size, color, price: Number(price), sku, quantity: 1 });
   }
   document.getElementById("cart-items-list").innerHTML = renderCartItems();
   updateCartTotals();
 }
 
+function stepItemCartQty(variantId, delta) {
+  const existing = state.cart.find(c => c.variantId === variantId);
+  if (!existing && delta > 0) {
+    for (const p of state.products) {
+      for (const v of (p.variants || [])) {
+        if (v.id === variantId) {
+          addToCart(v.id, p.name, v.size, v.color, v.retail_price, v.sku);
+          return;
+        }
+      }
+    }
+  } else if (existing) {
+    const idx = state.cart.indexOf(existing);
+    stepCartQty(idx, delta);
+  }
+}
+
+function openCustomItemModal() {
+  const nameInput = document.getElementById("custom-item-name");
+  const priceInput = document.getElementById("custom-item-price");
+  const qtyInput = document.getElementById("custom-item-qty");
+  if (nameInput) nameInput.value = "";
+  if (priceInput) priceInput.value = "";
+  if (qtyInput) qtyInput.value = "1";
+  const modal = document.getElementById("modal-pos-custom-item");
+  if (modal) modal.classList.add("active");
+}
+
+function submitCustomItem(event) {
+  event.preventDefault();
+  const name = document.getElementById("custom-item-name").value.trim() || "Custom Garment";
+  const price = parseFloat(document.getElementById("custom-item-price").value) || 0;
+  const qty = parseInt(document.getElementById("custom-item-qty").value, 10) || 1;
+
+  if (price <= 0) {
+    alert("Please enter a valid unit price greater than ₹0.");
+    return;
+  }
+  if (qty <= 0) {
+    alert("Quantity must be at least 1.");
+    return;
+  }
+
+  const sku = "AD-HOC-" + Date.now().toString().slice(-4);
+  state.cart.push({
+    variantId: null,
+    isCustom: true,
+    name,
+    size: "Standard",
+    color: "Custom",
+    price,
+    sku,
+    quantity: qty
+  });
+
+  closeModal("modal-pos-custom-item");
+  document.getElementById("cart-items-list").innerHTML = renderCartItems();
+  updateCartTotals();
+  triggerHaptic("success");
+}
+
 function renderCartItems() {
   if (state.cart.length === 0) {
-    return `<div style="text-align: center; color: var(--text-muted); padding: 40px 10px; font-size: 13px;">Cart is empty. Scan barcodes or click '+ Add' from catalog.</div>`;
+    return `<div style="text-align: center; color: var(--text-muted); padding: 40px 10px; font-size: 13px;">Cart is empty. Scan barcodes, click '+ Add', or add a Custom Item.</div>`;
   }
-  return state.cart.map((item, idx) => `
-    <div class="cart-item cart-item-enter" id="cart-item-row-${idx}" style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-      <div style="flex: 1; padding-right: 8px;">
-        <div style="font-weight: 700; font-size: 13px; color: var(--navy);">${item.name}</div>
-        <div style="font-size: 11.5px; color: var(--text-muted);">${item.size} / ${item.color} • <b style="color: var(--navy);">₹${item.price.toFixed(2)}</b></div>
+  return state.cart.map((item, idx) => {
+    const lineTotal = (Number(item.price || 0) * Number(item.quantity || 1)).toFixed(2);
+    return `
+      <div class="cart-item cart-item-enter" id="cart-item-row-${idx}" style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex: 1; padding-right: 8px;">
+          <div style="font-weight: 700; font-size: 13px; color: var(--navy); display: flex; align-items: center; gap: 6px;">
+            <span>${item.name}</span>
+            ${item.isCustom ? '<span class="badge badge-neutral" style="font-size: 9.5px; padding: 1px 5px;">Custom</span>' : ''}
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">
+            ${item.size || 'STD'} / ${item.color || 'Assorted'} • <span style="color: var(--navy);">₹${Number(item.price || 0).toFixed(2)} each</span>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: var(--teal); margin-top: 2px;">
+            Line Total: ₹${lineTotal}
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button type="button" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, -1)">-</button>
+          <input type="number" min="1" value="${item.quantity}" style="width: 42px; height: 32px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-weight: 700; font-size: 13px;" onchange="updateCartQty(${idx}, this.value)">
+          <button type="button" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, 1)">+</button>
+          <button type="button" style="width: 28px; height: 28px; border: none; background: none; color: var(--coral); cursor: pointer; font-size: 18px; margin-left: 2px;" onclick="removeFromCart(${idx})" title="Remove item">&times;</button>
+        </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <button type="button" style="width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, -1)">-</button>
-        <input type="number" min="1" value="${item.quantity}" style="width: 44px; height: 34px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-weight: 700; font-size: 13px;" onchange="updateCartQty(${idx}, this.value)">
-        <button type="button" style="width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--border); background: #fff; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;" onclick="stepCartQty(${idx}, 1)">+</button>
-        <button type="button" style="width: 30px; height: 30px; border: none; background: none; color: var(--coral); cursor: pointer; font-size: 18px; margin-left: 2px;" onclick="removeFromCart(${idx})" title="Remove item">&times;</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function stepCartQty(idx, delta) {
@@ -1746,42 +2520,122 @@ function clearCart() {
 }
 
 function updateCartTotals() {
-  const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = state.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
   const discountInput = document.getElementById("pos-discount");
   const discountVal = discountInput ? Math.max(0, parseFloat(discountInput.value) || 0) : 0;
-  const total = Math.max(0, subtotal - discountVal);
+  const taxable = Math.max(0, subtotal - discountVal);
+  const tax = taxable * 0.05;
+  const total = taxable + tax;
 
   const subEl = document.getElementById("pos-subtotal");
   if (subEl) subEl.textContent = `₹${subtotal.toFixed(2)}`;
 
-  const totalEl = document.getElementById("pos-cart-total");
-  if (totalEl) {
-    const currentNum = parseFloat(totalEl.textContent.replace(/[^0-9.]/g, '')) || 0;
-    animateNumber(totalEl, currentNum, total, 450, "₹", "", 2);
+  const taxEl = document.getElementById("pos-tax");
+  if (taxEl) taxEl.textContent = `₹${tax.toFixed(2)}`;
+
+  const totalEl = document.getElementById("pos-total");
+  if (totalEl) totalEl.textContent = `₹${total.toFixed(2)}`;
+
+  const cartTotalEl = document.getElementById("pos-cart-total");
+  if (cartTotalEl) {
+    const currentNum = parseFloat(cartTotalEl.textContent.replace(/[^0-9.]/g, '')) || 0;
+    animateNumber(cartTotalEl, currentNum, total, 450, "₹", "", 2);
   }
 
-  const upiEl = document.getElementById("pos-upi-amount-display");
-  if (upiEl) upiEl.textContent = `₹${total.toFixed(2)}`;
+  const grid = document.getElementById("pos-items-grid");
+  if (grid && state.products) {
+    const searchInput = document.getElementById("pos-search");
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    if (!query) {
+      grid.innerHTML = renderPOSItems(state.products);
+    }
+  }
+}
+
+let pendingUpiSaleData = null;
+
+function openUpiPaymentModal(totalAmount) {
+  const modal = document.getElementById("modal-upi-payment");
+  if (!modal) return;
+
+  const amountEl = document.getElementById("upi-modal-amount");
+  if (amountEl) amountEl.textContent = `₹${totalAmount.toFixed(2)}`;
+
+  const vpa = `${(state.business && state.business.name ? state.business.name : 'vastrenix').toLowerCase().replace(/[^a-z0-9]/g, '')}@upi`;
+  const vpaEl = document.getElementById("upi-modal-vpa");
+  if (vpaEl) vpaEl.textContent = vpa;
+
+  const qrContainer = document.getElementById("upi-modal-qr-container");
+  if (qrContainer) {
+    const upiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(state.storeName || (state.business && state.business.name) || 'Vastrenix')}&am=${totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('POS Sale')}`;
+    qrContainer.innerHTML = `
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiUri)}" alt="UPI QR Code" style="width: 180px; height: 180px; border-radius: 8px; border: 1px solid var(--border);" onerror="this.outerHTML='<div style=\\'width:180px;height:180px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;font-size:12px;color:#6b7280;text-align:center;padding:10px;\\'>Scan with any UPI App<br><b>${vpa}</b></div>'">
+    `;
+  }
+
+  const paidBtn = document.getElementById("upi-paid-btn");
+  if (paidBtn) paidBtn.style.display = "block";
+  const utrSection = document.getElementById("upi-utr-capture-section");
+  if (utrSection) utrSection.style.display = "none";
+  const utrInput = document.getElementById("upi-utr-input");
+  if (utrInput) utrInput.value = "";
+
+  modal.classList.add("active");
+}
+
+function onUpiPaidTapped() {
+  triggerHaptic("tick");
+  const paidBtn = document.getElementById("upi-paid-btn");
+  if (paidBtn) paidBtn.style.display = "none";
+  const utrSection = document.getElementById("upi-utr-capture-section");
+  if (utrSection) {
+    utrSection.style.display = "block";
+    const utrInput = document.getElementById("upi-utr-input");
+    if (utrInput) utrInput.focus();
+  }
+}
+
+async function confirmUpiSaleWithUtr(skip) {
+  triggerHaptic("tick");
+  const utrInput = document.getElementById("upi-utr-input");
+  const utr = skip ? null : (utrInput ? utrInput.value.trim() : null);
+  closeModal("modal-upi-payment");
+
+  if (!pendingUpiSaleData) return;
+  const payload = pendingUpiSaleData;
+  pendingUpiSaleData = null;
+
+  if (utr) {
+    payload.reference_number = utr;
+    payload.transaction_reference = utr;
+  }
+
+  await executeSalePost(payload);
 }
 
 async function completePOSSale() {
   if (state.cart.length === 0) return alert("Please add at least one item to the cart");
 
-  const paymentMode = document.getElementById("pos-payment-mode").value;
-  if (paymentMode === "UPI") {
-    const verified = document.getElementById("pos-upi-verified");
-    if (!verified || !verified.checked) {
-      return alert("Manual UPI Verification Required: Please verify payment received on the Soundbox or Bank App and check the verification box before issuing invoice.");
+  const modeInput = document.getElementById("pos-payment-mode");
+  const paymentMode = modeInput ? modeInput.value : (state.defaultPaymentMode || "CASH");
+  const customerName = document.getElementById("pos-cust-name") ? document.getElementById("pos-cust-name").value.trim() : "";
+  const customerPhone = document.getElementById("pos-cust-phone") ? document.getElementById("pos-cust-phone").value.trim() : "";
+
+  // Part 8: Customer Name and Phone mandatory for Store Credit
+  if (paymentMode === "CREDIT" || paymentMode === "STORE_CREDIT") {
+    if (!customerName || !customerPhone) {
+      alert("Store Credit Requirement:\nCustomer Name AND Mobile Number are strictly required to record outstanding receivables.");
+      if (!customerName && document.getElementById("pos-cust-name")) document.getElementById("pos-cust-name").focus();
+      else if (!customerPhone && document.getElementById("pos-cust-phone")) document.getElementById("pos-cust-phone").focus();
+      return;
     }
   }
 
-  const theme = document.getElementById("pos-theme-select").value;
+  const themeInput = document.getElementById("pos-theme-select");
+  const theme = state.selectedPOSTheme || (themeInput ? themeInput.value : "PREMIUM_BOUTIQUE");
   const discountInput = document.getElementById("pos-discount");
   const discountVal = discountInput ? Math.max(0, parseFloat(discountInput.value) || 0) : 0;
-  const customerName = document.getElementById("pos-cust-name") ? document.getElementById("pos-cust-name").value.trim() : "Walk-in Retail Client";
-  const customerPhone = document.getElementById("pos-cust-phone") ? document.getElementById("pos-cust-phone").value.trim() : "";
 
-  // Unique client idempotency key to prevent double sales on double-tap or retries
   const idempotencyKey = "POS-IDEMP-" + Date.now() + "-" + Math.random().toString(36).substring(2, 9);
 
   const payload = {
@@ -1789,11 +2643,11 @@ async function completePOSSale() {
     customer_name: customerName || "Walk-in Retail Client",
     customer_phone: customerPhone || undefined,
     items: state.cart.map(c => ({
-      variant_id: c.variantId,
+      variant_id: c.variantId || null,
       product_name: c.name,
-      size: c.size,
-      color: c.color,
-      sku: c.sku,
+      size: c.size || "STD",
+      color: c.color || "Assorted",
+      sku: c.sku || "CUSTOM",
       quantity: c.quantity,
       unit_price: c.price,
       tax_rate: 5.0
@@ -1803,6 +2657,20 @@ async function completePOSSale() {
     invoice_theme: theme
   };
 
+  // Part 6: If UPI, open QR modal first to verify payment & capture optional UTR
+  if (paymentMode === "UPI") {
+    const subtotal = state.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+    const taxable = Math.max(0, subtotal - discountVal);
+    const total = taxable + (taxable * 0.05);
+    pendingUpiSaleData = payload;
+    openUpiPaymentModal(total);
+    return;
+  }
+
+  await executeSalePost(payload);
+}
+
+async function executeSalePost(payload) {
   const btn = document.getElementById("pos-complete-sale-btn");
   if (btn) {
     btn.disabled = true;
@@ -1812,7 +2680,7 @@ async function completePOSSale() {
   try {
     const res = await api("/pos/sale", {
       method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
+      headers: { "Idempotency-Key": payload.idempotency_key },
       body: JSON.stringify(payload)
     });
 
@@ -1820,22 +2688,12 @@ async function completePOSSale() {
       triggerHaptic("success");
       if (btn) {
         btn.style.background = "var(--teal)";
-        btn.innerHTML = `
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
-            <path class="draw-check" d="M20 6L9 17l-5-5"/>
-          </svg>
-          Sale Confirmed & Saved!
-        `;
+        btn.innerHTML = `✓ Sale Confirmed & Saved!`;
       }
 
-      await new Promise(r => setTimeout(r, 450));
-
-      if (res.pdf_status === "FAILED") {
-        alert(`Invoice ${res.invoice_number} saved successfully, but background PDF generation failed or timed out.\nYou can click 'Retry PDF' on the invoice history tab.`);
-      } else {
-        openInvoicePdf(res.invoice_id, res.invoice_number);
-      }
+      await new Promise(r => setTimeout(r, 400));
       clearCart();
+      viewInvoiceInApp(res.invoice_id, res.invoice_number);
       switchTab("invoices");
     }
   } finally {
@@ -1941,28 +2799,29 @@ async function submitCloseShift(e) {
 async function retryInvoicePdf(id, invoiceNumber) {
   const res = await api(`/pos/invoices/${id}/retry-pdf`, { method: "POST" });
   if (res && res.pdf_filename) {
-    alert(`PDF for ${invoiceNumber} generated successfully! Opening download...`);
-    openInvoicePdf(id, invoiceNumber);
+    alert(`PDF for ${invoiceNumber} generated successfully! Opening in-app view...`);
+    viewInvoiceInApp(id, invoiceNumber);
     renderInvoices();
   }
+}
+
+async function refreshInvoices(force = false) {
+  const tableContainer = document.getElementById("invoices-table-container");
+  if (tableContainer) {
+    tableContainer.innerHTML = `
+      <div style="padding: 30px; text-align: center; color: var(--navy);">
+        <div class="spinner"></div>
+        <div style="margin-top: 10px; font-weight: 600;">Refreshing invoice records from cloud...</div>
+      </div>
+    `;
+  }
+  await renderInvoices();
 }
 
 // Render Invoices List
 async function renderInvoices() {
   const container = document.getElementById("tab-content");
-  container.innerHTML = `
-    <div style="margin-bottom: 20px;">
-      <div class="skeleton skeleton-text" style="width: 280px; height: 24px; margin-bottom: 10px;"></div>
-      <div class="skeleton skeleton-text" style="width: 380px; height: 14px;"></div>
-    </div>
-    <div class="panel">
-      <div class="table-responsive">
-        <table class="data-table"><tbody>${getSkeletonTableRowsHTML(8, 4)}</tbody></table>
-      </div>
-    </div>
-  `;
-  const invoices = await api("/pos/invoices");
-  if (!invoices) return;
+  if (!container) return;
 
   const currentDefaultTheme = (state.business && state.business.default_invoice_theme) || "CLASSIC_GST";
 
@@ -1978,17 +2837,22 @@ async function renderInvoices() {
   container.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div>
-        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">Authoritative Invoices & Billing Records</h2>
-        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || state.business.name}</b> • View posted invoices and download PDFs.</p>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--navy);">${t("invoices_title", "Authoritative Invoices & Billing Records")}</h2>
+        <p style="color: var(--text-muted); font-size: 13px;">Store: <b>${state.storeName || (state.business && state.business.name) || 'My Store'}</b> • View posted invoices and download PDFs.</p>
       </div>
-      <button class="btn btn-primary" onclick="switchTab('pos')">+ New POS Sale</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary" onclick="refreshInvoices(true)" id="btn-refresh-invoices" style="display: flex; align-items: center; gap: 6px;">
+          ${t("refresh_invoices_btn", "↻ Refresh Invoices")}
+        </button>
+        <button class="btn btn-primary" onclick="switchTab('pos')">${t("new_pos_sale", "+ New POS Sale")}</button>
+      </div>
     </div>
 
     <!-- Live Theme Picker Carousel -->
     <div style="margin-bottom: 24px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <span style="font-size: 13.5px; font-weight: 800; color: var(--navy);">6 Invoice Themes (Swipe to Preview & Select Default)</span>
-        <span style="font-size: 11.5px; color: var(--teal); font-weight: 600;">Active: <b>${currentDefaultTheme}</b></span>
+        <span style="font-size: 13.5px; font-weight: 800; color: var(--navy);">${t("six_themes_title", "6 Invoice Themes (Swipe to Preview & Select Default)")}</span>
+        <span style="font-size: 11.5px; color: var(--teal); font-weight: 600;">${t("active_theme_label", "Active")}: <b>${currentDefaultTheme}</b></span>
       </div>
       <div class="invoice-carousel-container">
         ${themesData.map(th => `
@@ -2000,67 +2864,93 @@ async function renderInvoices() {
             <div style="font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">${th.name}</div>
             <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4; flex: 1; margin-bottom: 12px;">${th.desc}</div>
             <div style="font-size: 11.5px; font-weight: 700; color: ${th.id === currentDefaultTheme ? 'var(--teal)' : 'var(--text-muted)'}; display: flex; align-items: center; gap: 4px;">
-              ${th.id === currentDefaultTheme ? '✓ Store Default' : 'Tap to set default'}
+              ${th.id === currentDefaultTheme ? t('store_default_badge', '✓ Store Default') : t('set_default_label', 'Tap to set default')}
             </div>
           </div>
         `).join('')}
       </div>
     </div>
 
-    <div class="panel">
-      ${invoices.length === 0 ? `
-        <div style="text-align: center; padding: 48px 16px;">
-          <div style="font-size: 38px; margin-bottom: 10px;">🧾</div>
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">No Invoices Posted Yet</h3>
-          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
-            Invoices are immutable business records. Complete your first garment sale on the POS Till to generate a GST invoice with instant PDF download.
-          </p>
-          <button class="btn btn-primary" onclick="switchTab('pos')">Open POS Billing Till ➔</button>
-        </div>
-      ` : `
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Invoice Number</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Theme</th>
-                <th>Total Amount</th>
-                <th>Paid</th>
-                <th>Payment Mode</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${invoices.map(inv => `
-                <tr>
-                  <td><b>${inv.invoice_number}</b></td>
-                  <td>${inv.date}</td>
-                  <td>${inv.customer_name}</td>
-                  <td><span class="badge badge-neutral">${inv.invoice_theme}</span></td>
-                  <td><b>₹${Number(inv.total_amount).toFixed(2)}</b></td>
-                  <td style="color: var(--teal);">₹${Number(inv.paid_amount).toFixed(2)}</td>
-                  <td>${inv.payment_mode}</td>
-                  <td>
-                    ${inv.payment_status === 'VOID' || inv.payment_status === 'REVERSED' 
-                      ? '<span class="badge badge-danger">VOID / REVERSED</span>' 
-                      : `<span class="badge badge-success">${inv.payment_status}</span>`}
-                  </td>
-                  <td>
-                    <button onclick="openInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
-                    <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
-                    <button onclick="retryInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-outline" title="Re-render PDF">Retry</button>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `}
+    <div class="panel" id="invoices-table-container">
+      <div class="table-responsive">
+        <table class="data-table"><tbody>${getSkeletonTableRowsHTML(6, 4)}</tbody></table>
+      </div>
     </div>
   `;
+
+  try {
+    const invoices = await api("/pos/invoices");
+    const tableContainer = document.getElementById("invoices-table-container");
+    if (!tableContainer) return;
+
+    if (!invoices || invoices.length === 0) {
+      tableContainer.innerHTML = `
+        <div style="text-align: center; padding: 48px 16px;">
+          <div style="font-size: 38px; margin-bottom: 10px;">🧾</div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px;">${t("no_invoices_title", "No Invoices Posted Yet")}</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
+            ${t("no_invoices_desc", "Invoices are immutable business records. Complete your first garment sale on the POS Till to generate a GST invoice with instant PDF download.")}
+          </p>
+          <button class="btn btn-primary" onclick="switchTab('pos')">${t("open_pos_till_btn", "Open POS Billing Till ➔")}</button>
+        </div>
+      `;
+      return;
+    }
+
+    tableContainer.innerHTML = `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>${t("invoice_number_col", "Invoice Number")}</th>
+              <th>${t("date_col", "Date")}</th>
+              <th>${t("customer_col", "Customer")}</th>
+              <th>${t("theme_col", "Theme")}</th>
+              <th>${t("total_amount_col", "Total Amount")}</th>
+              <th>${t("paid_col", "Paid")}</th>
+              <th>${t("payment_mode_title", "Payment Mode")}</th>
+              <th>${t("status_col", "Status")}</th>
+              <th>${t("actions_col", "Actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${invoices.map(inv => `
+              <tr>
+                <td><b>${inv.invoice_number}</b></td>
+                <td>${inv.date}</td>
+                <td>${inv.customer_name}</td>
+                <td><span class="badge badge-neutral">${inv.invoice_theme}</span></td>
+                <td><b>₹${Number(inv.total_amount).toFixed(2)}</b></td>
+                <td style="color: var(--teal);">₹${Number(inv.paid_amount).toFixed(2)}</td>
+                <td>${inv.payment_mode}</td>
+                <td>
+                  ${inv.payment_status === 'VOID' || inv.payment_status === 'REVERSED' 
+                    ? '<span class="badge badge-danger">VOID / REVERSED</span>' 
+                    : `<span class="badge badge-success">${inv.payment_status}</span>`}
+                </td>
+                <td>
+                  <button onclick="viewInvoiceInApp(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-navy">PDF</button>
+                  <button onclick="shareInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-secondary">Share</button>
+                  <button onclick="retryInvoicePdf(${inv.id}, '${inv.invoice_number}')" class="btn btn-sm btn-outline" title="Re-render PDF">Retry</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    const tableContainer = document.getElementById("invoices-table-container");
+    if (tableContainer) {
+      tableContainer.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--coral);">
+          <div style="font-size: 15px; font-weight: 700; margin-bottom: 8px;">Failed to load invoices from server</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">${err.message || 'Network request error'}</p>
+          <button class="btn btn-primary" onclick="refreshInvoices(true)">Retry Fetch</button>
+        </div>
+      `;
+    }
+  }
 }
 
 function selectStoreDefaultTheme(themeId) {
@@ -2795,7 +3685,7 @@ async function renderUsers() {
               </div>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-sm btn-primary" onclick="approveStaffMember(${s.membership_id}, '${s.full_name.replace(/'/g, "\\'")}')">✓ Approve</button>
-                <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">✕ Reject</button>
+                <button class="btn btn-sm btn-secondary" onclick="rejectStaffMember(${s.membership_id})">${t("reject_staff_btn", "✕ Reject")}</button>
               </div>
             </div>
           `).join('')}
@@ -3243,7 +4133,127 @@ function handleDevLogoTap() {
 }
 function handleDevLogoHold(e) {
   e.preventDefault();
-  openServerSettingsModal();
+  openStoreSettingsModal();
+}
+
+let versionSecretTapCount = 0;
+let versionSecretTapTimeout = null;
+function handleVersionSecretTap() {
+  versionSecretTapCount++;
+  console.log(`[DEV-SECRET] Version tap: ${versionSecretTapCount}/7`);
+  if (versionSecretTapTimeout) clearTimeout(versionSecretTapTimeout);
+
+  if (versionSecretTapCount >= 7) {
+    versionSecretTapCount = 0;
+    closeModal("modal-store-settings");
+    openServerSettingsModal();
+    showToast("Developer Server Settings unlocked");
+    return;
+  }
+  versionSecretTapTimeout = setTimeout(() => {
+    versionSecretTapCount = 0;
+  }, 3000);
+}
+
+function openStoreSettingsModal() {
+  const modal = document.getElementById("modal-store-settings");
+  if (!modal) return;
+  const payModeSelect = document.getElementById("settings-default-payment-mode");
+  if (payModeSelect) payModeSelect.value = state.defaultPaymentMode || "CASH";
+  const themeSelect = document.getElementById("settings-default-theme");
+  if (themeSelect) themeSelect.value = state.selectedPOSTheme || "PREMIUM_BOUTIQUE";
+
+  const titleLbl = document.getElementById("settings-title-label");
+  if (titleLbl) titleLbl.textContent = t("settings_modal_title", "Store & POS Settings");
+  const payModeLbl = document.getElementById("settings-paymode-label");
+  if (payModeLbl) payModeLbl.textContent = t("default_pay_mode_label", "Default POS Payment Mode");
+  const themeLbl = document.getElementById("settings-theme-label");
+  if (themeLbl) themeLbl.textContent = t("default_theme_label", "Default Invoice Theme");
+  const checkBtn = document.getElementById("settings-check-status-btn");
+  if (checkBtn) checkBtn.textContent = t("check_status_btn", "Check Status");
+  const doneBtn = document.getElementById("settings-done-btn");
+  if (doneBtn) doneBtn.textContent = t("done_btn", "Done");
+
+  updateSettingsConnectionDisplay();
+  modal.classList.add("active");
+}
+
+async function checkSettingsConnection() {
+  const dot = document.getElementById("settings-conn-dot");
+  const text = document.getElementById("settings-conn-text");
+  const meta = document.getElementById("settings-conn-meta");
+  const btn = document.getElementById("settings-check-status-btn");
+  if (btn) btn.disabled = true;
+  if (text) text.textContent = t("connecting_cloud", "Checking connection to VASTRENIX Cloud...");
+  if (dot) {
+    dot.style.background = "#F59E0B";
+    dot.style.boxShadow = "0 0 8px #F59E0B";
+  }
+
+  const startTime = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(`${getBaseServerUrl()}/health`, {
+      method: "GET",
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const elapsed = Date.now() - startTime;
+    if (res.ok) {
+      state.isServerConnected = true;
+      state.isServerWarm = true;
+      state.lastHealthCheckTime = new Date();
+      updateSettingsConnectionDisplay(true, elapsed);
+    } else {
+      updateSettingsConnectionDisplay(false, null, `Server responded with HTTP ${res.status}`);
+    }
+  } catch (err) {
+    const msg = !navigator.onLine ? t("device_offline_msg", "No internet connection detected.") : (err.name === "AbortError" ? "Connection timed out (>10s)" : err.message);
+    updateSettingsConnectionDisplay(false, null, msg);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function updateSettingsConnectionDisplay(isOnline = state.isServerConnected, latencyMs = null, errorMsg = null) {
+  const dot = document.getElementById("settings-conn-dot");
+  const text = document.getElementById("settings-conn-text");
+  const meta = document.getElementById("settings-conn-meta");
+  if (!text) return;
+
+  if (isOnline) {
+    if (dot) {
+      dot.style.background = "#10B981";
+      dot.style.boxShadow = "0 0 8px #10B981";
+    }
+    text.textContent = t("connected_status", "Connected to VASTRENIX Cloud");
+    text.style.color = "var(--navy)";
+    const timeStr = state.lastHealthCheckTime ? state.lastHealthCheckTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now";
+    const pingStr = latencyMs !== null ? ` (${latencyMs}ms)` : "";
+    if (meta) meta.textContent = `Online and verified at ${timeStr}${pingStr}. All store operations active.`;
+  } else {
+    if (dot) {
+      dot.style.background = "#EF4444";
+      dot.style.boxShadow = "0 0 8px #EF4444";
+    }
+    text.textContent = t("disconnected_status", "Disconnected (Offline / Reconnecting)");
+    text.style.color = "#DC2626";
+    if (meta) meta.textContent = errorMsg || t("conn_active_meta", "Unable to reach server. Local offline till mode is active.");
+  }
+}
+
+function setDefaultPaymentMode(mode) {
+  state.defaultPaymentMode = mode;
+  localStorage.setItem("vastrenix_default_payment_mode", mode);
+  showToast(`Default POS Payment Mode set to '${mode}'`);
+  const posHidden = document.getElementById("pos-payment-mode");
+  if (posHidden) selectPaymentMode(mode);
+}
+
+function setSettingsDefaultTheme(themeId) {
+  selectPOSTheme(themeId);
+  selectStoreDefaultTheme(themeId);
 }
 
 // Render Main App or Authentication Gate
@@ -3552,6 +4562,10 @@ async function renderApp() {
               </div>
             </div>
             <div class="topbar-right">
+              <button class="lang-compact-chip" onclick="openStoreSettingsModal()" title="Store & POS Settings" style="margin-right: 6px;">
+                <span style="font-size: 14px;">⚙️</span>
+                <span class="lang-code-text">Settings</span>
+              </button>
               <button class="lang-compact-chip" onclick="openLanguageModal()" title="Switch Language (English / हिन्दी / ગુજરાતી)">
                 <span class="lang-globe-icon">🌐</span>
                 <span class="lang-code-text">${state.lang==='hi' ? 'हि' : state.lang==='gu' ? 'ગુ' : 'EN'}</span>
@@ -4022,33 +5036,198 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+const AppState = {
+  LAUNCHING: "LAUNCHING",
+  CONNECTING: "CONNECTING",
+  CONNECTED: "CONNECTED",
+  CONNECTION_FAILED: "CONNECTION_FAILED"
+};
+
+let currentAppState = AppState.LAUNCHING;
+let launchColdStartTimer = null;
+let launchColdStartInterval = null;
+let launchElapsedSeconds = 0;
+
+function setAppState(newState, metadata = {}) {
+  currentAppState = newState;
+  console.log(`[APP-STATE] -> ${newState}`, metadata);
+
+  const splash = document.getElementById("vastrenix-splash-screen");
+  const spinner = document.getElementById("splash-spinner");
+  const statusText = document.getElementById("splash-status-text");
+  const subText = document.getElementById("splash-sub-text");
+  const actionContainer = document.getElementById("splash-action-container");
+
+  if (newState === AppState.LAUNCHING || newState === AppState.CONNECTING) {
+    if (splash) {
+      splash.style.display = "flex";
+      splash.classList.remove("splash-fade-out");
+    }
+    if (spinner) spinner.style.display = "block";
+    if (actionContainer) actionContainer.style.display = "none";
+    if (statusText) {
+      statusText.textContent = metadata.title || t("connecting_cloud", "Connecting to cloud server...");
+      statusText.style.color = "#FFF";
+    }
+    if (subText) {
+      subText.textContent = metadata.sub || t("checking_server_availability", "Checking server availability & secure session");
+      subText.style.color = "rgba(255, 255, 255, 0.85)";
+    }
+  } else if (newState === AppState.CONNECTED) {
+    if (launchColdStartTimer) clearTimeout(launchColdStartTimer);
+    if (launchColdStartInterval) clearInterval(launchColdStartInterval);
+    if (spinner) spinner.style.display = "none";
+    if (statusText) {
+      statusText.textContent = t("server_connected_msg", "✓ Server Connected");
+      statusText.style.color = "#10B981";
+    }
+    if (subText) {
+      subText.textContent = "Opening your store workspace...";
+      subText.style.color = "rgba(255, 255, 255, 0.9)";
+    }
+    if (actionContainer) actionContainer.style.display = "none";
+
+    // Dismiss splash screen smoothly after short confirmation
+    setTimeout(() => {
+      dismissSplashScreen();
+    }, 450);
+  } else if (newState === AppState.CONNECTION_FAILED) {
+    if (launchColdStartTimer) clearTimeout(launchColdStartTimer);
+    if (launchColdStartInterval) clearInterval(launchColdStartInterval);
+    if (spinner) spinner.style.display = "none";
+    if (statusText) {
+      statusText.textContent = t("cant_reach_title", "Can't reach VASTRENIX right now");
+      statusText.style.color = "#EF4444";
+    }
+    if (subText) {
+      subText.textContent = metadata.error || "Unable to establish connection to the cloud server.";
+      subText.style.color = "rgba(255, 255, 255, 0.85)";
+    }
+    if (actionContainer) {
+      actionContainer.style.display = "flex";
+      actionContainer.style.flexDirection = "column";
+      actionContainer.style.gap = "10px";
+      actionContainer.innerHTML = `
+        <button type="button" class="btn btn-primary" onclick="startAppLaunchSequence()" style="width: 100%; padding: 12px; font-weight: 700; background: #E65100; border: none; box-shadow: 0 4px 14px rgba(230,81,0,0.4); border-radius: 8px; color: #FFF; font-size: 14px; cursor: pointer;">
+          ⟳ ${t("retry_conn_btn", "Retry Connection")}
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="enterOfflineTillMode()" style="width: 100%; padding: 10px; font-size: 13px; background: rgba(255,255,255,0.12); color: #FFF; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; cursor: pointer;">
+          ${t("use_offline_till", "Open Offline POS Till")}
+        </button>
+      `;
+    }
+  }
+}
+
+async function startAppLaunchSequence() {
+  setAppState(AppState.CONNECTING, {
+    title: t("connecting_cloud", "Connecting to cloud server..."),
+    sub: t("checking_server_availability", "Checking server availability & secure session")
+  });
+
+  launchElapsedSeconds = 0;
+  if (launchColdStartInterval) clearInterval(launchColdStartInterval);
+  launchColdStartInterval = setInterval(() => {
+    launchElapsedSeconds++;
+    const statusText = document.getElementById("splash-status-text");
+    const subText = document.getElementById("splash-sub-text");
+    if (launchElapsedSeconds >= 4) {
+      if (statusText) {
+        statusText.textContent = `Waking up your store's server... (${launchElapsedSeconds}s)`;
+      }
+      if (subText) {
+        subText.textContent = "Render free-tier cold-start can take ~30-50s. Please hold on...";
+      }
+    }
+  }, 1000);
+
+  const startTime = Date.now();
+  const url = `${getBaseServerUrl()}/health`;
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), 65000); // 65 seconds max timeout
+
+  try {
+    let resStatus = 0;
+    try {
+      const res = await fetch(url, { method: "GET", signal: controller.signal });
+      resStatus = res.status;
+    } catch (fetchErr) {
+      // If WebView CORS or native file:// restriction, try Native Bridge
+      if (window.VastrenixNative && typeof window.VastrenixNative.fetchNative === "function") {
+        try {
+          const nativeRaw = window.VastrenixNative.fetchNative(url, "GET", "{}", "");
+          if (nativeRaw) {
+            const parsed = JSON.parse(nativeRaw);
+            if (parsed && parsed.status > 0) {
+              resStatus = parsed.status;
+            }
+          }
+        } catch (nativeErr) {
+          console.warn("[LAUNCH] Native bridge failed: " + nativeErr.message);
+        }
+      }
+      if (!resStatus) throw fetchErr;
+    }
+
+    clearTimeout(timeoutTimer);
+    clearInterval(launchColdStartInterval);
+
+    if (resStatus === 200) {
+      state.isServerConnected = true;
+      state.isServerWarm = true;
+      state.lastHealthCheckTime = new Date();
+      setAppState(AppState.CONNECTED);
+      try {
+        renderApp();
+      } catch (err) {
+        console.error("renderApp error after connected:", err);
+      }
+    } else {
+      setAppState(AppState.CONNECTION_FAILED, {
+        error: `Server responded with unexpected status (${resStatus}). Please tap Retry.`
+      });
+    }
+  } catch (err) {
+    clearTimeout(timeoutTimer);
+    clearInterval(launchColdStartInterval);
+
+    let reason = "Server is not responding. Please retry shortly.";
+    if (!navigator.onLine) {
+      reason = t("device_offline_msg", "No internet connection detected on your device. Please verify your Wi-Fi or mobile data.");
+    } else if (err.name === "AbortError" || launchElapsedSeconds >= 60) {
+      reason = t("server_slow_msg", "Server cold-start timed out (>60s). It may still be booting. Please tap Retry.");
+    } else if (err.message) {
+      reason = err.message.includes("Failed to fetch") 
+        ? "Network connection to server failed. Please check internet or retry."
+        : err.message;
+    }
+    setAppState(AppState.CONNECTION_FAILED, { error: reason });
+  }
+}
+
+function enterOfflineTillMode() {
+  dismissSplashScreen();
+  state.isServerConnected = false;
+  state.isOffline = true;
+  showToast("Offline POS Till Mode active. Sales will be saved locally.");
+  renderApp();
+}
+
 function dismissSplashScreen() {
   const splash = document.getElementById("vastrenix-splash-screen");
   if (splash && !splash.classList.contains("splash-fade-out")) {
-    const root = document.getElementById("app");
-    if (root && (!root.innerHTML || root.innerHTML.trim() === "")) {
-      try { renderApp(); } catch (e) { console.error("Fallback renderApp error:", e); }
-    }
     splash.classList.add("splash-fade-out");
     setTimeout(() => {
-      if (splash.parentNode) splash.parentNode.removeChild(splash);
+      splash.style.display = "none";
     }, 500);
   }
 }
 
-// Render immediately upon script evaluation
-try {
-  renderApp();
-} catch (e) {
-  console.error("Initial renderApp error:", e);
-}
-
+// Deterministic app launch sequence: probe server connection FIRST before displaying app/login
 if (document.readyState === "complete" || document.readyState === "interactive") {
-  setTimeout(renderApp, 1);
-  setTimeout(dismissSplashScreen, 1800);
+  startAppLaunchSequence();
 } else {
   window.addEventListener("DOMContentLoaded", () => {
-    renderApp();
-    setTimeout(dismissSplashScreen, 1800);
+    startAppLaunchSequence();
   });
 }

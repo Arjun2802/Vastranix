@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from backend.app.core.database import get_db
 from backend.app.core.permissions import get_tenant_context, TenantContext
-from backend.app.models.billing import Invoice, InvoiceItem
+from backend.app.models.billing import Invoice, InvoiceItem, Customer
 from backend.app.models.inventory import InventoryLevel
 from backend.app.models.product import ProductVariant, Product
 from backend.app.models.dealer import DealerOrder
@@ -71,6 +71,27 @@ def get_dashboard_metrics(
         CashShift.status == "OPEN"
     ).first()
 
+    # 5. Pending Store Credit / Khata Dues (Month-End Reminders - Part 8)
+    credit_invoices = db.query(Invoice).filter(
+        Invoice.business_id == ctx.business.id,
+        Invoice.payment_mode.in_(["CREDIT", "STORE_CREDIT"]),
+        Invoice.balance_due > 0,
+        Invoice.status == "POSTED"
+    ).order_by(Invoice.due_date.asc()).all()
+
+    credit_dues = []
+    for inv in credit_invoices:
+        cust = db.query(Customer).filter(Customer.id == inv.customer_id).first() if inv.customer_id else None
+        credit_dues.append({
+            "invoice_id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "customer_name": cust.name if cust else "Store Credit Customer",
+            "customer_phone": cust.phone if cust else "N/A",
+            "amount_owed": float(inv.balance_due),
+            "due_date": inv.due_date.strftime("%d-%b-%Y") if inv.due_date else "Month-End",
+            "is_month_end_due": True
+        })
+
     return {
         "business_name": ctx.business.name,
         "branch_name": ctx.branch.name if ctx.branch else "Main Branch",
@@ -83,7 +104,9 @@ def get_dashboard_metrics(
         "top_low_stock": low_stock_items[:5],
         "pending_dealer_orders": pending_dealer_orders,
         "has_open_shift": open_shift is not None,
-        "open_shift_cashier_id": open_shift.cashier_id if open_shift else None
+        "open_shift_cashier_id": open_shift.cashier_id if open_shift else None,
+        "pending_credit_dues": credit_dues,
+        "total_credit_due": sum(c["amount_owed"] for c in credit_dues)
     }
 
 @router.get("/valuation")

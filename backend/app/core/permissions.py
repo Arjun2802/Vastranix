@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -15,8 +15,13 @@ else:
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
-def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    if not token:
+def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    query_token: Optional[str] = Query(None, alias="token"),
+    db: Session = Depends(get_db)
+) -> User:
+    effective_token = token or query_token
+    if not effective_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -28,7 +33,7 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     # 1. Primary: Verify Firebase ID Token via Firebase Admin SDK
     if FIREBASE_AVAILABLE and auth and firebase_service.is_configured:
         try:
-            decoded = auth.verify_id_token(token)
+            decoded = auth.verify_id_token(effective_token)
             uid = decoded.get("uid")
             email = decoded.get("email", "")
             name = decoded.get("name") or decoded.get("display_name") or (email.split("@")[0] if email else "Staff Member")
@@ -55,7 +60,7 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
 
     # 2. Fallback: Local JWT decoder (for local tests & legacy offline tokens)
     if not user:
-        payload = decode_access_token(token)
+        payload = decode_access_token(effective_token)
         if payload and "sub" in payload:
             try:
                 user_id = int(payload["sub"])
@@ -89,9 +94,11 @@ class TenantContext:
 def get_tenant_context(
     x_business_id: Optional[int] = Header(None, alias="X-Business-ID"),
     x_branch_id: Optional[int] = Header(None, alias="X-Branch-ID"),
+    query_business_id: Optional[int] = Query(None, alias="business_id"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> TenantContext:
+    effective_biz_id = x_business_id or query_business_id
     # Check if user has an unapproved membership
     unapproved = db.query(UserMembership).filter(
         UserMembership.user_id == current_user.id,
@@ -104,8 +111,8 @@ def get_tenant_context(
         UserMembership.is_active == True,
         UserMembership.is_approved == True
     )
-    if x_business_id:
-        membership = query.filter(UserMembership.business_id == x_business_id).first()
+    if effective_biz_id:
+        membership = query.filter(UserMembership.business_id == effective_biz_id).first()
     else:
         membership = query.first()
 

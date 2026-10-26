@@ -60,7 +60,10 @@ def create_product(
 
         # Initialize stock in current branch if specified
         initial_qty = var.initial_stock or 0
-        branch_id = ctx.branch.id if ctx.branch else 1
+        branch = ctx.branch
+        if not branch:
+            branch = db.query(Branch).filter(Branch.business_id == ctx.business.id).first()
+        branch_id = branch.id if branch else 1
         level = InventoryLevel(
             variant_id=variant.id,
             branch_id=branch_id,

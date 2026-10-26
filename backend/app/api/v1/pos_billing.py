@@ -61,7 +61,10 @@ def process_pos_sale(
     ctx: TenantContext = Depends(require_roles(["OWNER", "ADMIN", "BRANCH_MANAGER", "CASHIER"])),
     db: Session = Depends(get_db)
 ):
-    branch_id = ctx.branch.id if ctx.branch else 1
+    branch = ctx.branch
+    if not branch:
+        branch = db.query(Branch).filter(Branch.business_id == ctx.business.id).first()
+    branch_id = branch.id if branch else 1
     idempotency_key = data.idempotency_key or idempotency_key_header
 
     # Check Idempotency Key to prevent duplicate invoices on network retry / double tap
@@ -87,6 +90,14 @@ def process_pos_sale(
                 "is_duplicate": True
             }
     
+    # Enforce Customer details for Store Credit sales (Part 8)
+    if data.payment_mode in ["CREDIT", "STORE_CREDIT"]:
+        if not data.customer_name or not data.customer_phone or not data.customer_phone.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Customer Name and Phone Number are strictly required for Store Credit / Khata sales."
+            )
+
     # 1. Resolve or create Customer
     customer = None
     if data.customer_id:
@@ -155,8 +166,18 @@ def process_pos_sale(
 
     discount_amount = Decimal(str(data.discount_amount))
     total_amount = max(Decimal("0.00"), subtotal + tax_total - discount_amount)
-    paid_amount = Decimal(str(data.paid_amount)) if data.paid_amount is not None else total_amount
-    balance_due = max(Decimal("0.00"), total_amount - paid_amount)
+
+    due_date = None
+    if data.payment_mode in ["CREDIT", "STORE_CREDIT"]:
+        import calendar
+        now = datetime.now(timezone.utc)
+        last_day = calendar.monthrange(now.year, now.month)[1]
+        due_date = datetime(now.year, now.month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        paid_amount = Decimal(str(data.paid_amount)) if data.paid_amount is not None else Decimal("0.00")
+        balance_due = max(Decimal("0.00"), total_amount - paid_amount)
+    else:
+        paid_amount = Decimal(str(data.paid_amount)) if data.paid_amount is not None else total_amount
+        balance_due = max(Decimal("0.00"), total_amount - paid_amount)
 
     payment_status = "PAID" if balance_due <= Decimal("0.00") else ("PARTIAL" if paid_amount > 0 else "UNPAID")
     theme = data.invoice_theme or ctx.business.default_invoice_theme or "CLASSIC_GST"
@@ -169,6 +190,7 @@ def process_pos_sale(
         idempotency_key=idempotency_key,
         invoice_number=inv_num,
         invoice_date=datetime.now(timezone.utc),
+        due_date=due_date,
         subtotal=subtotal,
         discount_amount=discount_amount,
         tax_amount=tax_total,
@@ -189,7 +211,8 @@ def process_pos_sale(
         item.invoice_id = invoice.id
         db.add(item)
 
-    # 5. Record Payment
+    # 5. Record Payment (with UTR / reference number capture)
+    utr = data.transaction_reference or data.reference_number
     if paid_amount > 0:
         payment = Payment(
             business_id=ctx.business.id,
@@ -197,15 +220,26 @@ def process_pos_sale(
             customer_id=customer.id if customer else None,
             amount=paid_amount,
             payment_mode=data.payment_mode,
-            verified=True,
+            reference_number=utr,
+            verified=bool(utr or data.payment_mode == "CASH"),
             cashier_id=ctx.user.id,
-            notes=f"Initial payment for {inv_num}"
+            notes=f"UPI UTR: {utr}" if utr else f"Initial payment for {inv_num}"
         )
         db.add(payment)
 
-    # If balance due and customer exists, update outstanding balance
+    # If balance due and customer exists, update outstanding balance & record month-end reminder (Part 8)
     if balance_due > 0 and customer:
-        customer.outstanding_balance += balance_due
+        customer.outstanding_balance = (customer.outstanding_balance or Decimal("0.00")) + balance_due
+        if data.payment_mode in ["CREDIT", "STORE_CREDIT"] and due_date:
+            from backend.app.models.notification import Notification
+            reminder = Notification(
+                business_id=ctx.business.id,
+                title=f"Store Credit Due: ₹{balance_due:.2f} ({customer.name})",
+                message=f"Outstanding khata / store credit of ₹{balance_due:.2f} for customer {customer.name} (Phone: {customer.phone}). Due at month-end on {due_date.strftime('%d-%b-%Y')}.",
+                notification_type="PAYMENT_DUE",
+                action_url=f"/invoices?id={invoice.id}"
+            )
+            db.add(reminder)
 
     db.commit()
     db.refresh(invoice)

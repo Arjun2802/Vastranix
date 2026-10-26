@@ -70,29 +70,174 @@
     </div>
   </div>
 
-  <!-- Immediate Launch Splash Screen: strictly auto-dismisses after 1.8-2.0s -->
-  <div id="vastrenix-splash-screen" class="vastrenix-splash-overlay">
-    <div class="vastrenix-splash-content">
-      <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" class="vastrenix-splash-logo">
-      <h1 class="vastrenix-splash-title">VASTRENIX</h1>
-      <p class="vastrenix-splash-tagline">Your Business, Beautifully in Sync.</p>
-      <div class="vastrenix-splash-spinner"></div>
-      <div class="vastrenix-splash-status">Loading business workspace...</div>
+  <!-- UPI Payment QR Modal (Part 6) -->
+  <div class="modal-overlay" id="modal-upi-payment" style="z-index: 100000;">
+    <div class="upi-qr-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-weight: 800; font-size: 17px; color: var(--navy);">UPI Counter Payment</div>
+        <button type="button" style="border: none; background: none; font-size: 22px; cursor: pointer;" onclick="closeModal('modal-upi-payment')">&times;</button>
+      </div>
+
+      <div style="font-size: 13px; color: var(--text-muted);">Scan with Google Pay, PhonePe, Paytm, or BHIM</div>
+
+      <div class="upi-qr-box">
+        <div id="upi-modal-qr-container"></div>
+        <div style="font-size: 24px; font-weight: 900; color: var(--navy); margin-top: 8px;" id="upi-modal-amount">₹0.00</div>
+        <div style="font-size: 12px; font-weight: 700; color: var(--teal); margin-top: 4px;">Store VPA: <span id="upi-modal-vpa">vastrenix@upi</span></div>
+      </div>
+
+      <div style="margin: 12px 0;">
+        <button type="button" id="upi-paid-btn" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 15px; font-weight: 700;" onclick="onUpiPaidTapped()">
+          ✓ Customer Has Paid
+        </button>
+      </div>
+
+      <!-- Step 2: Optional UTR / Reference capture -->
+      <div id="upi-utr-capture-section" style="display: none; background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 14px; margin-top: 10px; text-align: left;">
+        <label class="form-label" style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 6px;">
+          UPI UTR / Reference No. (Optional for reconciliation)
+        </label>
+        <input type="text" id="upi-utr-input" class="form-input" placeholder="e.g. 429381920394" style="margin-bottom: 10px; font-size: 13px;">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-primary" style="flex: 1; padding: 10px; font-size: 13px;" onclick="confirmUpiSaleWithUtr(false)">
+            Confirm & Print Invoice
+          </button>
+          <button type="button" class="btn btn-secondary" style="padding: 10px; font-size: 13px;" onclick="confirmUpiSaleWithUtr(true)">
+            Skip UTR
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-    // Failsafe timer: dismiss splash screen within 1.8-2.0s regardless of network
-    setTimeout(function() {
-      var splash = document.getElementById("vastrenix-splash-screen");
-      if (splash && !splash.classList.contains("splash-fade-out")) {
-        splash.classList.add("splash-fade-out");
-        setTimeout(function() {
-          if (splash.parentNode) splash.parentNode.removeChild(splash);
-        }, 500);
-      }
-    }, 1800);
-  </script>
+  <!-- Add Custom Non-Catalog Item Modal (Part 9) -->
+  <div class="modal-overlay" id="modal-pos-custom-item" style="z-index: 100000;">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">+ Add Custom Item to Cart</h3>
+        <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-pos-custom-item')">&times;</button>
+      </div>
+      <form class="modal-body" onsubmit="submitCustomItem(event)">
+        <div class="form-group">
+          <label class="form-label">Item Description / Name</label>
+          <input type="text" id="custom-item-name" class="form-input" required placeholder="e.g. Alteration & Fitting, Matching Border Dupatta">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Unit Price (₹)</label>
+            <input type="number" step="0.01" min="0.01" id="custom-item-price" class="form-input" required placeholder="250.00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Quantity</label>
+            <input type="number" min="1" id="custom-item-qty" class="form-input" required value="1">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; margin-top: 6px;">Add Line Item to Cart</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- In-App Invoice Viewer & Native Sharing Modal (Part 7) -->
+  <div class="modal-overlay invoice-viewer" id="modal-invoice-viewer">
+    <div class="invoice-viewer-card">
+      <div class="invoice-viewer-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🧾</span>
+          <span style="font-size: 15px; font-weight: 800;" id="invoice-viewer-title">Invoice Details</span>
+        </div>
+        <button type="button" style="border: none; background: none; color: white; font-size: 24px; cursor: pointer;" onclick="closeModal('modal-invoice-viewer')">&times;</button>
+      </div>
+      <div class="invoice-viewer-body" id="invoice-viewer-body">
+        <!-- Rendered invoice preview dynamically inserted here -->
+      </div>
+      <div class="invoice-viewer-actions">
+        <button type="button" class="btn btn-primary" id="invoice-viewer-share-btn" style="background: #25D366; border-color: #25D366; color: white; display: flex; align-items: center; gap: 6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+          Share Invoice (WhatsApp)
+        </button>
+        <button type="button" class="btn btn-secondary" id="invoice-viewer-download-btn">
+          ⎙ Download / Print PDF
+        </button>
+        <button type="button" class="btn" style="background: #E5E7EB; color: var(--navy);" onclick="closeModal('modal-invoice-viewer')">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Store & App Settings Modal (Part 4) -->
+  <div class="modal-overlay" id="modal-store-settings" style="z-index: 100000;">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Store & POS Settings</h3>
+        <button type="button" style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-store-settings')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label" style="font-weight: 700;">Default POS Payment Mode</label>
+          <select id="settings-default-payment-mode" class="form-select" onchange="setDefaultPaymentMode(this.value)">
+            <option value="CASH">Cash (Default Physical Till)</option>
+            <option value="UPI">UPI (Dynamic QR Scan)</option>
+            <option value="CARD">Debit / Credit Card</option>
+            <option value="SPLIT">Split Payment</option>
+            <option value="CREDIT">Store Credit / Khata</option>
+          </select>
+          <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 4px;">Pre-selected payment mode when opening the POS Billing till for new sales.</small>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label" style="font-weight: 700;">Default Invoice Theme</label>
+          <select id="settings-default-theme" class="form-select" onchange="setSettingsDefaultTheme(this.value)">
+            <option value="CLASSIC_GST">1. Classic GST (HSN/Tax breakdown)</option>
+            <option value="MODERN_MINIMAL">2. Modern Minimal (Editorial typography)</option>
+            <option value="PREMIUM_BOUTIQUE">3. Premium Boutique (Luxury Atelier)</option>
+            <option value="WHOLESALE_DEALER">4. Wholesale & Dealer (Size matrix)</option>
+            <option value="COMPACT_THERMAL">5. Compact Thermal (80mm POS Roll)</option>
+            <option value="INTERNATIONAL_COMMERCIAL">6. International Commercial (Export)</option>
+          </select>
+          <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 4px;">Default template used when generating authoritative PDF invoices.</small>
+        </div>
+
+        <div class="settings-connection-card" style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="settings-conn-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; display: inline-block; box-shadow: 0 0 8px #10B981;"></span>
+              <span id="settings-conn-text" style="font-size: 13px; font-weight: 700; color: var(--navy);">
+                Connected to VASTRENIX Cloud
+              </span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 8px;" onclick="checkSettingsConnection()">
+              Check Status
+            </button>
+          </div>
+          <div id="settings-conn-meta" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px;">
+            All store operations and real-time syncing are active.
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" style="width: 100%; padding: 11px;" onclick="closeModal('modal-store-settings')">Done</button>
+        <div id="settings-version-label" onclick="handleVersionSecretTap()" style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 14px; cursor: pointer; user-select: none;">
+          VASTRENIX v1.0.3
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Branded App Launch & State Machine Splash Overlay -->
+  <div id="vastrenix-splash-screen" class="vastrenix-splash-overlay">
+    <div class="vastrenix-splash-content" id="splash-content-container">
+      <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" class="vastrenix-splash-logo">
+      <h1 class="vastrenix-splash-title">VASTRENIX</h1>
+      <p class="vastrenix-splash-tagline">Clothing Business Platform</p>
+      <div class="vastrenix-splash-spinner" id="splash-spinner"></div>
+      <div class="vastrenix-splash-status" id="splash-status-text">Connecting to cloud server...</div>
+      <div id="splash-sub-text" style="font-size: 12px; color: var(--text-muted); margin-top: 6px; max-width: 320px; line-height: 1.4;">
+        Checking server availability & secure session
+      </div>
+      <div id="splash-action-container" style="display: none; margin-top: 18px; width: 100%; max-width: 280px;"></div>
+    </div>
+  </div>
+
   <script src="static/js/vastrenix.js"></script>
 </body>
 </html>

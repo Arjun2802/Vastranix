@@ -246,6 +246,24 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (webView != null) {
+            webView.onPause();
+            webView.evaluateJavascript("if (typeof window.onAppBackground === 'function') { window.onAppBackground(); }", null);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+            webView.evaluateJavascript("if (typeof window.onAppResume === 'function') { window.onAppResume(); }", null);
+        }
+    }
+
     // =========================================================================
     // Native PDF Download, FileProvider & Intent Handlers
     // =========================================================================
@@ -318,6 +336,14 @@ public class MainActivity extends Activity {
 
             Intent chooser = Intent.createChooser(intent, "Share Invoice via");
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(chooser, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo resolveInfo : resInfoList) {
+                String packageName = resolveInfo.activityInfo.packageName;
+                grantUriPermission(packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+
             startActivity(chooser);
         } catch (Exception e) {
             Log.e(TAG, "Cannot share PDF: " + e.getMessage(), e);
@@ -438,6 +464,43 @@ public class MainActivity extends Activity {
                     mainHandler.post(() -> launchPdfShare(file));
                 } catch (Exception e) {
                     Log.e(TAG, "Error sharing base64 PDF: " + e.getMessage(), e);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void sharePdfUrl(String pdfUrl, String fileName) {
+            new Thread(() -> {
+                try {
+                    File dir = new File(getCacheDir(), "invoices");
+                    if (!dir.exists()) dir.mkdirs();
+                    File file = new File(dir, fileName);
+
+                    if (pdfUrl.startsWith("data:application/pdf;base64,")) {
+                        String base64 = pdfUrl.substring("data:application/pdf;base64,".length());
+                        byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                        try (FileOutputStream fos = new FileOutputStream(file)) {
+                            fos.write(bytes);
+                        }
+                    } else {
+                        URL u = new URL(pdfUrl);
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setConnectTimeout(10000);
+                        conn.setReadTimeout(15000);
+                        conn.connect();
+                        try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(file)) {
+                            byte[] buffer = new byte[4096];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, read);
+                            }
+                        }
+                    }
+                    mainHandler.post(() -> launchPdfShare(file));
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sharing PDF URL: " + e.getMessage(), e);
+                    mainHandler.post(() -> Toast.makeText(MainActivity.this, "Unable to share PDF: " + e.getMessage(), Toast.LENGTH_SHORT).show());
                 }
             }).start();
         }
