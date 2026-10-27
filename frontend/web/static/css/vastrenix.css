@@ -1,29 +1,55 @@
-/* VASTRENIX — Professional Mobile & Desktop Editorial Business CSS */
+/* VASTRENIX — Professional Mobile & Desktop Business CSS (Exact Design System) */
 :root {
-  --navy: #101E2B;
-  --navy-light: #1A2D3E;
-  --ivory: #FAF8F3;
-  --white: #FFFFFF;
-  --teal: #218C82;
-  --teal-hover: #197068;
-  --teal-light: #E8F4F0;
-  --teal-glow: rgba(33, 140, 130, 0.25);
-  --cyan: #2DD4BF;
-  --amber: #D99A43;
-  --coral: #D96F65;
-  --gold: #EAB308;
-  --text-main: #202D38;
-  --text-muted: #64748B;
-  --border: #E5E7E2;
-  --border-stitch: rgba(33, 140, 130, 0.35);
-  --dark-surface: #0E1721;
-  --sidebar-width: 256px;
+  /* Exact Color Tokens from Vastrenix_App_UI.pdf */
+  --graphite: #0E0E12;
+  --vastra-violet: #5B3DF5;
+  --mist: #F6F6F8;
+  --paper: #FFFFFF;
+  --paid-green: #0E7C58;
+  --due-amber: #A35A00;
+  --risk-red: #C8283C;
+  --border: #E5E7EB;
+  --segment-track: #EDEDF0;
+
+  /* Backward Compatibility Aliases */
+  --navy: var(--graphite);
+  --navy-light: #1A1A22;
+  --ivory: var(--mist);
+  --white: var(--paper);
+  --teal: var(--vastra-violet);
+  --teal-hover: #4B2DE0;
+  --teal-light: #EDE9FE;
+  --teal-glow: rgba(91, 61, 245, 0.25);
+  --cyan: var(--vastra-violet);
+  --amber: var(--due-amber);
+  --coral: var(--risk-red);
+  --gold: var(--due-amber);
+  --text-main: var(--graphite);
+  --text-muted: #6B7280;
+  --border-stitch: rgba(91, 61, 245, 0.25);
+  --dark-surface: var(--graphite);
+
+  /* Spacing & Gutters (4pt grid: 4, 8, 12, 16, 20, 24, 32, 48) */
+  --screen-gutter: 20px;
+  --card-padding: 16px;
+  --sidebar-width: 260px;
+  --touch-target: 44px;
+
+  /* Corner Radii */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --shadow-sm: 0 2px 6px rgba(16, 30, 43, 0.04);
-  --shadow-md: 0 8px 24px rgba(16, 30, 43, 0.07);
-  --shadow-lg: 0 16px 40px rgba(16, 30, 43, 0.12);
+  --radius-lg: 18px;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-sheet: 28px;
+  --radius-pill: 999px;
+
+  /* Elevation: ONE soft shadow for sheets/modals only; flat cards on Mist */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 10px 30px rgba(14, 14, 18, 0.10);
+  --shadow-sheet: 0 10px 30px rgba(14, 14, 18, 0.10);
+  --shadow-raised: 0 8px 24px rgba(14, 14, 18, 0.22);
 }
 
 * {
@@ -34,15 +60,14 @@
 }
 
 body {
-  font-family: "Inter", "Manrope", "Noto Sans Devanagari", "Noto Sans Gujarati", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background-color: var(--ivory);
-  background-image: url('../images/textile-doodles.svg');
-  background-repeat: repeat;
-  background-size: 320px 320px;
+  font-family: "Geist", "Inter", "Noto Sans Devanagari", "Noto Sans Gujarati", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: var(--mist);
+  background-image: none;
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   touch-action: manipulation;
@@ -1975,3 +2000,217 @@ body {
 }
 
 
+
+
+/* ==========================================================================
+   VASTRENIX DESIGN SYSTEM TYPOGRAPHY & TOKEN UTILITIES (Vastrenix_App_UI.pdf)
+   ========================================================================== */
+.type-figure {
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 52px;
+  letter-spacing: -1px;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--graphite);
+}
+.type-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 36px;
+  letter-spacing: -0.5px;
+  color: var(--graphite);
+}
+.type-heading {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--graphite);
+}
+.type-body {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--graphite);
+}
+.type-caption {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-muted);
+}
+.type-overline {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Status Chips (WCAG AA Compliant) */
+.chip, .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.chip-paid, .badge-paid, .badge-success {
+  background: #E8F5E9 !important;
+  color: #0E7C58 !important;
+  border: none !important;
+}
+.chip-due, .badge-due, .badge-warning {
+  background: #FEF3C7 !important;
+  color: #A35A00 !important;
+  border: none !important;
+}
+.chip-risk, .badge-risk, .badge-danger {
+  background: #FEE2E2 !important;
+  color: #C8283C !important;
+  border: none !important;
+}
+.chip-dispatched, .badge-dispatched {
+  background: #EDE9FE !important;
+  color: #5B3DF5 !important;
+  border: none !important;
+}
+.chip-draft, .badge-draft, .badge-neutral {
+  background: #F3F4F6 !important;
+  color: #6B7280 !important;
+  border: none !important;
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--vastra-violet) !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  border-radius: var(--radius-control) !important;
+  font-weight: 600 !important;
+}
+.btn-primary:active {
+  background: #4B2DE0 !important;
+  transform: scale(0.98);
+}
+.btn-secondary, .btn-navy {
+  background: var(--graphite) !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  border-radius: var(--radius-control) !important;
+  font-weight: 600 !important;
+}
+.btn-secondary:active, .btn-navy:active {
+  background: #1C1B24 !important;
+  transform: scale(0.98);
+}
+.btn-tertiary, .btn-outline {
+  background: var(--paper) !important;
+  color: var(--graphite) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-control) !important;
+  font-weight: 600 !important;
+}
+
+/* Hero Dark Card (Page 9, 16, 23, 27, 28) */
+.card-hero-dark {
+  background: var(--graphite) !important;
+  color: #FFFFFF !important;
+  border-radius: var(--radius-card) !important;
+  padding: 20px !important;
+  border: none !important;
+}
+
+/* Segmented Control Track */
+.segmented-control {
+  background: var(--segment-track);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+}
+.segment-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.segment-btn.active {
+  background: var(--paper);
+  color: var(--graphite);
+  box-shadow: 0 2px 6px rgba(14, 14, 18, 0.08);
+}
+
+/* Mobile Bottom Navigation (5 items) */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 68px;
+  background: var(--paper);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  z-index: 1000;
+  padding: 0 4px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mobile-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #6B7280;
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  transition: color 0.15s ease;
+}
+.mobile-nav-btn.active {
+  color: var(--vastra-violet);
+  font-weight: 700;
+}
+.nav-center-create-btn {
+  width: 50px;
+  height: 50px;
+  background: var(--graphite);
+  color: #FFFFFF;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -24px;
+  box-shadow: 0 8px 20px rgba(14, 14, 18, 0.25);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s ease;
+  justify-self: center;
+}
+.nav-center-create-btn:active {
+  transform: scale(0.93);
+}
+
+/* Bottom Sheet */
+.modal-card, .bottom-sheet-card {
+  background: var(--paper);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0 !important;
+  box-shadow: var(--shadow-sheet) !important;
+}

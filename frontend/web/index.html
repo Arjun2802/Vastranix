@@ -223,18 +223,54 @@
     </div>
   </div>
 
-  <!-- Branded App Launch & State Machine Splash Overlay -->
-  <div id="vastrenix-splash-screen" class="vastrenix-splash-overlay">
-    <div class="vastrenix-splash-content" id="splash-content-container">
-      <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" class="vastrenix-splash-logo">
-      <h1 class="vastrenix-splash-title">VASTRENIX</h1>
-      <p class="vastrenix-splash-tagline">Clothing Business Platform</p>
-      <div class="vastrenix-splash-spinner-wrap">
-        <div class="vastrenix-splash-spinner" id="splash-spinner"></div>
+  <!-- Branded App Launch Screen (Page 4 of Vastrenix_App_UI.pdf) -->
+  <div id="vastrenix-splash-screen" class="vastrenix-splash-overlay" style="display: flex;">
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 340px;">
+      <!-- Woven V Icon & Wordmark -->
+      <div style="width: 72px; height: 72px; border-radius: 20px; background: #1C1B24; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.5);">
+        <img src="static/brand/vastrenix-icon.svg" alt="vastrenix" style="width: 48px; height: 48px;">
       </div>
-      <div class="vastrenix-splash-status" id="splash-status-text">Connecting to server...</div>
-      <div id="splash-sub-text" class="vastrenix-splash-sub"></div>
-      <div id="splash-action-container" style="display: none; margin-top: 18px; width: 100%; max-width: 280px;"></div>
+      <h1 style="font-size: 32px; font-weight: 700; letter-spacing: -1px; color: #FFFFFF; margin: 0 0 6px 0; font-family: 'Geist', 'Inter', sans-serif;">vastrenix</h1>
+      <p style="font-size: 14px; font-weight: 400; color: #9CA3AF; margin: 0 0 44px 0; text-align: center;">Retail, wholesale and dealers — one thread.</p>
+
+      <!-- Violet Progress Bar -->
+      <div style="width: 100%; height: 3px; background: #26262E; border-radius: 2px; overflow: hidden; margin-bottom: 32px;">
+        <div id="splash-progress-bar" style="width: 45%; height: 100%; background: #5B3DF5; border-radius: 2px; transition: width 0.4s ease;"></div>
+      </div>
+
+      <!-- 3-step checklist from PDF Page 4 -->
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 16px; margin-bottom: 36px; text-align: left;">
+        <div id="chk-step-1" style="display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: #FFFFFF;">
+          <div id="chk-icon-1" style="width: 20px; height: 20px; border-radius: 50%; background: #0E7C58; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <span>Server reachable</span>
+        </div>
+        <div id="chk-step-2" style="display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: #E5E7EB;">
+          <div id="chk-icon-2" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #5B3DF5; border-top-color: transparent; animation: splashSpin 0.9s linear infinite; flex-shrink: 0;"></div>
+          <span id="chk-text-2">Restoring your session…</span>
+        </div>
+        <div id="chk-step-3" style="display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: #6B7280;">
+          <div id="chk-icon-3" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #374151; flex-shrink: 0;"></div>
+          <span>Syncing today’s store data</span>
+        </div>
+      </div>
+
+      <!-- Reassuring Delay Subtext -->
+      <p style="font-size: 12.5px; line-height: 1.5; color: #6B7280; text-align: center; margin: 0 0 16px 0;">
+        First launch of the day can take up to 30 seconds while the server wakes. You’ll never see sign-in before it’s ready.
+      </p>
+
+      <div id="splash-action-container" style="display: none; width: 100%; margin-top: 10px;"></div>
+    </div>
+
+    <!-- Footer: v2.4.0 & Encrypted connection -->
+    <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding-top: 20px; border-top: 1px solid #1F1F24; font-size: 12px; color: #6B7280;">
+      <span>v2.4.0</span>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path></svg>
+        <span>Encrypted connection</span>
+      </div>
     </div>
   </div>
 

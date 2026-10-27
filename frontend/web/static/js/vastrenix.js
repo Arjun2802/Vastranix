@@ -4816,759 +4816,6 @@ function setSettingsDefaultTheme(themeId) {
 }
 
 // Render Main App or Authentication Gate
-async function renderApp() {
-  const root = document.getElementById("app");
-  if (!root) return;
-
-  if (!state.token) {
-    if (!state.stores || state.stores.length === 0) {
-      state.stores = offlineDB.stores;
-    }
-    // Background fetch of public stores without blocking UI render
-    loadPublicStores().then(() => {
-      const storeSelect = document.getElementById("reg-staff-store");
-      if (storeSelect && state.stores && state.stores.length > 0) {
-        storeSelect.innerHTML = state.stores.map(s => `
-          <option value="${s.id}">${s.name} (${s.city || 'India'})</option>
-        `).join('');
-      }
-    }).catch(() => {});
-
-    root.innerHTML = `
-      <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px;">
-        <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(229, 231, 226, 0.9); border-radius: var(--radius-lg); padding: 40px 36px; width: 100%; max-width: 480px; box-shadow: 0 20px 48px rgba(16, 30, 43, 0.12); position: relative;">
-          
-          <div style="text-align: center; margin-bottom: 26px;">
-            <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" style="width: 82px; height: 82px; margin-bottom: 14px; filter: drop-shadow(0 12px 24px rgba(16, 30, 43, 0.28)); cursor: pointer;" onclick="handleDevLogoTap()" oncontextmenu="handleDevLogoHold(event)" title="VASTRENIX Platform">
-            <div style="font-size: 26px; font-weight: 900; letter-spacing: 3.5px; color: var(--navy); margin-bottom: 4px;">VASTRENIX</div>
-            <p style="color: var(--teal); font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">Your Business, Beautifully in Sync.</p>
-          </div>
-
-          <!-- Auth Navigation Switcher -->
-          <div style="display: flex; background: #EEF2F5; padding: 4px; border-radius: 10px; margin-bottom: 24px;">
-            <button class="btn" style="flex: 1; padding: 8px; font-size: 13px; font-weight: 700; border-radius: 8px; background: ${state.authMode==='signin'?'var(--white)':'transparent'}; color: ${state.authMode==='signin'?'var(--navy)':'var(--text-muted)'}; box-shadow: ${state.authMode==='signin'?'0 2px 6px rgba(0,0,0,0.06)':'none'};" onclick="setAuthMode('signin')">
-              Sign In
-            </button>
-            <button class="btn" style="flex: 1; padding: 8px; font-size: 13px; font-weight: 700; border-radius: 8px; background: ${state.authMode==='signup_owner'?'var(--white)':'transparent'}; color: ${state.authMode==='signup_owner'?'var(--navy)':'var(--text-muted)'}; box-shadow: ${state.authMode==='signup_owner'?'0 2px 6px rgba(0,0,0,0.06)':'none'};" onclick="setAuthMode('signup_owner')">
-              Store Owner
-            </button>
-            <button class="btn" style="flex: 1; padding: 8px; font-size: 13px; font-weight: 700; border-radius: 8px; background: ${state.authMode==='signup_staff'?'var(--white)':'transparent'}; color: ${state.authMode==='signup_staff'?'var(--navy)':'var(--text-muted)'}; box-shadow: ${state.authMode==='signup_staff'?'0 2px 6px rgba(0,0,0,0.06)':'none'};" onclick="setAuthMode('signup_staff')">
-              Staff Request
-            </button>
-          </div>
-
-          <!-- MODE 1: SIGN IN -->
-          ${state.authMode === 'signin' ? `
-            <form id="signin-form" onsubmit="handleSignIn(event)">
-              <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <input type="email" id="login-email" class="form-input" required placeholder="demo@vastrenix.com" value="demo@vastrenix.com">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" id="login-password" class="form-input" required placeholder="••••••••" value="VastrenixDemo2026!">
-              </div>
-              <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; margin-top: 10px; font-size: 14px;">
-                Enter Business Workspace ➔
-              </button>
-            </form>
-
-            <div style="margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border);">
-              <div style="font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; text-align: center;">One-Click Instant Access</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button class="btn btn-sm btn-navy" onclick="loginDemo('demo@vastrenix.com', 'VastrenixDemo2026!')">
-                  👑 Store Owner
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="loginDemo('cashier@vastrenix.com', 'CashierPass123!')">
-                  🛒 Cashier POS
-                </button>
-              </div>
-            </div>
-          ` : ''}
-
-          <!-- MODE 2: OWNER SIGNUP -->
-          ${state.authMode === 'signup_owner' ? `
-            <form onsubmit="handleOwnerSignUp(event)">
-              <div class="form-group">
-                <label class="form-label">Store / Business Name</label>
-                <input type="text" id="reg-biz-name" class="form-input" required placeholder="e.g. Royal Silks Heritage">
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="form-group">
-                  <label class="form-label">City</label>
-                  <input type="text" id="reg-biz-city" class="form-input" required placeholder="Surat">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">GSTIN (Optional)</label>
-                  <input type="text" id="reg-biz-gstin" class="form-input" placeholder="24AAACV1234F1Z9">
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Owner Full Name</label>
-                <input type="text" id="reg-owner-name" class="form-input" required placeholder="Ramesh Patel">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Phone Number</label>
-                <input type="text" id="reg-owner-phone" class="form-input" required placeholder="+91 98765 43210">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <input type="email" id="reg-owner-email" class="form-input" required placeholder="owner@royalsilks.com">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" id="reg-owner-password" class="form-input" required placeholder="••••••••">
-              </div>
-              <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; margin-top: 8px;">
-                Register Store & Open Business
-              </button>
-            </form>
-          ` : ''}
-
-          <!-- MODE 3: STAFF SIGNUP -->
-          ${state.authMode === 'signup_staff' ? `
-            <form onsubmit="handleStaffSignUp(event)">
-              <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: var(--navy);">
-                <b>Staff Notice:</b> After submitting, your Store Administrator must approve your account before you can log in.
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Select Your Store</label>
-                <select id="reg-staff-store" class="form-select" required>
-                  ${state.stores && state.stores.length > 0 ? state.stores.map(s => `
-                    <option value="${s.id}">${s.name} (${s.city || 'India'})</option>
-                  `).join('') : '<option value="1">Vastrenix Heritage Garments (Surat)</option>'}
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Assigned Staff Role</label>
-                <select id="reg-staff-role" class="form-select" required>
-                  <option value="CASHIER">Store Cashier (Billing & Shifts)</option>
-                  <option value="INVENTORY_MGR">Inventory & Warehouse Manager</option>
-                  <option value="BRANCH_MANAGER">Branch Manager</option>
-                  <option value="DISPATCHER">Dispatcher & Logistics</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Staff Full Name</label>
-                <input type="text" id="reg-staff-name" class="form-input" required placeholder="Aman Verma">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Staff Email Address</label>
-                <input type="email" id="reg-staff-email" class="form-input" required placeholder="aman.staff@store.com">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Phone Number</label>
-                <input type="text" id="reg-staff-phone" class="form-input" required placeholder="+91 98888 77777">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" id="reg-staff-password" class="form-input" required placeholder="••••••••">
-              </div>
-
-              <button type="submit" class="btn btn-navy" style="width: 100%; padding: 12px; margin-top: 8px;">
-                Request Staff Account (Pending Admin Approval)
-              </button>
-            </form>
-          ` : ''}
-
-        </div>
-      </div>
-
-      <!-- Developer Diagnostic Server URL Modal (Hidden from regular users, accessible via logo gesture) -->
-      <div class="modal-overlay" id="modal-server-settings">
-        <div class="modal-card" style="max-width: 440px;">
-          <div class="modal-header">
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Developer Diagnostic Settings</h3>
-            <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeServerSettingsModal()">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
-              Production default is hardcoded to Render cloud service. Use this dialog only for internal debugging or self-hosted testing.
-            </p>
-            <div class="form-group">
-              <label class="form-label">API Override Endpoint</label>
-              <input type="text" id="server-url-input" class="form-input" placeholder="${PRODUCTION_RENDER_API}">
-            </div>
-
-            <div style="margin-bottom: 16px;">
-              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Presets</div>
-              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                <button type="button" class="btn btn-sm btn-primary" onclick="setPresetServerUrl('${PRODUCTION_RENDER_API}')">Production Render</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://10.0.2.2:8000')">Android Emulator (10.0.2.2)</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetServerUrl('http://localhost:8000')">Localhost (8000)</button>
-              </div>
-            </div>
-
-            <div id="server-health-status" style="min-height: 24px; margin-bottom: 14px;"></div>
-
-            <div style="display: flex; gap: 10px;">
-              <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;" onclick="testServerConnection()">
-                Test Health
-              </button>
-              <button type="button" class="btn btn-primary" style="flex: 1; padding: 10px;" onclick="saveServerSettings()">
-                Save Override
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  // Authenticated Application Shell
-  const t = i18n[state.lang] || i18n.en;
-  root.innerHTML = `
-    <div class="app-layout">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="brand-header">
-          <img src="static/brand/vastrenix-icon.svg" alt="VASTRENIX 3D V" class="brand-logo-img">
-          <div>
-            <div class="brand-title">VASTRENIX</div>
-            <div class="brand-desc">Clothing Business Platform</div>
-          </div>
-        </div>
-
-        <!-- Prominent Store & Staff Identity Card -->
-        <div style="margin: 12px; padding: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-sm);">
-          <div style="font-size: 10px; color: #9FB0BC; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">${t.current_store}</div>
-          <div style="font-size: 13.5px; font-weight: 800; color: white; margin: 2px 0;">${state.storeName || state.business.name}</div>
-          <div style="font-size: 11px; color: var(--teal); font-weight: 600;">
-            ${state.isStaff ? `Staff: ${state.user.full_name} (${state.business.role})` : `Owner / Store Admin`}
-          </div>
-        </div>
-
-        <ul class="nav-menu">
-          <li class="nav-item">
-            <a class="nav-link active" data-tab="dashboard" onclick="switchTab('dashboard')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-              ${t.dashboard}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-tab="inventory" onclick="switchTab('inventory')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              ${t.inventory}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-tab="pos" onclick="switchTab('pos')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-              ${t.pos}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-tab="invoices" onclick="switchTab('invoices')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              ${t.invoices}
-            </a>
-          </li>
-          ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
-          <li class="nav-item">
-            <a class="nav-link" data-tab="dealers" onclick="switchTab('dealers')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-              ${t.dealers}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-tab="expenses" onclick="switchTab('expenses')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              ${t.expenses}
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-tab="users" onclick="switchTab('users')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-              ${t.team}
-            </a>
-          </li>
-          ` : ''}
-          <li class="nav-item">
-            <a class="nav-link" data-tab="flowcharts" onclick="switchTab('flowcharts')">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              ${t.flowcharts}
-            </a>
-          </li>
-        </ul>
-
-        <div class="user-badge">
-          <div>
-            <div class="user-info-name">${state.user.full_name}</div>
-            <div class="user-info-role">${state.business.role || 'OWNER'}</div>
-          </div>
-          <button style="background: none; border: none; color: #9FB0BC; cursor: pointer; font-size: 11px;" onclick="logout()">${t.logout}</button>
-        </div>
-      </aside>
-
-      <!-- Main Section -->
-      <div class="main-wrapper">
-        <header class="topbar">
-          <div class="topbar-row-main">
-            <div class="topbar-left">
-              <button class="mobile-hamburger" onclick="toggleMobileDrawer()" aria-label="Open Navigation">
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-              </button>
-              <div class="topbar-title-wrap" onclick="showStoreInfoToast()" title="${state.storeName || state.business.name}">
-                <div class="topbar-title">${state.storeName || state.business.name}</div>
-                <div class="topbar-subtitle">${state.isStaff ? `Staff: ${state.user.full_name} (${state.business.role})` : (t.flagship_store || 'Flagship Store')}</div>
-              </div>
-            </div>
-            <div class="topbar-right">
-              <button class="lang-compact-chip" onclick="openStoreSettingsModal()" title="Store & POS Settings" style="margin-right: 6px;">
-                <span style="font-size: 14px;">⚙️</span>
-                <span class="lang-code-text">Settings</span>
-              </button>
-              <button class="lang-compact-chip" onclick="openLanguageModal()" title="Switch Language (English / हिन्दी / ગુજરાતી)">
-                <span class="lang-globe-icon">🌐</span>
-                <span class="lang-code-text">${state.lang==='hi' ? 'हि' : state.lang==='gu' ? 'ગુ' : 'EN'}</span>
-              </button>
-            </div>
-          </div>
-          <!-- Row 2: Sync Status Pill (Shown ONLY while syncing/offline, auto-hides when empty) -->
-          <div id="sync-banner-row" class="sync-banner-row" style="display: none;" onclick="drainOfflineQueue()" title="Tap to sync with cloud">
-            <span class="sync-pulse-dot"></span>
-            <span id="sync-banner-text">Syncing...</span>
-          </div>
-        </header>
-
-        <main class="content-body" id="tab-content"></main>
-      </div>
-    </div>
-
-    <!-- Add Product Modal -->
-    <div class="modal-overlay" id="modal-add-product">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("add_product_title", "Add Garment Product")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-product')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitAddProduct(event)">
-          <div class="form-group">
-            <label class="form-label">${t("prod_name_label", "Garment Name")}</label>
-            <input type="text" id="prod-name" class="form-input" required placeholder="${t('prod_name_placeholder', 'e.g. Pure Mulberry Silk Sari')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("prod_fabric_label", "Fabric / Material")}</label>
-            <input type="text" id="prod-fabric" class="form-input" required placeholder="${t('prod_fabric_placeholder', 'e.g. Handwoven Mulberry Silk')}">
-          </div>
-          <div class="modal-responsive-grid">
-            <div class="form-group">
-              <label class="form-label">${t("retail_price_label", "Retail Price (₹)")}</label>
-              <input type="number" step="0.01" id="prod-price" class="form-input" required placeholder="3490.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">${t("purchase_cost_label", "Purchase Cost (₹)")}</label>
-              <input type="number" step="0.01" id="prod-cost" class="form-input" required placeholder="1400.00">
-            </div>
-          </div>
-          <div class="modal-responsive-grid-3">
-            <div class="form-group">
-              <label class="form-label">${t("size_label", "Size")}</label>
-              <input type="text" id="prod-size" class="form-input" required placeholder="${t('size_placeholder', 'M or Free')}">
-            </div>
-            <div class="form-group">
-              <label class="form-label">${t("color_label", "Color")}</label>
-              <input type="text" id="prod-color" class="form-input" required placeholder="${t('color_placeholder', 'Peacock Blue')}">
-            </div>
-            <div class="form-group">
-              <label class="form-label">${t("initial_stock_label", "Initial Stock")}</label>
-              <input type="number" id="prod-stock" class="form-input" required placeholder="20">
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("save_add_catalog_btn", "Save & Add to Catalog")}</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Purchase Order Modal (Order More) -->
-    <div class="modal-overlay" id="modal-purchase-order">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("create_po_title", "Create Purchase Order (Order More)")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-purchase-order')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitPurchaseOrder(event)">
-          <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">${t("target_garment_label", "Garment Target")}</div>
-            <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="po-product-display">Garment Variant</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("select_supplier_label", "Select Textile Supplier / Weaver")}</label>
-            <select id="po-supplier-select" class="form-select" required></select>
-          </div>
-          <div class="modal-responsive-grid">
-            <div class="form-group">
-              <label class="form-label">${t("order_qty_label", "Order Quantity (Pieces)")}</label>
-              <input type="number" id="po-quantity" class="form-input" min="1" required placeholder="20">
-            </div>
-            <div class="form-group">
-              <label class="form-label">${t("unit_cost_label", "Unit Purchase Cost (₹)")}</label>
-              <input type="number" step="0.01" id="po-unit-cost" class="form-input" required placeholder="1200.00">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("po_notes_label", "PO Notes / Reference")}</label>
-            <input type="text" id="po-notes" class="form-input" placeholder="${t('po_notes_placeholder', 'e.g. Festival restocking')}">
-          </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("issue_po_btn", "Issue Purchase Order")}</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Goods Receipt Modal (Receive Stock) -->
-    <div class="modal-overlay" id="modal-receive-goods">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("receive_goods_title", "Goods Received Note (Receive Stock)")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-receive-goods')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitReceiveGoods(event)">
-          <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">${t("receiving_garment_label", "Receiving Garment")}</div>
-            <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="grn-product-display">Garment Variant</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("select_po_label", "Select Issued Purchase Order")}</label>
-            <select id="grn-po-select" class="form-select" required></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("challan_no_label", "Supplier Invoice / Challan Number")}</label>
-            <input type="text" id="grn-invoice-no" class="form-input" required placeholder="${t('challan_placeholder', 'e.g. INV-TEX-9921')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("inspection_notes_label", "Receiving Inspection Notes")}</label>
-            <input type="text" id="grn-notes" class="form-input" placeholder="${t('inspection_placeholder', 'e.g. Checked pieces, quality approved')}">
-          </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("confirm_receive_stock_btn", "Confirm & Add to Stock")}</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Language Picker Modal -->
-    <div class="modal-overlay" id="modal-language-picker">
-      <div class="modal-card" style="max-width: 420px;">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Choose App Language / ભાષા પસંદ કરો</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-language-picker')">&times;</button>
-        </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 10px; padding-top: 6px;">
-          <div class="lang-option-card ${state.lang === 'en' ? 'selected' : ''}" data-lang="en" onclick="selectLanguage('en')">
-            <span style="font-size: 24px;">🇬🇧</span>
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">English</div>
-              <div style="font-size: 11px; color: var(--text-muted);">Standard Retail Operations</div>
-            </div>
-          </div>
-          <div class="lang-option-card ${state.lang === 'hi' ? 'selected' : ''}" data-lang="hi" onclick="selectLanguage('hi')">
-            <span style="font-size: 24px;">🇮🇳</span>
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">हिन्दी (Hindi)</div>
-              <div style="font-size: 11px; color: var(--text-muted);">भारतीय वस्त्र भंडार एवं बिलिंग</div>
-            </div>
-          </div>
-          <div class="lang-option-card ${state.lang === 'gu' ? 'selected' : ''}" data-lang="gu" onclick="selectLanguage('gu')">
-            <span style="font-size: 24px;">🇮🇳</span>
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: var(--navy);">ગુજરાતી (Gujarati)</div>
-              <div style="font-size: 11px; color: var(--text-muted);">સુરત ટેક્સટાઇલ વ્યાપાર અને હિસાબ</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Assign Staff to Order Modal -->
-    <div class="modal-overlay" id="modal-assign-staff">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">Assign Order to Store Staff</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-assign-staff')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitAssignStaff(event)">
-          <input type="hidden" id="assign-order-id">
-          <div style="background: var(--teal-light); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--teal); font-weight: 700;">Dealer Order</div>
-            <div style="font-size: 14px; font-weight: 800; color: var(--navy);" id="assign-order-num-display">B2B Order</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Select Staff Member to Assign</label>
-            <select id="assign-staff-select" class="form-select" required></select>
-          </div>
-          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">The assigned staff member will be responsible for item picking, quality check, and packaging for this order.</p>
-          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">Confirm Staff Assignment</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Record Store Expense Modal -->
-    <div class="modal-overlay" id="modal-add-expense">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("record_store_expense_title", "Record Store Expense")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-expense')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitAddExpense(event)">
-          <div class="form-group">
-            <label class="form-label">${t("expense_category_label", "Expense Category")}</label>
-            <select id="exp-category" class="form-select" required>
-              <option value="RENT">Rent & Store Premises</option>
-              <option value="SALARY">Staff Salaries & Advances</option>
-              <option value="TEA_SNACKS">Tea, Coffee & Hospitality</option>
-              <option value="PACKAGING">Packaging Bags & Boxes</option>
-              <option value="ELECTRICITY">Electricity & Power Bill</option>
-              <option value="LOGISTICS">Transport, Porter & Freight</option>
-              <option value="MARKETING">Marketing & Social Media</option>
-              <option value="MAINTENANCE">Store Repairs & Maintenance</option>
-              <option value="OTHER">Other Miscellaneous</option>
-            </select>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="form-group">
-              <label class="form-label">${t("amount_col", "Amount (₹)")}</label>
-              <input type="number" step="0.01" id="exp-amount" class="form-input" required placeholder="1500.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">${t("payment_mode_col", "Payment Mode")}</label>
-              <select id="exp-payment-mode" class="form-select" required>
-                <option value="CASH">Cash (From Store Till)</option>
-                <option value="UPI">UPI (Google Pay / PhonePe)</option>
-                <option value="BANK_TRANSFER">Bank IMPS / NEFT</option>
-                <option value="CARD">Debit / Credit Card</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("expense_desc_label", "Description / Receipt Note")}</label>
-            <input type="text" id="exp-description" class="form-input" required placeholder="${t('expense_desc_placeholder', 'e.g. 500 custom cotton carry bags for festival rush')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("attach_receipt_label", "Attach Bill / Receipt Document (Optional)")}</label>
-            <input type="file" id="exp-receipt-file" class="form-input" accept="image/*,application/pdf">
-          </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;">${t("save_post_expense_btn", "Save & Post Expense")}</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Add Staff Member Modal -->
-    <div class="modal-overlay" id="modal-add-staff">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("add_staff_title", "Add Store Staff Member")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-add-staff')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitAddStaff(event)">
-          <div class="form-group">
-            <label class="form-label">${t("full_name_label", "Full Name")}</label>
-            <input type="text" id="staff-name" class="form-input" required placeholder="${t('full_name_placeholder', 'e.g. Ramesh Patel')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("email_address_label", "Email Address")}</label>
-            <input type="email" id="staff-email" class="form-input" required placeholder="${t('email_placeholder', 'ramesh@vastrenix-store.com')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("phone_number_label", "Phone Number")}</label>
-            <input type="text" id="staff-phone" class="form-input" required placeholder="${t('phone_placeholder', '+91 98765 43210')}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">${t("role_responsibility_label", "Role & Responsibility")}</label>
-            <select id="staff-role" class="form-select" required>
-              <option value="SALES">Sales Associate / Till Operator</option>
-              <option value="INVENTORY_MANAGER">Inventory & Warehouse Manager</option>
-              <option value="BILLING">Billing & Cash Counter Staff</option>
-              <option value="STORE_STAFF">General Store Associate</option>
-              <option value="ADMIN">Assistant Store Admin</option>
-            </select>
-          </div>
-          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">${t("staff_auth_notice", "Once created, staff will immediately be authorized to sign in to this store location.")}</p>
-          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">${t("create_auth_staff_btn", "Create & Authorize Staff")}</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Close & Reconcile Shift Modal -->
-    <div class="modal-overlay" id="modal-close-shift">
-      <div class="modal-card" style="max-width: 480px;">
-        <div class="modal-header">
-          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy);">${t("close_shift_title", "Close & Reconcile Cash Shift")}</h3>
-          <button style="border: none; background: none; font-size: 20px; cursor: pointer;" onclick="closeModal('modal-close-shift')">&times;</button>
-        </div>
-        <form class="modal-body" onsubmit="submitCloseShift(event)">
-          <div style="background: #FAF8F3; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 13px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">${t("opening_float_label", "Opening Cash Float:")}</span>
-              <b id="close-shift-opening">₹0.00</b>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">${t("cash_sales_collected_label", "Total Cash Sales Collected:")}</span>
-              <b id="close-shift-sales" style="color: var(--teal);">+₹0.00</b>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: var(--text-muted);">${t("cash_payouts_label", "Cash Payouts / Expenses:")}</span>
-              <b id="close-shift-expenses" style="color: var(--coral);">-₹0.00</b>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 14px;">
-              <b>${t("expected_drawer_cash_label", "Expected Drawer Cash:")}</b>
-              <b id="close-shift-expected" style="color: var(--navy);">₹0.00</b>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label class="form-label" style="font-weight: 700;">${t("counted_cash_label", "Counted Physical Cash in Drawer (₹)")}</label>
-            <input type="number" step="0.01" id="close-shift-actual" class="form-input" required placeholder="${t('counted_cash_placeholder', 'Enter total counted notes & coins')}" oninput="recalcShiftDifference()" style="font-size: 16px; font-weight: 700;">
-          </div>
-
-          <div id="close-shift-diff-box" style="margin-bottom: 16px; padding: 10px; border-radius: var(--radius-sm); text-align: center; font-weight: 700; font-size: 13px; display: none;">
-          </div>
-
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">${t("closing_notes_label", "Closing Notes / Discrepancy Reason (Optional)")}</label>
-            <input type="text" id="close-shift-notes" class="form-input" placeholder="${t('closing_notes_placeholder', 'e.g. Verified by head cashier')}">
-          </div>
-
-          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-weight: 700;">
-            ${t("reconcile_close_btn", "Reconcile & Close Shift")}
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Mobile Navigation Drawer Overlay & Drawer -->
-    <div class="mobile-drawer-overlay" id="mobile-drawer-overlay" onclick="closeMobileDrawer()"></div>
-    <aside class="mobile-drawer" id="mobile-drawer">
-      <div class="mobile-drawer-header">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <img src="static/brand/vastrenix-icon.svg" alt="3D V" style="width: 28px; height: 28px;">
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: white; letter-spacing: 0.5px;">VASTRENIX</div>
-            <div style="font-size: 10px; color: var(--teal); font-weight: 600;">${state.storeName || state.business.name}</div>
-          </div>
-        </div>
-        <button onclick="closeMobileDrawer()" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 4px;">&times;</button>
-      </div>
-
-      <div style="padding: 12px 14px; background: rgba(255,255,255,0.05); margin: 10px; border-radius: 8px;">
-        <div style="font-size: 10px; color: #9FB0BC; text-transform: uppercase; font-weight: 700;">Logged in as</div>
-        <div style="font-size: 13px; font-weight: 700; color: white; margin: 2px 0;">${state.user.full_name}</div>
-        <div style="font-size: 11px; color: var(--teal);">${state.isStaff ? `Staff (${state.business.role})` : 'Store Owner / Admin'}</div>
-      </div>
-
-      <div class="mobile-drawer-nav">
-        <a class="mobile-drawer-link ${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard" onclick="drawerNav('dashboard')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-          </div>
-          <span class="drawer-label">${t.dashboard}</span>
-        </a>
-        <a class="mobile-drawer-link ${state.activeTab === 'inventory' ? 'active' : ''}" data-tab="inventory" onclick="drawerNav('inventory')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-          </div>
-          <span class="drawer-label">${t.inventory}</span>
-        </a>
-        <a class="mobile-drawer-link ${state.activeTab === 'pos' ? 'active' : ''}" data-tab="pos" onclick="drawerNav('pos')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
-          </div>
-          <span class="drawer-label">${t.pos}</span>
-        </a>
-        <a class="mobile-drawer-link ${state.activeTab === 'invoices' ? 'active' : ''}" data-tab="invoices" onclick="drawerNav('invoices')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-          </div>
-          <span class="drawer-label">${t.invoices}</span>
-        </a>
-        ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
-        <a class="mobile-drawer-link ${state.activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses" onclick="drawerNav('expenses')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-          </div>
-          <span class="drawer-label">${t.expenses}</span>
-        </a>
-        <a class="mobile-drawer-link ${state.activeTab === 'dealers' ? 'active' : ''}" data-tab="dealers" onclick="drawerNav('dealers')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-          </div>
-          <span class="drawer-label">${t.dealers}</span>
-        </a>
-        <a class="mobile-drawer-link ${state.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="drawerNav('users')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-          </div>
-          <span class="drawer-label">${t.team}</span>
-        </a>
-        ` : ''}
-        <a class="mobile-drawer-link ${state.activeTab === 'flowcharts' ? 'active' : ''}" data-tab="flowcharts" onclick="drawerNav('flowcharts')">
-          <div class="mobile-drawer-icon-box">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><path d="M10 6.5h4"></path><path d="M17.5 10v4"></path></svg>
-          </div>
-          <span class="drawer-label">${t.flowcharts}</span>
-        </a>
-      </div>
-
-      <div style="padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: auto;">
-        <button onclick="logout()" class="mobile-drawer-logout-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 8px; background: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.3); color: #ff6b6b; font-weight: 700; cursor: pointer;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-          <span>${t.logout} (Sign Out)</span>
-        </button>
-      </div>
-    </aside>
-
-    <!-- Mobile Bottom Navigation Bar (Max 5 Actions, Crisp Icons & Clean Non-Overlapping Labels) -->
-    <nav class="mobile-bottom-nav">
-      <a class="mobile-nav-btn ${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard" onclick="switchTab('dashboard')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-        </div>
-        <span>${t.dashboard}</span>
-      </a>
-      <a class="mobile-nav-btn ${state.activeTab === 'inventory' ? 'active' : ''}" data-tab="inventory" onclick="switchTab('inventory')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-        </div>
-        <span>${t.inventory}</span>
-      </a>
-      <a class="mobile-nav-btn ${state.activeTab === 'pos' ? 'active' : ''}" data-tab="pos" onclick="switchTab('pos')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="6" cy="15" r="1"></circle><circle cx="10" cy="15" r="1"></circle><circle cx="14" cy="15" r="1"></circle></svg>
-        </div>
-        <span>${t.pos}</span>
-      </a>
-      ${(!state.isStaff || state.business.role !== 'CASHIER') ? `
-      <a class="mobile-nav-btn ${state.activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses" onclick="switchTab('expenses')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-        </div>
-        <span>${t.expenses}</span>
-      </a>
-      <a class="mobile-nav-btn ${state.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="switchTab('users')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-        </div>
-        <span>${t.team}</span>
-      </a>
-      ` : `
-      <a class="mobile-nav-btn ${state.activeTab === 'invoices' ? 'active' : ''}" data-tab="invoices" onclick="switchTab('invoices')">
-        <div class="mobile-nav-icon-pill">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-        </div>
-        <span>${t.invoices}</span>
-      </a>
-      `}
-    </nav>
-  `;
-
-  renderCurrentTab();
-  updateOfflineIndicator();
-}
-
 window.addEventListener("keydown", (e) => {
   // ESC closes any active modal
   if (e.key === "Escape") {
@@ -5612,70 +4859,95 @@ function setAppState(newState, metadata = {}) {
   console.log(`[APP-STATE] -> ${newState}`, metadata);
 
   const splash = document.getElementById("vastrenix-splash-screen");
-  const spinner = document.getElementById("splash-spinner");
-  const statusText = document.getElementById("splash-status-text");
-  const subText = document.getElementById("splash-sub-text");
+  const pBar = document.getElementById("splash-progress-bar");
+  const icon1 = document.getElementById("chk-icon-1");
+  const icon2 = document.getElementById("chk-icon-2");
+  const icon3 = document.getElementById("chk-icon-3");
+  const step2 = document.getElementById("chk-step-2");
+  const step3 = document.getElementById("chk-step-3");
   const actionContainer = document.getElementById("splash-action-container");
+
+  const greenCheckSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 
   if (newState === AppState.LAUNCHING || newState === AppState.CONNECTING) {
     if (splash) {
       splash.style.display = "flex";
       splash.classList.remove("splash-fade-out");
     }
-    if (spinner) spinner.style.display = "block";
     if (actionContainer) actionContainer.style.display = "none";
-    if (statusText) {
-      statusText.textContent = metadata.title || "Connecting to server...";
-      statusText.style.color = "#192B3A";
-    }
-    if (subText) {
-      subText.textContent = metadata.sub || "";
-      subText.style.color = "#697782";
+    if (pBar) pBar.style.width = "40%";
+    if (icon1) {
+      icon1.style.background = "transparent";
+      icon1.style.border = "2px solid #5B3DF5";
+      icon1.style.borderTopColor = "transparent";
+      icon1.style.animation = "splashSpin 0.9s linear infinite";
+      icon1.innerHTML = "";
     }
   } else if (newState === AppState.CONNECTED) {
     if (launchColdStartTimer) clearTimeout(launchColdStartTimer);
     if (launchColdStartInterval) clearInterval(launchColdStartInterval);
-    if (spinner) spinner.style.display = "none";
-    if (statusText) {
-      statusText.textContent = "✓ Connected to server";
-      statusText.style.color = "#10B981";
+    if (pBar) pBar.style.width = "100%";
+    
+    // Step 1: Server reachable
+    if (icon1) {
+      icon1.style.background = "#0E7C58";
+      icon1.style.border = "none";
+      icon1.style.animation = "none";
+      icon1.innerHTML = greenCheckSvg;
     }
-    if (subText) {
-      subText.textContent = "";
+    // Step 2: Restoring your session
+    if (step2) step2.style.color = "#FFFFFF";
+    if (icon2) {
+      icon2.style.background = "#0E7C58";
+      icon2.style.border = "none";
+      icon2.style.animation = "none";
+      icon2.innerHTML = greenCheckSvg;
+    }
+    // Step 3: Syncing today's store data
+    if (step3) step3.style.color = "#FFFFFF";
+    if (icon3) {
+      icon3.style.background = "#0E7C58";
+      icon3.style.border = "none";
+      icon3.style.animation = "none";
+      icon3.innerHTML = greenCheckSvg;
     }
     if (actionContainer) actionContainer.style.display = "none";
 
-    // Dismiss splash screen smoothly after short confirmation
     setTimeout(() => {
       dismissSplashScreen();
     }, 450);
   } else if (newState === AppState.CONNECTION_FAILED) {
     if (launchColdStartTimer) clearTimeout(launchColdStartTimer);
     if (launchColdStartInterval) clearInterval(launchColdStartInterval);
-    if (spinner) spinner.style.display = "none";
-    if (statusText) {
-      statusText.textContent = "Can't connect to server";
-      statusText.style.color = "#EF4444";
+    if (pBar) {
+      pBar.style.width = "100%";
+      pBar.style.background = "#C8283C";
     }
-    if (subText) {
-      subText.textContent = metadata.error || "Unable to establish connection to the cloud server.";
-      subText.style.color = "#697782";
+    if (icon1) {
+      icon1.style.background = "#C8283C";
+      icon1.style.border = "none";
+      icon1.style.animation = "none";
+      icon1.style.color = "#FFFFFF";
+      icon1.style.fontSize = "12px";
+      icon1.style.fontWeight = "bold";
+      icon1.innerHTML = "✕";
     }
     if (actionContainer) {
       actionContainer.style.display = "flex";
       actionContainer.style.flexDirection = "column";
       actionContainer.style.gap = "10px";
       actionContainer.innerHTML = `
-        <button type="button" class="btn btn-primary" onclick="startAppLaunchSequence()" style="width: 100%; padding: 12px; font-weight: 700; background: #E65100; border: none; box-shadow: 0 4px 14px rgba(230,81,0,0.3); border-radius: 8px; color: #FFF; font-size: 14px; cursor: pointer;">
-          ⟳ ${t("retry_conn_btn", "Retry Connection")}
+        <button type="button" class="btn btn-primary" onclick="startAppLaunchSequence()" style="width: 100%; height: 48px; font-weight: 700; background: var(--vastra-violet); border: none; border-radius: var(--radius-button); color: #FFF; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span>Retry Connection</span>
         </button>
-        <button type="button" class="btn btn-secondary" onclick="enterOfflineTillMode()" style="width: 100%; padding: 10px; font-size: 13px; background: #F3F4F6; color: #192B3A; border: 1px solid #D1D5DB; border-radius: 8px; cursor: pointer;">
-          ${t("use_offline_till", "Open Offline POS Till")}
+        <button type="button" onclick="enterOfflineTillMode()" style="width: 100%; height: 44px; font-size: 14px; font-weight: 600; background: #1C1B24; color: #FFFFFF; border: 1px solid #2B2A36; border-radius: var(--radius-button); cursor: pointer;">
+          Open Offline POS Till
         </button>
       `;
     }
   }
 }
+
 
 async function startAppLaunchSequence() {
   setAppState(AppState.CONNECTING, {
@@ -5788,4 +5060,4406 @@ if (document.readyState === "complete" || document.readyState === "interactive")
   window.addEventListener("DOMContentLoaded", () => {
     startAppLaunchSequence();
   });
+}
+
+
+
+// ============================================================================
+// LUCIDE ICON ENGINE (Exact 1.75px stroke, outline only, ISC License)
+// ============================================================================
+function lucideIcon(name, size = 20, stroke = 1.75, color = "currentColor", className = "") {
+  const icons = {
+    "home": '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>',
+    "shirt": '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"></path>',
+    "truck": '<rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>',
+    "grid": '<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect>',
+    "wallet": '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>',
+    "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+    "clock": '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
+    "package": '<path d="m16.5 9.4-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>',
+    "arrow-left-right": '<path d="m9 7-5 5 5 5"></path><path d="m15 17 5-5-5-5"></path><path d="M4 12h16"></path>',
+    "receipt": '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"></path><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 17.5v.5"></path><path d="M12 6v.5"></path>',
+    "cash": '<rect width="20" height="12" x="2" y="6" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path>',
+    "building": '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v8h4"></path><path d="M18 12h2a2 2 0 0 1 2 2v8h-4"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path>',
+    "store": '<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"></path><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"></path><path d="M2 7h20"></path><path d="M22 7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2"></path>',
+    "bar-chart": '<path d="M3 3v18h18"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
+    "network": '<circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>',
+    "palette": '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.992 6.5 17.5 2 12 2z"></path>',
+    "settings": '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle>',
+    "search": '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
+    "scan": '<path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>',
+    "bell": '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
+    "qr-code": '<rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01"></path><path d="M12 3h.01"></path><path d="M12 16v.01"></path><path d="M16 12h1"></path><path d="M21 12v.01"></path><path d="M12 21v-1"></path>',
+    "check": '<polyline points="20 6 9 17 4 12"></polyline>',
+    "plus": '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
+    "minus": '<line x1="5" y1="12" x2="19" y2="12"></line>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"></path>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"></path>',
+    "arrow-left": '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>',
+    "arrow-right": '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
+    "globe": '<circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path>',
+    "lock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
+    "mail": '<rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>',
+    "eye": '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle>',
+    "phone": '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>',
+    "message-circle": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>',
+    "printer": '<polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect width="12" height="8" x="6" y="14"></rect>',
+    "share": '<circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>',
+    "download": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+    "copy": '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
+    "camera": '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle>',
+    "credit-card": '<rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line>',
+    "sliders-horizontal": '<line x1="21" y1="4" x2="14" y2="4"></line><line x1="10" y1="4" x2="3" y2="4"></line><line x1="21" y1="12" x2="12" y2="12"></line><line x1="8" y1="12" x2="3" y2="12"></line><line x1="21" y1="20" x2="16" y2="20"></line><line x1="12" y1="20" x2="3" y2="20"></line><line x1="14" y1="2" x2="14" y2="6"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="16" y1="18" x2="16" y2="22"></line>',
+    "map-pin": '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle>',
+    "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>',
+    "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>',
+    "edit": '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>',
+    "more-vertical": '<circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle>',
+    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path>',
+    "x": '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
+    "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line>',
+    "arrow-up-right": '<line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline>',
+    "arrow-down-left": '<line x1="17" y1="7" x2="7" y2="17"></line><polyline points="17 17 7 17 7 7"></polyline>'
+  };
+
+  const body = icons[name] || icons["grid"];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" class="lucide-icon ${className}">${body}</svg>`;
+}
+window.lucideIcon = lucideIcon;
+window.lucide = lucideIcon;
+
+
+
+// ============================================================================
+// VASTRENIX 34 SCREENS ENGINE — PIXEL-FOR-PIXEL ACCORDING TO Vastrenix_App_UI.pdf
+// ============================================================================
+
+// --- SCREEN 2: LOGIN SCREEN (Page 5) ---
+function renderLoginScreen() {
+  const root = document.getElementById("app");
+  if (!root) return;
+  const t = (k, d) => (window.i18n && window.i18n[state.lang] && window.i18n[state.lang][k]) || d;
+
+  root.innerHTML = `
+    <div style="min-height: 100vh; background: var(--mist); display: flex; flex-direction: column; justify-content: space-between; padding: 24px var(--screen-gutter) 20px var(--screen-gutter); box-sizing: border-box;">
+      <!-- Top Bar: Logo & Language Selector Pill -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <img src="static/brand/vastrenix-icon.svg" alt="vastrenix" style="width: 28px; height: 28px; border-radius: 8px;">
+          <span style="font-size: 20px; font-weight: 700; color: var(--graphite); letter-spacing: -0.5px;">vastrenix</span>
+        </div>
+        <!-- Language Switcher Pill (Page 5: EN pill) -->
+        <button onclick="cycleLanguage()" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-pill); background: var(--paper); border: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--graphite); cursor: pointer;">
+          ${lucideIcon("globe", 15, 1.75, "var(--graphite)")}
+          <span>${state.lang === 'hi' ? 'हिन्दी' : state.lang === 'gu' ? 'ગુજરાતી' : 'EN'}</span>
+          ${lucideIcon("chevron-down", 14, 1.75, "#6B7280")}
+        </button>
+      </div>
+
+      <!-- Main Login Form Container -->
+      <div style="width: 100%; max-width: 400px; margin: 0 auto; flex: 1;">
+        <h1 class="type-title" style="margin: 0 0 8px 0; color: var(--graphite);">Sign in to<br>your store</h1>
+        <p class="type-body" style="color: var(--text-muted); margin: 0 0 28px 0;">Billing, stock and dealer orders — wherever you are.</p>
+
+        <form id="signin-form" onsubmit="handleSignIn(event)">
+          <!-- Email Input -->
+          <div style="margin-bottom: 20px;">
+            <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Email</label>
+            <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; box-shadow: none;">
+              ${lucideIcon("mail", 18, 1.75, "#6B7280")}
+              <input type="email" id="login-email" required placeholder="arjun@odedarafashions.in" value="arjun@odedarafashions.in" style="flex: 1; border: none; outline: none; font-size: 15px; color: var(--graphite); background: transparent; font-family: inherit;">
+            </div>
+          </div>
+
+          <!-- Password Input -->
+          <div style="margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="type-caption" style="font-weight: 600; color: var(--graphite); margin: 0;">Password</label>
+              <a href="#" onclick="alert('Password reset link sent to registered owner email.')" style="font-size: 13px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Forgot password?</a>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+              ${lucideIcon("lock", 18, 1.75, "#6B7280")}
+              <input type="password" id="login-password" required value="VastrenixDemo2026!" style="flex: 1; border: none; outline: none; font-size: 15px; color: var(--graphite); background: transparent; font-family: inherit;">
+              ${lucideIcon("eye", 18, 1.75, "#6B7280")}
+            </div>
+          </div>
+
+          <!-- Continue Button (Graphite / Black per PDF Page 5) -->
+          <button type="submit" class="btn btn-secondary" style="width: 100%; height: 50px; font-size: 15px; font-weight: 600; border-radius: var(--radius-control); display: flex; justify-content: center; align-items: center; gap: 6px;">
+            <span>Continue</span>
+            <span>—</span>
+          </button>
+        </form>
+
+        <!-- Joining a store team? Card (Page 5) -->
+        <div onclick="renderStaffAccessRequest()" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-top: 24px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("user-plus", 20, 1.75, "var(--graphite)")}
+            </div>
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Joining a store team?</div>
+              <div style="font-size: 12.5px; color: var(--text-muted);">Request access — your admin approves it.</div>
+            </div>
+          </div>
+          ${lucideIcon("chevron-right", 18, 1.75, "#9CA3AF")}
+        </div>
+
+        <!-- Set up a new business Link -->
+        <div style="text-align: center; margin-top: 28px;">
+          <a href="#" onclick="renderOnboardingTaxBilling()" style="font-size: 14px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Set up a new business</a>
+        </div>
+      </div>
+
+      <!-- Bottom Connected Status Dot (Page 5) -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 0;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #0E7C58;"></span>
+        <span style="font-size: 12px; font-weight: 500; color: #4B5563;">Connected</span>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 3: STAFF ACCESS REQUEST FLOW (Page 6) ---
+function renderStaffAccessRequest() {
+  const root = document.getElementById("app");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="min-height: 100vh; background: var(--mist); display: flex; flex-direction: column; justify-content: space-between; padding: 20px var(--screen-gutter); box-sizing: border-box;">
+      <div style="width: 100%; max-width: 440px; margin: 0 auto; flex: 1;">
+        <!-- Header: Back & Step Tracker -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+          <button onclick="renderLoginScreen()" style="border: none; background: none; cursor: pointer; padding: 4px; display: flex; align-items: center;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">Step 1 of 2</span>
+        </div>
+
+        <h1 class="type-title" style="margin: 0 0 6px 0; color: var(--graphite);">Request staff access</h1>
+        <p class="type-body" style="color: var(--text-muted); margin: 0 0 24px 0;">Your store owner or admin approves every new account before you can sign in.</p>
+
+        <!-- Store code input with resolved badge -->
+        <div style="margin-bottom: 18px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Store code</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              ${lucideIcon("store", 18, 1.75, "#6B7280")}
+              <input type="text" id="req-store-code" value="ODF-RJK-24" style="border: none; outline: none; font-size: 15px; font-weight: 700; color: var(--graphite); background: transparent; width: 130px; font-family: inherit;">
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: #0E7C58; font-size: 12.5px; font-weight: 700; background: #E8F5E9; padding: 4px 10px; border-radius: var(--radius-pill);">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #0E7C58;"></span>
+              <span>Odedara Fashions</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full Name & Mobile side-by-side -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+          <div>
+            <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Full name</label>
+            <input type="text" id="req-staff-name" value="Ravi Patel" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 14.5px; color: var(--graphite); outline: none;">
+          </div>
+          <div>
+            <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Mobile</label>
+            <input type="text" id="req-staff-phone" value="98250 41123" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 14.5px; color: var(--graphite); outline: none;">
+          </div>
+        </div>
+
+        <!-- Work Email -->
+        <div style="margin-bottom: 22px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Work email</label>
+          <input type="email" id="req-staff-email" value="ravi.patel@gmail.com" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 14.5px; color: var(--graphite); outline: none;">
+        </div>
+
+        <!-- Role Selector (Pill grid from Page 6) -->
+        <div style="margin-bottom: 22px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">Your role</label>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;" id="staff-role-chips">
+            <button type="button" class="segment-btn active" style="background: var(--graphite); color: #FFFFFF; padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;" onclick="selectStaffRoleChip(this, 'Cashier')">
+              ${lucideIcon("check", 14, 2.2, "#FFFFFF")} Cashier
+            </button>
+            <button type="button" class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;" onclick="selectStaffRoleChip(this, 'Inventory')">Inventory</button>
+            <button type="button" class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;" onclick="selectStaffRoleChip(this, 'Purchase')">Purchase</button>
+            <button type="button" class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;" onclick="selectStaffRoleChip(this, 'Accountant')">Accountant</button>
+            <button type="button" class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;" onclick="selectStaffRoleChip(this, 'Dispatcher')">Dispatcher</button>
+            <button type="button" class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); padding: 8px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 500;" onclick="selectStaffRoleChip(this, 'Branch manager')">Branch manager</button>
+          </div>
+        </div>
+
+        <!-- Branch Dropdown -->
+        <div style="margin-bottom: 32px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Branch</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              ${lucideIcon("map-pin", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 500; color: var(--graphite);">Rajkot — Yagnik Road</span>
+            </div>
+            ${lucideIcon("chevron-down", 16, 1.75, "#6B7280")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Continue Button (Vastra Violet #5B3DF5) -->
+      <div style="width: 100%; max-width: 440px; margin: 0 auto;">
+        <button type="button" onclick="renderWaitingApproval()" class="btn btn-primary" style="width: 100%; height: 50px;">
+          Continue
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function selectStaffRoleChip(btn, role) {
+  document.querySelectorAll("#staff-role-chips button").forEach(b => {
+    b.style.background = "var(--paper)";
+    b.style.color = "var(--graphite)";
+    b.style.border = "1px solid var(--border)";
+    b.innerHTML = b.textContent.replace("✓ ", "").trim();
+  });
+  btn.style.background = "var(--graphite)";
+  btn.style.color = "#FFFFFF";
+  btn.style.border = "none";
+  btn.innerHTML = `${lucideIcon("check", 14, 2.2, "#FFFFFF")} ${role}`;
+}
+
+// --- SCREEN 4: WAITING FOR APPROVAL (Page 7) ---
+function renderWaitingApproval() {
+  const root = document.getElementById("app");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="min-height: 100vh; background: var(--mist); display: flex; flex-direction: column; justify-content: space-between; padding: 40px var(--screen-gutter) 24px var(--screen-gutter); box-sizing: border-box;">
+      <div style="width: 100%; max-width: 400px; margin: 0 auto; text-align: center;">
+        <!-- Clock & Arrow Illustration Card -->
+        <div style="width: 80px; height: 80px; border-radius: 24px; background: var(--paper); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px auto; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+          <div style="position: relative;">
+            ${lucideIcon("clock", 36, 1.75, "var(--vastra-violet)")}
+            <div style="position: absolute; bottom: -4px; right: -6px; background: var(--graphite); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("arrow-up-right", 12, 2.2, "#FFFFFF")}
+            </div>
+          </div>
+        </div>
+
+        <h1 class="type-title" style="margin: 0 0 8px 0; color: var(--graphite);">Waiting for approval</h1>
+        <p class="type-body" style="color: var(--text-muted); margin: 0 0 28px 0;">We’ve sent your request to the admins at Odedara Fashions. You’ll get a notification the moment it’s approved.</p>
+
+        <!-- Summary Card (Paper #FFFFFF, radius 18px) -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 24px; text-align: left;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+            <span style="color: var(--text-muted);">Store</span>
+            <span style="font-weight: 600; color: var(--graphite);">Odedara Fashions</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+            <span style="color: var(--text-muted);">Branch</span>
+            <span style="font-weight: 600; color: var(--graphite);">Rajkot — Yagnik Road</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+            <span style="color: var(--text-muted);">Role requested</span>
+            <span style="font-weight: 600; color: var(--graphite);">Cashier</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+            <span style="color: var(--text-muted);">Sent</span>
+            <span style="font-weight: 600; color: var(--graphite);">Today, 10:42 AM</span>
+          </div>
+        </div>
+
+        <!-- Vertical Timeline (Page 7) -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 24px; text-align: left;">
+          <div style="display: flex; gap: 14px; margin-bottom: 16px;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
+              <div style="width: 20px; height: 20px; border-radius: 50%; background: #0E7C58; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("check", 12, 2.2, "#FFFFFF")}
+              </div>
+              <div style="width: 2px; height: 28px; background: #0E7C58;"></div>
+            </div>
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Request submitted</div>
+              <div style="font-size: 12.5px; color: var(--text-muted);">Account created, email verified</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 14px; margin-bottom: 16px;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
+              <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--vastra-violet); display: flex; align-items: center; justify-content: center;">
+                <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--vastra-violet);"></div>
+              </div>
+              <div style="width: 2px; height: 28px; background: #E5E7EB;"></div>
+            </div>
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Admin review</div>
+              <div style="font-size: 12.5px; color: var(--text-muted);">Usually within a few hours</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 14px;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
+              <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #D1D5DB;"></div>
+            </div>
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: #9CA3AF;">Access granted</div>
+              <div style="font-size: 12.5px; color: var(--text-muted);">Sign in with your role’s permissions</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions: Check status & Sign out -->
+      <div style="width: 100%; max-width: 400px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; text-align: center;">
+        <button type="button" class="btn btn-secondary" onclick="alert('Your account is currently under review by Odedara Fashions admins.')" style="width: 100%; height: 50px;">
+          ${lucideIcon("refresh-cw", 16, 1.75, "#FFFFFF")}
+          <span>Check status</span>
+        </button>
+        <button type="button" onclick="renderLoginScreen()" style="background: none; border: none; font-size: 14px; font-weight: 600; color: var(--graphite); padding: 8px; cursor: pointer;">
+          Sign out
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 5: ONBOARDING — TAX & BILLING (Page 8) ---
+function renderOnboardingTaxBilling() {
+  const root = document.getElementById("app");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="min-height: 100vh; background: var(--mist); display: flex; flex-direction: column; justify-content: space-between; padding: 20px var(--screen-gutter); box-sizing: border-box;">
+      <div style="width: 100%; max-width: 440px; margin: 0 auto; flex: 1;">
+        <!-- Top bar: Back & Save & exit -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <button onclick="renderLoginScreen()" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <button onclick="renderLoginScreen()" style="border: none; background: none; font-size: 14px; font-weight: 600; color: var(--graphite); cursor: pointer;">
+            Save & exit
+          </button>
+        </div>
+
+        <!-- Step tracker (Page 8: Business, Tax [active], Products, Invoice, Team) -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px;">
+          <div style="flex: 1; height: 3px; background: var(--vastra-violet); border-radius: 2px;"></div>
+          <div style="flex: 1; height: 3px; background: var(--vastra-violet); border-radius: 2px;"></div>
+          <div style="flex: 1; height: 3px; background: #E5E7EB; border-radius: 2px;"></div>
+          <div style="flex: 1; height: 3px; background: #E5E7EB; border-radius: 2px;"></div>
+          <div style="flex: 1; height: 3px; background: #E5E7EB; border-radius: 2px;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-top: -16px; margin-bottom: 24px;">
+          <span>Business</span>
+          <span style="color: var(--vastra-violet);">Tax</span>
+          <span>Products</span>
+          <span>Invoice</span>
+          <span>Team</span>
+        </div>
+
+        <h1 class="type-title" style="margin: 0 0 6px 0; color: var(--graphite);">Tax & billing</h1>
+        <p class="type-body" style="color: var(--text-muted); margin: 0 0 24px 0;">We’ll use this on every invoice. You can change it later in Settings.</p>
+
+        <!-- GSTIN Input with Verified badge -->
+        <div style="margin-bottom: 18px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">GSTIN</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <input type="text" value="24AAPCO4821K1Z6" style="border: none; outline: none; font-size: 15px; font-weight: 700; color: var(--graphite); background: transparent; width: 180px; font-family: inherit;">
+            <div style="display: flex; align-items: center; gap: 5px; color: #0E7C58; font-size: 12px; font-weight: 700; background: #E8F5E9; padding: 4px 10px; border-radius: var(--radius-pill);">
+              ${lucideIcon("check", 12, 2.2, "#0E7C58")}
+              <span>Verified</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resolved Details Card (Page 8) -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 22px;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px;">
+            <span style="color: var(--text-muted);">Legal name</span>
+            <span style="font-weight: 600; color: var(--graphite);">Odedara Fashions Pvt Ltd</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px;">
+            <span style="color: var(--text-muted);">State</span>
+            <span style="font-weight: 600; color: var(--graphite);">Gujarat (24)</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px;">
+            <span style="color: var(--text-muted);">Registration</span>
+            <span style="font-weight: 600; color: var(--graphite);">Regular</span>
+          </div>
+        </div>
+
+        <!-- Default GST on garments (Segmented pills: 5% | 12% | 18% | By slab) -->
+        <div style="margin-bottom: 22px;">
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">Default GST on garments</label>
+          <div class="segmented-control" style="background: var(--segment-track);">
+            <button type="button" class="segment-btn active" style="font-weight: 700;" onclick="activateSegmentBtn(this)">5%</button>
+            <button type="button" class="segment-btn" onclick="activateSegmentBtn(this)">12%</button>
+            <button type="button" class="segment-btn" onclick="activateSegmentBtn(this)">18%</button>
+            <button type="button" class="segment-btn" onclick="activateSegmentBtn(this)">By slab</button>
+          </div>
+        </div>
+
+        <!-- Toggle Row 1: Prices include GST -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Prices include GST</div>
+            <div style="font-size: 12.5px; color: var(--text-muted);">Off: GST is added at billing</div>
+          </div>
+          <input type="checkbox" style="width: 44px; height: 24px; accent-color: var(--vastra-violet); cursor: pointer;">
+        </div>
+
+        <!-- Toggle Row 2: More than one branch -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">More than one branch</div>
+            <div style="font-size: 12.5px; color: var(--text-muted);">Separate stock and cash per branch</div>
+          </div>
+          <input type="checkbox" checked style="width: 44px; height: 24px; accent-color: var(--vastra-violet); cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Bottom Button Pair: Back & Continue to products -->
+      <div style="width: 100%; max-width: 440px; margin: 0 auto; display: flex; gap: 12px;">
+        <button type="button" class="btn btn-tertiary" onclick="renderLoginScreen()" style="flex: 1; height: 50px;">Back</button>
+        <button type="button" class="btn btn-primary" onclick="loginDemo('demo@vastrenix.com', 'VastrenixDemo2026!')" style="flex: 2; height: 50px;">Continue to products —</button>
+      </div>
+    </div>
+  `;
+}
+
+function activateSegmentBtn(btn) {
+  const parent = btn.parentElement;
+  if (!parent) return;
+  parent.querySelectorAll(".segment-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+
+
+// --- SCREEN 6: HOME / DASHBOARD (Page 9) ---
+async function renderDashboard() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+  const t = (k, d) => (window.i18n && window.i18n[state.lang] && window.i18n[state.lang][k]) || d;
+
+  container.innerHTML = `
+    <div style="padding-bottom: 84px;">
+      <!-- Store Switcher Header (Page 9) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;" onclick="openStoreSettingsModal()">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background: var(--graphite); color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">
+            OF
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 16px; font-weight: 700; color: var(--graphite);">Odedara Fashions</span>
+              ${lucideIcon("chevron-down", 16, 1.75, "var(--graphite)")}
+            </div>
+            <div style="font-size: 12.5px; color: var(--text-muted);">Rajkot · Yagnik Rd</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('inventory')" style="width: 40px; height: 40px; border-radius: 50%; background: var(--paper); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("search", 18, 1.75, "var(--graphite)")}
+          </button>
+          <button onclick="renderUsers()" style="width: 40px; height: 40px; border-radius: 50%; background: var(--paper); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer;">
+            ${lucideIcon("bell", 18, 1.75, "var(--graphite)")}
+            <span style="position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--risk-red);"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Hero Dark Card: Today's sales (Page 9) -->
+      <div class="card-hero-dark" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-size: 13.5px; font-weight: 500; color: #9CA3AF;">Today’s sales · Mon 26 Oct</div>
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(14, 124, 88, 0.2); padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; color: #34D399;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #34D399;"></span>
+            <span>Shift open</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;">
+          <div class="type-figure" style="color: #FFFFFF;">₹48,260</div>
+          <div style="display: flex; align-items: center; gap: 4px; color: #34D399; font-size: 14px; font-weight: 600;">
+            ${lucideIcon("arrow-up-right", 16, 2.2, "#34D399")} 12.4%
+          </div>
+        </div>
+
+        <!-- Mini 7-Bar Chart -->
+        <div style="display: flex; align-items: flex-end; gap: 8px; height: 44px; margin-bottom: 20px; padding: 4px 0;">
+          <div style="flex: 1; height: 35%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 45%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 40%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 55%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 70%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 85%; background: #26262E; border-radius: 3px;"></div>
+          <div style="flex: 1; height: 100%; background: var(--vastra-violet); border-radius: 3px;"></div>
+        </div>
+
+        <!-- 3-stat row (Bills / Avg. bill / Cash drawer) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #1F1F24; padding-top: 14px;">
+          <div>
+            <div style="font-size: 18px; font-weight: 700; color: #FFFFFF; font-variant-numeric: tabular-nums;">37</div>
+            <div style="font-size: 12px; color: #9CA3AF;">Bills</div>
+          </div>
+          <div>
+            <div style="font-size: 18px; font-weight: 700; color: #FFFFFF; font-variant-numeric: tabular-nums;">₹1,304</div>
+            <div style="font-size: 12px; color: #9CA3AF;">Avg. bill</div>
+          </div>
+          <div>
+            <div style="font-size: 18px; font-weight: 700; color: #FFFFFF; font-variant-numeric: tabular-nums;">₹18,450</div>
+            <div style="font-size: 12px; color: #9CA3AF;">Cash drawer</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4-Icon Quick-Action Row (Page 9) -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+        <!-- New bill: Violet Card -->
+        <button onclick="switchTab('pos')" style="background: var(--vastra-violet); border: none; border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: #FFFFFF;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("receipt", 20, 2, "#FFFFFF")}
+          </div>
+          <span style="font-size: 12.5px; font-weight: 600; color: #FFFFFF;">New bill</span>
+        </button>
+
+        <!-- Add item -->
+        <button onclick="openAddGarmentScreen()" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("shirt", 20, 1.75, "var(--graphite)")}
+          </div>
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Add item</span>
+        </button>
+
+        <!-- Receive -->
+        <button onclick="openReceiveGoodsScreen()" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("truck", 20, 1.75, "var(--graphite)")}
+          </div>
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Receive</span>
+        </button>
+
+        <!-- Expense -->
+        <button onclick="switchTab('expenses')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("wallet", 20, 1.75, "var(--graphite)")}
+          </div>
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Expense</span>
+        </button>
+      </div>
+
+      <!-- Staff Approval Banner (Page 9) -->
+      <div onclick="switchTab('users')" style="background: #EDE9FE; border-radius: var(--radius-card); padding: 14px 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; margin-right: 4px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--vastra-violet); color: white; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; border: 2px solid white;">RP</div>
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--graphite); color: white; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; border: 2px solid white; margin-left: -10px;">MK</div>
+          </div>
+          <span style="font-size: 14px; font-weight: 700; color: var(--graphite);">2 staff requests to review</span>
+        </div>
+        ${lucideIcon("chevron-right", 18, 1.75, "var(--vastra-violet)")}
+      </div>
+
+      <!-- Needs Attention Section (Page 9) -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h2 style="font-size: 16px; font-weight: 700; color: var(--graphite); margin: 0;">Needs attention</h2>
+          <a href="#" onclick="switchTab('more')" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">See all</a>
+        </div>
+
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <!-- Item 1: Low stock -->
+          <div onclick="switchTab('lowstock')" style="padding: 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #FEE2E2; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("alert-triangle", 20, 1.75, "#C8283C")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">14 variants low on stock</div>
+                <div style="font-size: 12.5px; color: var(--text-muted);">5 have a reorder suggestion</div>
+              </div>
+            </div>
+            ${lucideIcon("chevron-right", 18, 1.75, "#9CA3AF")}
+          </div>
+
+          <!-- Item 2: Store credit due -->
+          <div onclick="switchTab('dues')" style="padding: 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #FEF3C7; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("wallet", 20, 1.75, "#A35A00")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">₹1,24,300 store credit due</div>
+                <div style="font-size: 12.5px; color: var(--text-muted);">9 customers · reminders go out 28 Oct</div>
+              </div>
+            </div>
+            ${lucideIcon("chevron-right", 18, 1.75, "#9CA3AF")}
+          </div>
+
+          <!-- Item 3: New dealer orders -->
+          <div onclick="switchTab('orders')" style="padding: 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #EDE9FE; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("truck", 20, 1.75, "#5B3DF5")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">3 new dealer orders</div>
+                <div style="font-size: 12.5px; color: var(--text-muted);">6 accepted orders waiting to pack</div>
+              </div>
+            </div>
+            ${lucideIcon("chevron-right", 18, 1.75, "#9CA3AF")}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 7: POS "NEW BILL" (Page 10) ---
+function renderPOS() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="padding-bottom: 96px;">
+      <!-- Top Bar: Title & Hold -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('dashboard')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 20, 1.75, "var(--graphite)")}
+          </button>
+          <div>
+            <h1 class="type-heading" style="margin: 0; color: var(--graphite);">New bill</h1>
+            <div style="font-size: 12px; color: var(--text-muted);">VX-2041 · Counter 1</div>
+          </div>
+        </div>
+        <button onclick="alert('Current bill held and saved to queue.')" style="display: flex; align-items: center; gap: 6px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--graphite); cursor: pointer;">
+          ${lucideIcon("clock", 15, 1.75, "var(--graphite)")}
+          <span>Hold</span>
+        </button>
+      </div>
+
+      <!-- Add Customer (Optional, clearly marked - Product Principle 01) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="promptCustomerName()">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("users", 18, 1.75, "#6B7280")}
+          </div>
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);" id="pos-cust-name-label">Add customer</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Optional · needed for store credit</div>
+          </div>
+        </div>
+        ${lucideIcon("plus", 18, 2, "var(--vastra-violet)")}
+      </div>
+
+      <!-- Search / Scan Bar (Page 10) -->
+      <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 14px; margin-bottom: 16px;">
+        ${lucideIcon("search", 18, 1.75, "#6B7280")}
+        <input type="text" placeholder="Search name, SKU or size" style="flex: 1; border: none; outline: none; font-size: 14.5px; background: transparent; font-family: inherit;">
+        <button style="border: none; background: none; cursor: pointer; padding: 2px;">
+          ${lucideIcon("scan", 20, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Cart List Items (Page 10) -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+        <!-- Item 1: Chanderi silk kurta -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #233876; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta</div>
+              <div class="type-caption">Indigo · M · VX-KUR-0142</div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite); margin-top: 2px;">₹2,450</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">−</button>
+            <span style="font-size: 14px; font-weight: 700; min-width: 16px; text-align: center;">1</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">+</button>
+          </div>
+        </div>
+
+        <!-- Item 2: Linen Nehru jacket -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #374151; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Linen Nehru jacket</div>
+              <div class="type-caption">Charcoal · 40 · VX-JKT-0087</div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite); margin-top: 2px;">₹1,890</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">−</button>
+            <span style="font-size: 14px; font-weight: 700; min-width: 16px; text-align: center;">1</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">+</button>
+          </div>
+        </div>
+
+        <!-- Item 3: Cotton palazzo -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #9A3412; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Cotton palazzo</div>
+              <div class="type-caption">Rust · L · VX-PLZ-0213 · ₹790 each</div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite); margin-top: 2px;">₹1,580</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">−</button>
+            <span style="font-size: 14px; font-weight: 700; min-width: 16px; text-align: center;">2</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer; padding: 2px 6px;">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- + Custom Item Link (Page 10) -->
+      <div style="margin-bottom: 20px;">
+        <button onclick="openCustomItemModal()" style="border: none; background: none; color: var(--vastra-violet); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          ${lucideIcon("plus", 16, 2, "var(--vastra-violet)")}
+          <span>Custom item</span>
+        </button>
+      </div>
+
+      <!-- Financial Calculation Breakdown Card (Page 10) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Subtotal · 4 items</span>
+          <span style="font-weight: 600; color: var(--graphite); font-variant-numeric: tabular-nums;">₹5,920.00</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">CGST 2.5% + SGST 2.5%</span>
+          <span style="font-weight: 600; color: var(--graphite); font-variant-numeric: tabular-nums;">₹296.00</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Discount</span>
+          <a href="#" onclick="alert('Enter discount percentage or amount');" style="color: var(--vastra-violet); font-weight: 600; text-decoration: none;">Add</a>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); margin-top: 6px; font-size: 13px;">
+          <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="switchTab('themes')">
+            ${lucideIcon("receipt", 15, 1.75, "#6B7280")}
+            <span style="color: var(--text-muted);">Invoice: <strong style="color: var(--vastra-violet);">Modern Minimal</strong></span>
+          </div>
+          <span style="color: var(--text-muted); font-variant-numeric: tabular-nums;">Round off −₹0.00</span>
+        </div>
+      </div>
+
+      <!-- Sticky Bottom Total & Charge Button (Page 10) -->
+      <div style="position: fixed; bottom: 68px; left: 0; right: 0; background: var(--paper); border-top: 1px solid var(--border); padding: 12px var(--screen-gutter); display: flex; justify-content: space-between; align-items: center; z-index: 100;">
+        <div>
+          <div class="type-overline" style="color: var(--text-muted);">Total payable</div>
+          <div style="font-size: 24px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹6,216</div>
+        </div>
+        <button onclick="openPaymentMethodSheet()" class="btn btn-primary" style="height: 48px; padding: 0 20px; display: flex; align-items: center; gap: 10px;">
+          <span>Charge</span>
+          <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: var(--radius-pill); font-size: 12.5px;">
+            ${lucideIcon("cash", 14, 1.75, "#FFFFFF")}
+            <span id="pos-charge-mode-text">Cash ></span>
+          </div>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function promptCustomerName() {
+  const name = prompt("Enter customer name or phone for Store Credit tracking:", "Meera Shah");
+  if (name) {
+    const el = document.getElementById("pos-cust-name-label");
+    if (el) el.textContent = name;
+  }
+}
+
+// --- SCREEN 8: PAYMENT METHOD BOTTOM SHEET (Page 11) ---
+function openPaymentMethodSheet() {
+  let sheet = document.getElementById("pos-payment-bottom-sheet");
+  if (!sheet) {
+    sheet = document.createElement("div");
+    sheet.id = "pos-payment-bottom-sheet";
+    sheet.className = "modal-overlay active";
+    sheet.style.zIndex = "100000";
+    document.body.appendChild(sheet);
+  }
+
+  sheet.innerHTML = `
+    <div style="position: fixed; inset: 0; background: rgba(14, 14, 18, 0.6);" onclick="closePaymentMethodSheet()"></div>
+    <div class="bottom-sheet" style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 100001; max-width: 500px; margin: 0 auto; box-sizing: border-box;">
+      <div class="sheet-drag-handle"></div>
+
+      <!-- Header: Amount due & Edit bill link -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+        <div>
+          <div style="font-size: 12.5px; color: var(--text-muted);">Amount due · VX-2041</div>
+          <div class="type-figure" style="font-size: 36px; line-height: 42px;">₹6,216</div>
+        </div>
+        <button onclick="closePaymentMethodSheet()" style="border: none; background: none; font-size: 14px; font-weight: 600; color: var(--vastra-violet); cursor: pointer; padding: 4px;">
+          Edit bill
+        </button>
+      </div>
+
+      <!-- 5-Mode Segmented Selector (Cash / UPI / Card / Split / Credit) -->
+      <div class="segmented-control" style="margin-bottom: 20px;">
+        <button type="button" class="segment-btn active" onclick="selectPaySegment(this, 'CASH')">
+          ${lucideIcon("cash", 16, 1.75)} Cash
+        </button>
+        <button type="button" class="segment-btn" onclick="selectPaySegment(this, 'UPI')">
+          ${lucideIcon("qr-code", 16, 1.75)} UPI
+        </button>
+        <button type="button" class="segment-btn" onclick="selectPaySegment(this, 'CARD')">
+          ${lucideIcon("credit-card", 16, 1.75)} Card
+        </button>
+        <button type="button" class="segment-btn" onclick="selectPaySegment(this, 'SPLIT')">
+          ${lucideIcon("arrow-left-right", 16, 1.75)} Split
+        </button>
+        <button type="button" class="segment-btn" onclick="selectPaySegment(this, 'CREDIT')">
+          ${lucideIcon("wallet", 16, 1.75)} Credit
+        </button>
+      </div>
+
+      <!-- Cash Received Field (Page 11) -->
+      <div id="cash-received-section">
+        <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">Cash received</label>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 20px; font-weight: 700; color: var(--graphite);">₹</span>
+          <input type="text" id="pos-cash-input" value="6,500" style="border: none; outline: none; font-size: 22px; font-weight: 700; color: var(--graphite); width: 100%; font-family: inherit; font-variant-numeric: tabular-nums;">
+        </div>
+
+        <!-- Quick Amount Chips (Exact, ₹6,500, ₹7,000, ₹10,000) -->
+        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+          <button type="button" class="segment-btn" style="border: 1px solid var(--border); background: var(--paper); border-radius: var(--radius-pill); font-size: 13px;" onclick="setCashVal('6,216')">Exact</button>
+          <button type="button" class="segment-btn active" style="border: 1px solid var(--graphite); background: var(--paper); border-radius: var(--radius-pill); font-size: 13px; font-weight: 700;" onclick="setCashVal('6,500')">₹6,500</button>
+          <button type="button" class="segment-btn" style="border: 1px solid var(--border); background: var(--paper); border-radius: var(--radius-pill); font-size: 13px;" onclick="setCashVal('7,000')">₹7,000</button>
+          <button type="button" class="segment-btn" style="border: 1px solid var(--border); background: var(--paper); border-radius: var(--radius-pill); font-size: 13px;" onclick="setCashVal('10,000')">₹10,000</button>
+        </div>
+
+        <!-- Return Change Row (Page 11: Green label & green 24px figure) -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-top: 1px solid var(--border); margin-bottom: 20px;">
+          <span style="font-size: 15px; font-weight: 600; color: #0E7C58;">Return change</span>
+          <span style="font-size: 24px; font-weight: 700; color: #0E7C58; font-variant-numeric: tabular-nums;">₹284</span>
+        </div>
+      </div>
+
+      <!-- Primary Action Button: Complete sale · ₹6,216 -->
+      <button onclick="handleCompleteSaleAction()" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 16px; margin-bottom: 12px;">
+        Complete sale · ₹6,216
+      </button>
+
+      <!-- Default Payment Hint Subtext -->
+      <div style="text-align: center; font-size: 12.5px; color: var(--text-muted);">
+        Cash is your default · change in Settings
+      </div>
+    </div>
+  `;
+}
+
+function closePaymentMethodSheet() {
+  const sheet = document.getElementById("pos-payment-bottom-sheet");
+  if (sheet) sheet.remove();
+}
+
+let _selectedPayMode = "CASH";
+function selectPaySegment(btn, mode) {
+  _selectedPayMode = mode;
+  btn.parentElement.querySelectorAll(".segment-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  const cashSec = document.getElementById("cash-received-section");
+  if (cashSec) {
+    cashSec.style.display = (mode === "CASH" || mode === "SPLIT") ? "block" : "none";
+  }
+}
+
+function setCashVal(val) {
+  const el = document.getElementById("pos-cash-input");
+  if (el) el.value = val;
+}
+
+function handleCompleteSaleAction() {
+  closePaymentMethodSheet();
+  if (_selectedPayMode === "UPI") {
+    openUpiPaymentScreen();
+  } else {
+    openPaymentConfirmationScreen();
+  }
+}
+
+// --- SCREEN 9: UPI PAYMENT SCREEN (Page 12) ---
+function openUpiPaymentScreen() {
+  const root = document.getElementById("tab-content");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="max-width: 440px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+        <button onclick="switchTab('pos')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <h1 class="type-heading" style="margin: 0; color: var(--graphite);">UPI payment</h1>
+      </div>
+
+      <!-- Collect Exactly Figure (Page 12) -->
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="font-size: 13.5px; color: var(--text-muted);">Collect exactly</div>
+        <div class="type-figure" style="margin: 4px 0;">₹6,216.00</div>
+        <div style="font-size: 13px; color: var(--text-muted);">Bill VX-2041 · 4 items</div>
+      </div>
+
+      <!-- QR Code Card with center woven V mark -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 24px; text-align: center; margin-bottom: 20px;">
+        <div style="width: 200px; height: 200px; margin: 0 auto 16px auto; position: relative; display: flex; align-items: center; justify-content: center; background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; padding: 8px;">
+          <!-- SVG QR Code with Center Logo Mark -->
+          <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+            <path d="M10,10 h25 v25 h-25 z M15,15 v15 h15 v-15 z M65,10 h25 v25 h-25 z M70,15 v15 h15 v-15 z M10,65 h25 v25 h-25 z M15,70 v15 h15 v-15 z" fill="#0E0E12" />
+            <path d="M40,15 h5 v5 h-5 z M50,15 h10 v5 h-10 z M40,25 h15 v5 h-15 z M45,35 h5 v10 h-5 z M15,45 h10 v5 h-10 z M65,45 h20 v5 h-20 z M55,55 h10 v15 h-10 z M75,60 h15 v5 h-15 z M40,65 h10 v20 h-10 z M70,75 h20 v5 h-20 z M80,85 h10 v10 h-10 z" fill="#0E0E12" />
+          </svg>
+          <div style="position: absolute; width: 34px; height: 34px; border-radius: 8px; background: var(--graphite); display: flex; align-items: center; justify-content: center; border: 2px solid white;">
+            <img src="static/brand/vastrenix-icon.svg" style="width: 22px; height: 22px;">
+          </div>
+        </div>
+
+        <!-- UPI ID with Copy Icon -->
+        <div style="display: inline-flex; align-items: center; gap: 8px; background: #F3F4F6; padding: 6px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">
+          <span>odedarafashions@hdfcbank</span>
+          <button onclick="navigator.clipboard.writeText('odedarafashions@hdfcbank'); alert('UPI ID copied!');" style="border: none; background: none; cursor: pointer; padding: 0;">
+            ${lucideIcon("copy", 14, 1.75, "#6B7280")}
+          </button>
+        </div>
+
+        <div style="font-size: 12.5px; color: var(--text-muted);">Scan with GPay, PhonePe, Paytm or any UPI app</div>
+      </div>
+
+      <!-- Status Pill: Waiting for payment · QR valid 04:32 (Page 12) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #EDE9FE; padding: 12px 18px; border-radius: var(--radius-pill); margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--vastra-violet);"></span>
+          <span style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet);">Waiting for payment</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 600; color: var(--vastra-violet); font-variant-numeric: tabular-nums;">QR valid 04:32</span>
+      </div>
+
+      <!-- Primary Action: Customer has paid -->
+      <button onclick="openPaymentConfirmationScreen()" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        ${lucideIcon("check", 18, 2.2, "#FFFFFF")}
+        <span>Customer has paid</span>
+      </button>
+
+      <!-- Secondary Row: Change method | Send link -->
+      <div style="display: flex; gap: 12px;">
+        <button onclick="openPaymentMethodSheet()" class="btn btn-tertiary" style="flex: 1; height: 44px; font-size: 13.5px;">Change method</button>
+        <button onclick="alert('Payment link dispatched via SMS/WhatsApp.')" class="btn btn-tertiary" style="flex: 1; height: 44px; font-size: 13.5px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          ${lucideIcon("arrow-up-right", 16, 1.75)}
+          <span>Send link</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 10: PAYMENT RECEIVED CONFIRMATION (Page 13) ---
+function openPaymentConfirmationScreen() {
+  const root = document.getElementById("tab-content");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div style="max-width: 440px; margin: 0 auto; text-align: center; padding: 32px var(--screen-gutter) 84px var(--screen-gutter);">
+      <!-- Success Animated Badge (Page 13) -->
+      <div style="width: 72px; height: 72px; border-radius: 50%; background: #0E7C58; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px auto; box-shadow: 0 8px 24px rgba(14, 124, 88, 0.25);">
+        ${lucideIcon("check", 38, 2.5, "#FFFFFF")}
+      </div>
+
+      <div style="font-size: 14.5px; color: var(--text-muted); margin-bottom: 4px;">Payment received</div>
+      <div class="type-figure" style="margin-bottom: 6px;">₹6,216</div>
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 28px;">via UPI · 7:42 PM · Invoice VX-2041</div>
+
+      <!-- Optional UTR Card (Page 13) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px; text-align: left;">
+        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+          <strong style="color: var(--graphite);">UTR / reference no.</strong>
+          <span style="color: var(--text-muted);">Optional</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; background: #F9FAFB; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 12px; margin-bottom: 8px;">
+          <input type="text" value="4321 9876 5410" style="border: none; outline: none; font-size: 15px; font-weight: 600; color: var(--graphite); background: transparent; font-family: inherit; font-variant-numeric: tabular-nums;">
+          ${lucideIcon("camera", 18, 1.75, "#6B7280")}
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted);">Helps match this bill during bank reconciliation.</div>
+      </div>
+
+      <!-- 3-Action Card Row: View invoice | WhatsApp | Print (Page 13) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+        <button onclick="openInvoiceDetail({id: 'VX-2041', total: 6216})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+          ${lucideIcon("receipt", 22, 1.75, "var(--graphite)")}
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">View invoice</span>
+        </button>
+        <button onclick="alert('PDF invoice shared to customer WhatsApp number.')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+          ${lucideIcon("message-circle", 22, 1.75, "#0E7C58")}
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">WhatsApp</span>
+        </button>
+        <button onclick="window.print()" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+          ${lucideIcon("printer", 22, 1.75, "var(--graphite)")}
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Print</span>
+        </button>
+      </div>
+
+      <!-- Stock Updated Link Banner (Page 13) -->
+      <div style="background: #F3F4F6; border-radius: var(--radius-card); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--graphite); font-weight: 500;">
+          ${lucideIcon("package", 16, 1.75, "#6B7280")}
+          <span>Stock updated · 4 units sold</span>
+        </div>
+        <a href="#" onclick="switchTab('inventory')" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">View</a>
+      </div>
+
+      <!-- Bottom Button: + Next bill & Back to home -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button onclick="switchTab('pos')" class="btn btn-secondary" style="height: 50px; font-size: 15px;">
+          ${lucideIcon("plus", 18, 2, "#FFFFFF")}
+          <span>Next bill</span>
+        </button>
+        <button onclick="switchTab('dashboard')" style="background: none; border: none; font-size: 14px; font-weight: 600; color: var(--graphite); cursor: pointer; padding: 6px;">
+          Back to home
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 11: CLOSE SHIFT (Page 14) ---
+function renderCloseShift() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 14) -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <button onclick="switchTab('dashboard')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 24px;">Close shift</h1>
+          <div style="font-size: 12.5px; color: var(--text-muted);">Ravi P. · Counter 1 · since 10:02 AM</div>
+        </div>
+      </div>
+
+      <!-- Reconciliation Card (Page 14) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+          <span style="color: var(--text-muted);">Opening float</span>
+          <span style="font-weight: 600; color: var(--graphite); font-variant-numeric: tabular-nums;">₹2,000</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+          <span style="color: var(--text-muted);">Cash sales · 22 bills</span>
+          <span style="font-weight: 600; color: #0E7C58; font-variant-numeric: tabular-nums;">+₹24,300</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+          <span style="color: var(--text-muted);">Cash received (dues)</span>
+          <span style="font-weight: 600; color: #0E7C58; font-variant-numeric: tabular-nums;">+₹1,500</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px;">
+          <span style="color: var(--text-muted);">Payouts & expenses</span>
+          <span style="font-weight: 600; color: #C8283C; font-variant-numeric: tabular-nums;">−₹2,350</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0 4px 0; border-top: 1px solid var(--border); margin-top: 6px; font-size: 15px; font-weight: 700;">
+          <span style="color: var(--graphite);">Expected in drawer</span>
+          <span style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹25,450</span>
+        </div>
+      </div>
+
+      <!-- Count the drawer (Denomination Grid - Page 14) -->
+      <div style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <strong style="font-size: 15px; color: var(--graphite);">Count the drawer</strong>
+          <span style="font-size: 12.5px; color: var(--text-muted);">By denomination</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹500</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 32</div>
+          </div>
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹200</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 20</div>
+          </div>
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹100</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 38</div>
+          </div>
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹50</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 20</div>
+          </div>
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹20</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 15</div>
+          </div>
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">₹10 & coins</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">× 20</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control);">
+          <span style="font-size: 15px; font-weight: 600; color: var(--graphite);">Counted</span>
+          <span style="font-size: 22px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹25,300</span>
+        </div>
+      </div>
+
+      <!-- Variance Banner (Amber 'Short by ₹150' style per Page 14) -->
+      <div style="background: #FEF3C7; border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+        ${lucideIcon("alert-triangle", 22, 1.75, "#A35A00")}
+        <div>
+          <div style="font-size: 14.5px; font-weight: 700; color: #A35A00;">Short by ₹150</div>
+          <div style="font-size: 12.5px; color: #78350F;">Add a note — your manager will see it.</div>
+        </div>
+      </div>
+
+      <!-- Non-Cash Collected Summary Cards (Page 14) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px;">
+          <div style="font-size: 12.5px; color: var(--text-muted);">UPI collected</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹19,840</div>
+        </div>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px;">
+          <div style="font-size: 12.5px; color: var(--text-muted);">Card collected</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹4,120</div>
+        </div>
+      </div>
+
+      <!-- Sticky Close Shift Button (Graphite #0E0E12 per Page 14) -->
+      <button onclick="alert('Register shift #14 closed successfully. Settlement summary printed.'); switchTab('dashboard');" class="btn btn-secondary" style="width: 100%; height: 50px; font-size: 15px;">
+        ${lucideIcon("lock", 18, 1.75, "#FFFFFF")}
+        <span>Close shift & print summary</span>
+      </button>
+    </div>
+  `;
+}
+
+// --- SCREEN 12: ITEMS LIST (Page 15) ---
+function renderInventory() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="padding-bottom: 84px;">
+      <!-- Header (Page 15) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 26px;">Items</h1>
+          <div style="font-size: 13px; color: var(--text-muted);">1,284 variants · ₹38.6L at cost</div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("arrow-left-right", 16, 1.75, "var(--graphite)")}
+          </button>
+          <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("search", 16, 1.75, "var(--graphite)")}
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Filter Row -->
+      <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 14px; margin-bottom: 14px;">
+        ${lucideIcon("search", 18, 1.75, "#6B7280")}
+        <input type="text" placeholder="Search kurta, SKU, fabric..." style="flex: 1; border: none; outline: none; font-size: 14px; background: transparent; font-family: inherit;">
+        <button style="border: none; background: none; cursor: pointer; padding: 2px;">
+          ${lucideIcon("scan", 18, 1.75, "var(--graphite)")}
+        </button>
+        <button style="border: none; background: none; cursor: pointer; padding: 2px;">
+          ${lucideIcon("sliders-horizontal", 18, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Horizontal Filter Chips (All [active black] / Low stock · 14 / Kurtas / Sarees / Menswear) -->
+      <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 14px;">
+        <button class="segment-btn active" style="background: var(--graphite); color: #FFFFFF; border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">All</button>
+        <button class="segment-btn" onclick="switchTab('lowstock')" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; white-space: nowrap;">Low stock · 14</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">Kurtas</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); font-size: 13px;">Sarees</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); font-size: 13px;">Menswear</button>
+      </div>
+
+      <!-- Item Rows (Page 15) -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- Item 1: Chanderi silk kurta -->
+        <div onclick="openItemDetail({name: 'Chanderi silk kurta', sku: 'VX-KUR-0142', price: '2,450', avail: '36 available', color: '#233876'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #233876; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta</div>
+              <div class="type-caption">VX-KUR-0142 · S–XL · Chand...</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹2,450</div>
+            <div class="chip chip-paid" style="margin-top: 4px;">36 available</div>
+          </div>
+        </div>
+
+        <!-- Item 2: Banarasi silk saree -->
+        <div onclick="openItemDetail({name: 'Banarasi silk saree', sku: 'VX-SAR-0031', price: '8,900', avail: '3 left', color: '#881337'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #881337; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Banarasi silk saree</div>
+              <div class="type-caption">VX-SAR-0031 · Free size · Katan silk</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹8,900</div>
+            <div class="chip chip-risk" style="margin-top: 4px;">3 left</div>
+          </div>
+        </div>
+
+        <!-- Item 3: Linen Nehru jacket -->
+        <div onclick="openItemDetail({name: 'Linen Nehru jacket', sku: 'VX-JKT-0087', price: '1,890', avail: '9 available', color: '#374151'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #374151; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Linen Nehru jacket</div>
+              <div class="type-caption">VX-JKT-0087 · 38–44 · Linen</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,890</div>
+            <div class="chip chip-due" style="margin-top: 4px;">9 available</div>
+          </div>
+        </div>
+
+        <!-- Item 4: Cotton palazzo -->
+        <div onclick="openItemDetail({name: 'Cotton palazzo', sku: 'VX-PLZ-0213', price: '790', avail: '64 available', color: '#9A3412'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #9A3412; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Cotton palazzo</div>
+              <div class="type-caption">VX-PLZ-0213 · S–XXL · Cotton</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹790</div>
+            <div class="chip chip-paid" style="margin-top: 4px;">64 available</div>
+          </div>
+        </div>
+
+        <!-- Item 5: Bandhani dupatta -->
+        <div onclick="openItemDetail({name: 'Bandhani dupatta', sku: 'VX-DUP-0110', price: '1,250', avail: '2 left', color: '#B45309'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #B45309; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Bandhani dupatta</div>
+              <div class="type-caption">VX-DUP-0110 · Free size · Georgette</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,250</div>
+            <div class="chip chip-risk" style="margin-top: 4px;">2 left</div>
+          </div>
+        </div>
+
+        <!-- Item 6: Khadi kurta pyjama set -->
+        <div onclick="openItemDetail({name: 'Khadi kurta pyjama set', sku: 'VX-SET-0045', price: '2,190', avail: '21 available', color: '#3F6212'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: #3F6212; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("shirt", 22, 1.75, "#FFFFFF")}
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Khadi kurta pyjama set</div>
+              <div class="type-caption">VX-SET-0045 · 38–46 · Khadi</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹2,190</div>
+            <div class="chip chip-paid" style="margin-top: 4px;">21 available</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Action Button: + Add garment (Vastra Violet #5B3DF5 pill - Page 15) -->
+      <div style="position: fixed; bottom: 84px; right: var(--screen-gutter); z-index: 99;">
+        <button onclick="openAddGarmentScreen()" class="btn btn-primary" style="border-radius: var(--radius-pill); padding: 12px 20px; box-shadow: 0 8px 24px rgba(91, 61, 245, 0.35);">
+          ${lucideIcon("plus", 18, 2, "#FFFFFF")}
+          <span>Add garment</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 13: ITEM DETAIL (Page 16) ---
+function openItemDetail(item = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const name = item.name || "Chanderi silk kurta";
+  const sku = item.sku || "VX-KUR-0142";
+  const price = item.price || "2,450";
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 96px;">
+      <!-- Top Bar: Back & Actions -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <button onclick="switchTab('inventory')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("edit", 16, 1.75, "var(--graphite)")}
+          </button>
+          <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("more-vertical", 16, 1.75, "var(--graphite)")}
+          </button>
+        </div>
+      </div>
+
+      <!-- Hero Visual Panel with Color Swatches & Counter (Page 16) -->
+      <div style="background: #233876; border-radius: var(--radius-card); height: 200px; position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+        ${lucideIcon("shirt", 80, 1.5, "rgba(255,255,255,0.7)")}
+
+        <!-- Color Swatch Dots -->
+        <div style="position: absolute; bottom: 14px; left: 16px; display: flex; gap: 8px; align-items: center;">
+          <div style="width: 22px; height: 22px; border-radius: 50%; background: #233876; border: 2px solid white;"></div>
+          <div style="width: 18px; height: 18px; border-radius: 50%; background: #881337;"></div>
+          <div style="width: 18px; height: 18px; border-radius: 50%; background: #D97706;"></div>
+        </div>
+
+        <!-- 1 / 4 Image Indicator -->
+        <div style="position: absolute; bottom: 14px; right: 16px; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 600; color: white;">
+          1 / 4
+        </div>
+      </div>
+
+      <!-- Title & Price (Page 16) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px;">
+        <div>
+          <h1 class="type-title" style="margin: 0 0 4px 0; font-size: 24px;">${name}</h1>
+          <div class="type-caption">Indigo · ${sku} · HSN 6204</div>
+        </div>
+        <div class="type-title" style="color: var(--graphite); font-size: 26px; font-variant-numeric: tabular-nums;">₹${price}</div>
+      </div>
+
+      <!-- 3-Price Card Row (Retail / Wholesale / Dealer) -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Retail</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹2,450</div>
+        </div>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Wholesale</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹1,980</div>
+        </div>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Dealer</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹1,760</div>
+        </div>
+      </div>
+
+      <!-- Stock Breakdown Card (Page 16) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <strong style="font-size: 15px; color: var(--graphite);">Stock</strong>
+          <span style="font-size: 12.5px; color: var(--text-muted);">48 on hand · 20 in transit</span>
+        </div>
+
+        <!-- Segmented Stock Bar -->
+        <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 14px;">
+          <div style="flex: 36; background: var(--graphite);"></div>
+          <div style="flex: 8; background: var(--vastra-violet);"></div>
+          <div style="flex: 4; background: var(--risk-red);"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--graphite);"></span> Available
+            </div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--graphite); margin-top: 2px;">36</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--vastra-violet);"></span> Reserved
+            </div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--graphite); margin-top: 2px;">8</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--risk-red);"></span> Damaged
+            </div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--graphite); margin-top: 2px;">4</div>
+          </div>
+        </div>
+
+        <!-- Size Grid with Low Stock Highlighting (Page 16) -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div style="background: #F9FAFB; border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 12px; color: var(--text-muted);">S</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">6</div>
+          </div>
+          <div style="background: #F9FAFB; border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 12px; color: var(--text-muted);">M</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">14</div>
+          </div>
+          <div style="background: #FEE2E2; border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 12px; color: #C8283C; font-weight: 600;">L · low</div>
+            <div style="font-size: 16px; font-weight: 700; color: #C8283C; margin-top: 2px;">3</div>
+          </div>
+          <div style="background: #F9FAFB; border-radius: var(--radius-control); padding: 10px; text-align: center;">
+            <div style="font-size: 12px; color: var(--text-muted);">XL</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px;">13</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Rows (Fabric / Supplier / Location) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Fabric</span>
+          <span style="font-weight: 600; color: var(--graphite);">Chanderi silk-cotton</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Supplier</span>
+          <span style="font-weight: 600; color: var(--vastra-violet); cursor: pointer;" onclick="switchTab('suppliers')">Shree Textiles, Surat</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Location</span>
+          <span style="font-weight: 600; color: var(--graphite);">Rack R-03 · Shelf B</span>
+        </div>
+      </div>
+
+      <!-- Bottom Action Pair: New order | Receive stock (Page 16) -->
+      <div style="display: flex; gap: 12px;">
+        <button onclick="switchTab('suppliers')" class="btn btn-tertiary" style="flex: 1; height: 50px;">
+          ${lucideIcon("receipt", 18, 1.75)} New order
+        </button>
+        <button onclick="openReceiveGoodsScreen()" class="btn btn-primary" style="flex: 1; height: 50px;">
+          ${lucideIcon("package", 18, 1.75, "#FFFFFF")} Receive stock
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 14: ADD GARMENT (Page 17) ---
+function openAddGarmentScreen() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Top Bar: Close & Save draft (Page 17) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button onclick="switchTab('inventory')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("x", 22, 1.75, "var(--graphite)")}
+          </button>
+          <h1 class="type-heading" style="margin: 0; font-size: 18px;">Add garment</h1>
+        </div>
+        <button onclick="alert('Draft saved locally.'); switchTab('inventory');" style="border: none; background: none; font-size: 14px; font-weight: 600; color: var(--graphite); cursor: pointer;">
+          Save draft
+        </button>
+      </div>
+
+      <!-- Top Photo Picker + Swatch Row (Page 17) -->
+      <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+        <div style="width: 80px; height: 80px; border: 1.5px dashed var(--border); border-radius: var(--radius-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; background: var(--paper);">
+          ${lucideIcon("camera", 22, 1.75, "#6B7280")}
+          <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Add photo</span>
+        </div>
+        <div style="width: 80px; height: 80px; border-radius: var(--radius-card); background: #134E4A; display: flex; align-items: center; justify-content: center;">
+          ${lucideIcon("shirt", 32, 1.75, "rgba(255,255,255,0.7)")}
+        </div>
+        <div style="width: 80px; height: 80px; border-radius: var(--radius-card); background: #D6C2A9; display: flex; align-items: center; justify-content: center;">
+          ${lucideIcon("shirt", 32, 1.75, "rgba(255,255,255,0.7)")}
+        </div>
+      </div>
+
+      <!-- Garment Name Input -->
+      <div style="margin-bottom: 18px;">
+        <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Garment name</label>
+        <input type="text" id="add-prod-name" value="Mul cotton anarkali" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 15px; font-weight: 500; color: var(--graphite); outline: none;">
+      </div>
+
+      <!-- Category & Fabric Dropdown Row -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+        <div>
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Category</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <span style="font-size: 14.5px; color: var(--graphite);">Kurtas</span>
+            ${lucideIcon("chevron-down", 16, 1.75, "#6B7280")}
+          </div>
+        </div>
+        <div>
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Fabric</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <span style="font-size: 14.5px; color: var(--graphite);">Mul cotton</span>
+            ${lucideIcon("chevron-down", 16, 1.75, "#6B7280")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Colours Row with Add Button -->
+      <div style="margin-bottom: 20px;">
+        <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">Colours</label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--border); padding: 6px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 600;">
+            <span style="width: 14px; height: 14px; border-radius: 50%; background: #134E4A;"></span>
+            <span>Teal</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--border); padding: 6px 14px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 600;">
+            <span style="width: 14px; height: 14px; border-radius: 50%; background: #D6C2A9;"></span>
+            <span>Beige</span>
+          </div>
+          <button style="width: 32px; height: 32px; border-radius: 50%; background: var(--paper); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("plus", 16, 2, "var(--graphite)")}
+          </button>
+        </div>
+      </div>
+
+      <!-- Sizes Grid with Live Variant Count (Page 17) -->
+      <div style="margin-bottom: 22px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label class="type-caption" style="font-weight: 600; color: var(--graphite); margin: 0;">Sizes</label>
+          <span style="font-size: 12.5px; color: var(--text-muted);">8 variants will be created</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;">
+          <button class="segment-btn" style="border: 1px solid var(--border); background: var(--paper); border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">XS</button>
+          <button class="segment-btn active" style="background: var(--graphite); color: white; border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">S</button>
+          <button class="segment-btn active" style="background: var(--graphite); color: white; border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">M</button>
+          <button class="segment-btn active" style="background: var(--graphite); color: white; border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">L</button>
+          <button class="segment-btn active" style="background: var(--graphite); color: white; border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">XL</button>
+          <button class="segment-btn" style="border: 1px solid var(--border); background: var(--paper); border-radius: var(--radius-control); padding: 10px 0; font-size: 13px;">XXL</button>
+        </div>
+      </div>
+
+      <!-- Pricing 4-Field Grid (Cost / Retail / Wholesale / Dealer) -->
+      <div style="margin-bottom: 22px;">
+        <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 8px;">Pricing</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 4px;">Cost</label>
+            <input type="text" value="₹980" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">
+          </div>
+          <div>
+            <label style="font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 4px;">Retail (MRP)</label>
+            <input type="text" value="₹2,190" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 4px;">Wholesale</label>
+            <input type="text" value="₹1,640" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">
+          </div>
+          <div>
+            <label style="font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 4px;">Dealer</label>
+            <input type="text" value="₹1,480" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Information Note (Page 17) -->
+      <div style="display: flex; gap: 8px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4;">
+        <span style="color: var(--text-muted);">ⓘ</span>
+        <span>Barcodes are generated. Stock starts at 0 until goods are received.</span>
+      </div>
+
+      <!-- Primary Action: Create 8 variants (Vastra Violet #5B3DF5) -->
+      <button onclick="alert('Successfully generated 8 variant SKUs with unique barcodes!'); switchTab('inventory');" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+        Create 8 variants
+      </button>
+    </div>
+  `;
+}
+
+// --- SCREEN 15: RECEIVE GOODS (Page 18) ---
+function openReceiveGoodsScreen(po = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Scanner Icon (Page 18) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('inventory')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <div>
+            <h1 class="type-heading" style="margin: 0; font-size: 20px;">Receive goods</h1>
+            <div style="font-size: 12.5px; color: var(--text-muted);">Against PO-0318 · Shree Textiles</div>
+          </div>
+        </div>
+        <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("scan", 20, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Progress Card (62 of 80 units arrived · Partial receipt) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <strong style="font-size: 15px; color: var(--graphite);">62 of 80 units arrived</strong>
+          <span class="chip chip-due">Partial receipt</span>
+        </div>
+        <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+          <div style="width: 77.5%; height: 100%; background: var(--graphite); border-radius: 3px;"></div>
+        </div>
+      </div>
+
+      <!-- Supplier Invoice & Put-away fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+        <div>
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Supplier invoice</label>
+          <input type="text" value="ST/24-25/1187" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 14px; font-weight: 600; color: var(--graphite);">
+        </div>
+        <div>
+          <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Put away at</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px;">
+            <span style="font-size: 14px; color: var(--graphite);">Godown · R-03</span>
+            ${lucideIcon("chevron-down", 16, 1.75, "#6B7280")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-Line Input Table (ITEM | RECD | DAMAGED - Page 18) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 18px;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px;">
+          <span>ITEM</span>
+          <span style="text-align: center;">RECD</span>
+          <span style="text-align: center;">DAMAGED</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta</div>
+            <div class="type-caption">Indigo · M · of 20</div>
+          </div>
+          <input type="number" value="20" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+          <input type="number" value="0" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta</div>
+            <div class="type-caption">Indigo · L · of 20</div>
+          </div>
+          <input type="number" value="18" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+          <input type="number" value="2" style="text-align: center; background: #FEE2E2; border: 1px solid #FCA5A5; color: #C8283C; border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Linen Nehru jacket</div>
+            <div class="type-caption">Charcoal · 40 · of 20</div>
+          </div>
+          <input type="number" value="12" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+          <input type="number" value="0" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border);">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Cotton palazzo</div>
+            <div class="type-caption">Rust · L · of 20</div>
+          </div>
+          <input type="number" value="12" style="text-align: center; background: #F9FAFB; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+          <input type="number" value="2" style="text-align: center; background: #FEE2E2; border: 1px solid #FCA5A5; color: #C8283C; border-radius: 8px; padding: 8px; font-weight: 700; font-size: 15px;">
+        </div>
+      </div>
+
+      <!-- Informational Note (Page 18) -->
+      <div style="display: flex; gap: 8px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">
+        <span style="color: var(--text-muted);">ⓘ</span>
+        <span>18 units stay open on the PO. Damaged pieces are tracked separately and can be returned to the supplier.</span>
+      </div>
+
+      <!-- Bottom Bar: Adds to stock summary & Post goods receipt (Page 18) -->
+      <div style="margin-bottom: 12px; font-size: 13.5px; display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Adds to stock</span>
+        <strong style="color: var(--graphite);">58 available · 4 damaged</strong>
+      </div>
+
+      <button onclick="alert('Inward stock receipt posted. Inventory counts updated across store and godown.'); switchTab('inventory');" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+        ${lucideIcon("check", 18, 2.2, "#FFFFFF")}
+        <span>Post goods receipt</span>
+      </button>
+    </div>
+  `;
+}
+
+
+
+// --- SCREEN 16: LOW STOCK (Page 19) ---
+function renderLowStock() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Locations Dropdown (Page 19) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('inventory')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <h1 class="type-title" style="margin: 0; font-size: 24px;">Low stock</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--graphite); background: var(--paper); border: 1px solid var(--border); padding: 6px 12px; border-radius: var(--radius-pill); cursor: pointer;">
+          ${lucideIcon("map-pin", 14, 1.75, "var(--graphite)")}
+          <span>All locations</span>
+          ${lucideIcon("chevron-down", 14, 1.75, "#6B7280")}
+        </div>
+      </div>
+
+      <!-- Hero Dark Summary Card (Page 19: Below minimum / Out of stock / To reorder) -->
+      <div class="card-hero-dark" style="margin-bottom: 20px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px;">
+          <div>
+            <div style="font-size: 28px; font-weight: 700; color: #FFFFFF; font-variant-numeric: tabular-nums;">14</div>
+            <div style="font-size: 12px; color: #9CA3AF;">Below minimum</div>
+          </div>
+          <div>
+            <div style="font-size: 28px; font-weight: 700; color: #F87171; font-variant-numeric: tabular-nums;">4</div>
+            <div style="font-size: 12px; color: #9CA3AF;">Out of stock</div>
+          </div>
+          <div>
+            <div style="font-size: 28px; font-weight: 700; color: #FFFFFF; font-variant-numeric: tabular-nums;">₹42.6k</div>
+            <div style="font-size: 12px; color: #9CA3AF;">To reorder</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Supplier Group 1: Shree Textiles (Page 19) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">ST</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Shree Textiles</div>
+              <div class="type-caption">Surat · lead time 5 days</div>
+            </div>
+          </div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹24,300</div>
+        </div>
+
+        <!-- Line 1 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" checked style="accent-color: var(--vastra-violet); width: 18px; height: 18px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta · L</div>
+              <div style="font-size: 12px; color: #C8283C; font-weight: 600;">3 left · min 10</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">−</button>
+            <span style="font-size: 13.5px; font-weight: 700; min-width: 18px; text-align: center;">15</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">+</button>
+          </div>
+        </div>
+
+        <!-- Line 2 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" checked style="accent-color: var(--vastra-violet); width: 18px; height: 18px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Cotton palazzo · XXL</div>
+              <div style="font-size: 12px; color: #C8283C; font-weight: 600;">Out of stock · min 8</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">−</button>
+            <span style="font-size: 13.5px; font-weight: 700; min-width: 18px; text-align: center;">12</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">+</button>
+          </div>
+        </div>
+
+        <!-- Line 3 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" checked style="accent-color: var(--vastra-violet); width: 18px; height: 18px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Linen Nehru jacket · 44</div>
+              <div style="font-size: 12px; color: #A35A00; font-weight: 600;">1 left · min 6</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">−</button>
+            <span style="font-size: 13.5px; font-weight: 700; min-width: 18px; text-align: center;">6</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Supplier Group 2: Kala Silk House (Page 19) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">KS</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Kala Silk House</div>
+              <div class="type-caption">Varanasi · lead time 9 days</div>
+            </div>
+          </div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹18,300</div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" checked style="accent-color: var(--vastra-violet); width: 18px; height: 18px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Banarasi silk saree · Wine</div>
+              <div style="font-size: 12px; color: #C8283C; font-weight: 600;">3 left · min 6</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">−</button>
+            <span style="font-size: 13.5px; font-weight: 700; min-width: 18px; text-align: center;">4</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">+</button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" checked style="accent-color: var(--vastra-violet); width: 18px; height: 18px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Bandhani dupatta · Mustard</div>
+              <div style="font-size: 12px; color: #C8283C; font-weight: 600;">Out of stock · min 5</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #F3F4F6; border-radius: var(--radius-pill); padding: 4px 8px;">
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">−</button>
+            <span style="font-size: 13.5px; font-weight: 700; min-width: 18px; text-align: center;">6</span>
+            <button style="border: none; background: none; font-size: 16px; font-weight: 700; cursor: pointer;">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Bottom: 5 items · 2 suppliers & Create 2 purchase orders -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px;">
+          <span style="color: var(--text-muted);">5 items · 2 suppliers</span>
+          <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹42,600 at cost</strong>
+        </div>
+        <button onclick="alert('2 Purchase Orders (PO-0319 & PO-0320) generated and queued for dispatch.'); switchTab('dealers');" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+          Create 2 purchase orders
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 17: STOCK MOVEMENT (Page 20) ---
+function renderStockMovement() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <h1 class="type-title" style="margin: 0; font-size: 24px;">Stock movement</h1>
+      </div>
+
+      <!-- Tab Switcher: Transfer (active) | Physical count | Return (Page 20) -->
+      <div class="segmented-control" style="margin-bottom: 20px;">
+        <button type="button" class="segment-btn active">Transfer</button>
+        <button type="button" class="segment-btn">Physical count</button>
+        <button type="button" class="segment-btn">Return</button>
+      </div>
+
+      <!-- FROM & TO Cards with Swap Icon in between (Page 20) -->
+      <div style="position: relative; margin-bottom: 24px;">
+        <!-- FROM Card -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 14px;">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("building", 20, 1.75, "var(--graphite)")}
+          </div>
+          <div>
+            <div class="type-overline">FROM</div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Main godown · Aji GIDC</div>
+          </div>
+        </div>
+
+        <!-- Swap Icon Circle -->
+        <div style="position: absolute; right: 24px; top: 58px; z-index: 10; width: 36px; height: 36px; border-radius: 50%; background: var(--graphite); color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer;">
+          ${lucideIcon("arrow-left-right", 16, 2, "#FFFFFF")}
+        </div>
+
+        <!-- TO Card -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; display: flex; align-items: center; gap: 14px;">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: #EDE9FE; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("store", 20, 1.75, "var(--vastra-violet)")}
+          </div>
+          <div>
+            <div class="type-overline">TO</div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Shop floor · Yagnik Road</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scannable Item List (Page 20) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <strong style="font-size: 15px; color: var(--graphite);">Items · 24 units</strong>
+          <a href="#" onclick="alert('Barcode camera scanner ready to scan item tags.');" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none; display: flex; align-items: center; gap: 4px;">
+            ${lucideIcon("scan", 16, 1.75, "var(--vastra-violet)")}
+            <span>Scan to add</span>
+          </a>
+        </div>
+
+        <!-- Item 1 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #233876;"></div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Chanderi silk kurta · M</div>
+              <div class="type-caption">14 in godown</div>
+            </div>
+          </div>
+          <div style="background: #F3F4F6; border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 15px;">10</div>
+        </div>
+
+        <!-- Item 2 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #3F6212;"></div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Khadi kurta pyjama · 40</div>
+              <div class="type-caption">21 in godown</div>
+            </div>
+          </div>
+          <div style="background: #F3F4F6; border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 15px;">8</div>
+        </div>
+
+        <!-- Item 3 -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: #991B1B;"></div>
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Bandhani dupatta · Red</div>
+              <div class="type-caption">9 in godown</div>
+            </div>
+          </div>
+          <div style="background: #F3F4F6; border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 15px;">6</div>
+        </div>
+      </div>
+
+      <!-- Note for Receiver (Page 20) -->
+      <div style="margin-bottom: 20px;">
+        <label class="type-caption" style="display: block; font-weight: 600; color: var(--graphite); margin-bottom: 6px;">Note for receiver</label>
+        <input type="text" value="Diwali display — front racks" style="width: 100%; box-sizing: border-box; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px 14px; font-size: 14.5px; color: var(--graphite);">
+      </div>
+
+      <!-- Footer Note -->
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 24px;">
+        ${lucideIcon("truck", 16, 1.75, "#6B7280")}
+        <span>Shows as in-transit until the shop confirms receipt.</span>
+      </div>
+
+      <!-- Send 24 units Button (Vastra Violet #5B3DF5) -->
+      <button onclick="alert('Dispatched 24 units in transit to Shop floor.'); switchTab('inventory');" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+        Send 24 units
+      </button>
+    </div>
+  `;
+}
+
+// --- SCREEN 18: INVOICE VIEW (Page 21) ---
+function openInvoiceDetail(invoice = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const invId = invoice.id || invoice.invoice_number || "VX-2041";
+
+  container.innerHTML = `
+    <div style="max-width: 480px; margin: 0 auto; padding-bottom: 96px;">
+      <!-- Top Bar: Back & Status Chip (Page 21) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button onclick="switchTab('invoices')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <span style="font-size: 18px; font-weight: 700; color: var(--graphite);">${invId}</span>
+          <span class="chip chip-paid">Paid</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="switchTab('themes')" style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("palette", 16, 1.75, "var(--graphite)")}
+          </button>
+          <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("more-vertical", 16, 1.75, "var(--graphite)")}
+          </button>
+        </div>
+      </div>
+
+      <!-- Invoice Sheet Card (Paper #FFFFFF, radius 18px - Page 21) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 22px 20px; margin-bottom: 16px;">
+        <!-- Letterhead Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+          <div style="display: flex; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: var(--graphite); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">OF</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Odedara Fashions</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Yagnik Road, Rajkot 360001</div>
+              <div style="font-size: 11.5px; color: var(--text-muted); font-weight: 600;">GSTIN 24AAPCO4821K1Z6</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div class="type-overline">TAX INVOICE</div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">${invId}</div>
+            <div style="font-size: 11.5px; color: var(--text-muted);">26 Oct 2026, 7:42 PM</div>
+          </div>
+        </div>
+
+        <!-- Bill To & Place of Supply -->
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 16px; font-size: 13px;">
+          <div><span style="color: var(--text-muted);">Bill to</span> <strong>Walk-in customer</strong></div>
+          <div><span style="color: var(--text-muted);">Place of supply:</span> <strong>Gujarat</strong></div>
+        </div>
+
+        <!-- Line Item Table (ITEM | QTY | RATE | AMOUNT) -->
+        <div style="margin-bottom: 18px;">
+          <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">
+            <span>ITEM</span>
+            <span style="text-align: center;">QTY</span>
+            <span style="text-align: right;">RATE</span>
+            <span style="text-align: right;">AMOUNT</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #F3F4F6;">
+            <div>
+              <div style="font-weight: 600; color: var(--graphite);">Chanderi silk kurta · Indigo M</div>
+              <div style="font-size: 11px; color: var(--text-muted);">HSN 6204 · 5%</div>
+            </div>
+            <span style="text-align: center; font-variant-numeric: tabular-nums;">1</span>
+            <span style="text-align: right; font-variant-numeric: tabular-nums;">2,450.00</span>
+            <span style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">2,450.00</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #F3F4F6;">
+            <div>
+              <div style="font-weight: 600; color: var(--graphite);">Linen Nehru jacket · 40</div>
+              <div style="font-size: 11px; color: var(--text-muted);">HSN 6203 · 5%</div>
+            </div>
+            <span style="text-align: center; font-variant-numeric: tabular-nums;">1</span>
+            <span style="text-align: right; font-variant-numeric: tabular-nums;">1,890.00</span>
+            <span style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">1,890.00</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 1fr 1fr; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #F3F4F6;">
+            <div>
+              <div style="font-weight: 600; color: var(--graphite);">Cotton palazzo · Rust L</div>
+              <div style="font-size: 11px; color: var(--text-muted);">HSN 6204 · 5%</div>
+            </div>
+            <span style="text-align: center; font-variant-numeric: tabular-nums;">2</span>
+            <span style="text-align: right; font-variant-numeric: tabular-nums;">790.00</span>
+            <span style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">1,580.00</span>
+          </div>
+        </div>
+
+        <!-- Breakdown & Total (Page 21) -->
+        <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px;">
+            <span style="color: var(--text-muted);">Taxable value</span>
+            <span style="font-variant-numeric: tabular-nums; font-weight: 600;">5,920.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px;">
+            <span style="color: var(--text-muted);">CGST 2.5%</span>
+            <span style="font-variant-numeric: tabular-nums; font-weight: 600;">148.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px;">
+            <span style="color: var(--text-muted);">SGST 2.5%</span>
+            <span style="font-variant-numeric: tabular-nums; font-weight: 600;">148.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0 0 0; border-top: 1px solid var(--border); margin-top: 6px;">
+            <span style="font-size: 16px; font-weight: 700; color: var(--graphite);">Total</span>
+            <span style="font-size: 24px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹6,216.00</span>
+          </div>
+        </div>
+
+        <!-- Footer Payment Notes -->
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5; border-top: 1px dashed var(--border); padding-top: 12px;">
+          <div>Paid via UPI · UTR 4321 9876 5410</div>
+          <div>Thank you for shopping with us</div>
+        </div>
+      </div>
+
+      <!-- Immutability Notice Card with Issue Credit Note link (Page 21) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          ${lucideIcon("lock", 18, 1.75, "#6B7280")}
+          <span style="font-size: 13px; color: var(--graphite);">Posted invoices can’t be edited.</span>
+        </div>
+        <a href="#" onclick="alert('Credit note generator ready for bill ' + '${invId}');" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Issue credit note</a>
+      </div>
+
+      <!-- Bottom Action Row: Download | Print | Share invoice (Page 21) -->
+      <div style="display: flex; gap: 10px;">
+        <button onclick="downloadInvoicePdf('${invId}')" class="btn btn-tertiary" style="width: 52px; height: 50px; padding: 0;">
+          ${lucideIcon("download", 18, 1.75)}
+        </button>
+        <button onclick="window.print()" class="btn btn-tertiary" style="width: 52px; height: 50px; padding: 0;">
+          ${lucideIcon("printer", 18, 1.75)}
+        </button>
+        <button onclick="shareInvoicePdf('${invId}')" class="btn btn-primary" style="flex: 1; height: 50px;">
+          ${lucideIcon("share", 18, 1.75, "#FFFFFF")}
+          <span>Share invoice</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 19: INVOICE THEMES PICKER (Page 22) ---
+function renderInvoiceThemesPicker() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const currentDefault = state.selectedPOSTheme || "MODERN_MINIMAL";
+
+  container.innerHTML = `
+    <div style="max-width: 480px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 22) -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px;">
+        <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 22px;">Invoice themes</h1>
+          <div style="font-size: 12.5px; color: var(--text-muted);">Same data, six looks — preview is the real PDF</div>
+        </div>
+      </div>
+
+      <!-- 2-Column Grid of 6 Theme Cards (Page 22) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;" id="theme-cards-grid">
+        <!-- 1. Classic GST -->
+        <div onclick="selectInvoiceTheme('CLASSIC_GST')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="border: 1px solid #D1D5DB; border-radius: 6px; height: 90px; padding: 8px; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 10px; background: #E5E7EB; margin-bottom: 8px; border-radius: 2px;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 4px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 4px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 4px;"></div>
+            <div style="height: 6px; background: var(--graphite); margin-top: 14px; border-radius: 2px;"></div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Classic GST</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Boxed, every tax column</div>
+        </div>
+
+        <!-- 2. Modern Minimal (Selected State with Checkmark Badge - Page 22) -->
+        <div onclick="selectInvoiceTheme('MODERN_MINIMAL')" style="background: var(--paper); border: 2px solid var(--vastra-violet); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%; background: var(--vastra-violet); color: white; display: flex; align-items: center; justify-content: center;">
+            ${lucideIcon("check", 14, 2.5, "#FFFFFF")}
+          </div>
+          <div style="border: 1px solid #E5E7EB; border-radius: 6px; height: 90px; padding: 8px; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 6px; width: 40%; background: var(--graphite); margin-bottom: 12px; border-radius: 2px;"></div>
+            <div style="height: 2px; background: #E5E7EB; margin-bottom: 6px;"></div>
+            <div style="height: 2px; background: #E5E7EB; margin-bottom: 6px;"></div>
+            <div style="height: 2px; background: #E5E7EB; margin-bottom: 12px;"></div>
+            <div style="height: 6px; width: 50%; background: var(--vastra-violet); border-radius: 2px; margin-left: auto;"></div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Modern Minimal</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Airy, one bold total</div>
+        </div>
+
+        <!-- 3. Premium Boutique -->
+        <div onclick="selectInvoiceTheme('PREMIUM_BOUTIQUE')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="border: 1px solid #E5E7EB; border-radius: 6px; height: 90px; overflow: hidden; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 24px; background: #0E0E12; margin-bottom: 4px;"></div>
+            <div style="height: 2px; background: #D97706; margin-bottom: 8px;"></div>
+            <div style="padding: 0 6px;">
+              <div style="height: 2px; background: #E5E7EB; margin-bottom: 4px;"></div>
+              <div style="height: 2px; background: #E5E7EB; margin-bottom: 4px;"></div>
+              <div style="height: 4px; background: #D97706; width: 40%; margin-top: 10px;"></div>
+            </div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Premium Boutique</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Dark band, gold rule</div>
+        </div>
+
+        <!-- 4. Wholesale & Dealer -->
+        <div onclick="selectInvoiceTheme('WHOLESALE_DEALER')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="border: 1px solid #E5E7EB; border-radius: 6px; height: 90px; padding: 6px; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 12px; background: #EDE9FE; margin-bottom: 6px;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 3px;"></div>
+            <div style="height: 4px; background: var(--graphite); width: 60%; margin-top: 12px; margin-left: auto;"></div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Wholesale & Dealer</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Dense, bulk quantities</div>
+        </div>
+
+        <!-- 5. Compact Thermal -->
+        <div onclick="selectInvoiceTheme('COMPACT_THERMAL')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="border: 1px solid #E5E7EB; border-radius: 6px; height: 90px; padding: 6px 14px; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 4px; width: 50%; background: #0E0E12; margin: 4px auto 8px auto;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 3px;"></div>
+            <div style="height: 4px; background: #0E0E12; width: 60%; margin: 8px auto 0 auto;"></div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Compact Thermal</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">58 / 80 mm receipts</div>
+        </div>
+
+        <!-- 6. International Commercial -->
+        <div onclick="selectInvoiceTheme('INTERNATIONAL_COMMERCIAL')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; position: relative; cursor: pointer;">
+          <div style="border: 1px solid #E5E7EB; border-radius: 6px; height: 90px; padding: 6px; margin-bottom: 10px; background: #FFFFFF;">
+            <div style="height: 14px; background: #1E293B; margin-bottom: 6px;"></div>
+            <div style="height: 2px; background: #9CA3AF; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 3px;"></div>
+            <div style="height: 2px; background: #D1D5DB; margin-bottom: 3px;"></div>
+            <div style="height: 4px; background: var(--graphite); width: 50%; margin-top: 12px; margin-left: auto;"></div>
+          </div>
+          <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">International</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">Export, multi-currency</div>
+        </div>
+      </div>
+
+      <!-- Toggles: Show logo & Print UPI QR for dues (Page 22) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 8px 16px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border);">
+          <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Show logo</span>
+          <input type="checkbox" checked style="width: 44px; height: 24px; accent-color: var(--vastra-violet); cursor: pointer;">
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0;">
+          <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Print UPI QR for dues</span>
+          <input type="checkbox" checked style="width: 44px; height: 24px; accent-color: var(--vastra-violet); cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Primary Action: Set Modern Minimal as default (Page 22) -->
+      <button onclick="setThemeAsDefault('MODERN_MINIMAL')" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+        Set Modern Minimal as default
+      </button>
+    </div>
+  `;
+}
+
+function selectInvoiceTheme(themeId) {
+  state.selectedPOSTheme = themeId;
+  alert(`Theme '${themeId}' selected. All future bills will use this layout.`);
+}
+
+function setThemeAsDefault(themeId) {
+  state.selectedPOSTheme = themeId;
+  localStorage.setItem("vastrenix_invoice_theme", themeId);
+  alert(`'Modern Minimal' set as default invoice theme across all registers.`);
+  switchTab('dashboard');
+}
+
+// --- SCREEN 20: INVOICES LIST (Page 23) ---
+function renderInvoices() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Download / Export Icon (Page 23) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 26px;">Invoices</h1>
+          <div style="font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+            ${lucideIcon("refresh-cw", 13, 1.75, "#6B7280")}
+            <span>Pull to refresh · updated just now</span>
+          </div>
+        </div>
+        <button onclick="alert('Exporting GST B2C/B2B summary spreadsheet...');" style="border: none; background: var(--paper); border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("download", 18, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Search Bar -->
+      <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 14px; margin-bottom: 14px;">
+        ${lucideIcon("search", 18, 1.75, "#6B7280")}
+        <input type="text" placeholder="Invoice no., customer, phone, UTR" style="flex: 1; border: none; outline: none; font-size: 14px; background: transparent; font-family: inherit;">
+      </div>
+
+      <!-- Filter Chips (All [active black] / Store credit / Credit notes / Date) -->
+      <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+        <button class="segment-btn active" style="background: var(--graphite); color: #FFFFFF; border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">All</button>
+        <button class="segment-btn" onclick="switchTab('dues')" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">Store credit</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">Credit notes</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 4px;">
+          ${lucideIcon("clock", 14, 1.75)} Date
+        </button>
+      </div>
+
+      <!-- Section: TODAY ₹48,260 · 37 (Page 23) -->
+      <div style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span class="type-overline">TODAY</span>
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums;">₹48,260 · 37</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- Row 1: Walk-in customer -->
+          <div onclick="openInvoiceDetail({id: 'VX-2041'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("qr-code", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Walk-in customer</div>
+                <div class="type-caption">VX-2041 · 7:42 PM · UPI</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹6,216</div>
+              <div class="chip chip-paid" style="margin-top: 4px;">Paid</div>
+            </div>
+          </div>
+
+          <!-- Row 2: Meera Shah -->
+          <div onclick="openInvoiceDetail({id: 'VX-2040'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("wallet", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Meera Shah</div>
+                <div class="type-caption">VX-2040 · 7:10 PM · Store credit</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹3,480</div>
+              <div class="chip chip-due" style="margin-top: 4px;">Due 30 Oct</div>
+            </div>
+          </div>
+
+          <!-- Row 3: Karan Mehta -->
+          <div onclick="openInvoiceDetail({id: 'VX-2039'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("cash", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Karan Mehta</div>
+                <div class="type-caption">VX-2039 · 6:55 PM · Cash</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,890</div>
+              <div class="chip chip-paid" style="margin-top: 4px;">Paid</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: YESTERDAY ₹42,915 · 33 (Page 23) -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span class="type-overline">YESTERDAY</span>
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums;">₹42,915 · 33</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- Row 1: Nisha Joshi (Credit Note) -->
+          <div onclick="openInvoiceDetail({id: 'CN-0112'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #FEE2E2; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("arrow-left-right", 18, 1.75, "#C8283C")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Nisha Joshi</div>
+                <div class="type-caption">CN-0112 · against VX-2006</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 700; color: #C8283C; font-variant-numeric: tabular-nums;">−₹790</div>
+              <div class="chip chip-draft" style="margin-top: 4px;">Credit note</div>
+            </div>
+          </div>
+
+          <!-- Row 2: Shiv Garments (dealer) -->
+          <div onclick="openInvoiceDetail({id: 'VX-2008'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("arrow-left-right", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Shiv Garments (dealer)</div>
+                <div class="type-caption">VX-2008 · 5:30 PM · Split</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹18,400</div>
+              <div class="chip chip-paid" style="margin-top: 4px;">Paid</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 21: DUES (Page 24) ---
+function renderDues() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 24) -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <h1 class="type-title" style="margin: 0; font-size: 24px;">Dues</h1>
+      </div>
+
+      <!-- Segmented Tab Toggle: To collect · ₹1.24L (active) | To pay · ₹2.86L -->
+      <div class="segmented-control" style="margin-bottom: 20px;">
+        <button type="button" class="segment-btn active">To collect · ₹1.24L</button>
+        <button type="button" class="segment-btn" onclick="switchTab('suppliers')">To pay · ₹2.86L</button>
+      </div>
+
+      <!-- Aging Summary Hero Card (Page 24) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 16px;">
+        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">Customer store credit outstanding</div>
+        <div class="type-figure" style="font-size: 34px; line-height: 40px; margin-bottom: 14px;">₹1,24,300</div>
+
+        <!-- 3-Segment Aging Bar (0-30 days black / 31-60 days amber / 60+ days red) -->
+        <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 14px;">
+          <div style="flex: 78; background: var(--graphite);"></div>
+          <div style="flex: 32; background: var(--due-amber);"></div>
+          <div style="flex: 14; background: var(--risk-red);"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); padding-top: 12px;">
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">0–30 days</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px; font-variant-numeric: tabular-nums;">₹78,000</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">31–60 days</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); margin-top: 2px; font-variant-numeric: tabular-nums;">₹32,000</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">60+ days</div>
+            <div style="font-size: 16px; font-weight: 700; color: #C8283C; margin-top: 2px; font-variant-numeric: tabular-nums;">₹14,300</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Month-End Reminders Banner (Page 24) -->
+      <div style="background: #EDE9FE; border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          ${lucideIcon("clock", 20, 1.75, "var(--vastra-violet)")}
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Month-end reminders · 28 Oct</div>
+            <div style="font-size: 12px; color: var(--text-muted);">WhatsApp + SMS to 9 customers</div>
+          </div>
+        </div>
+        <a href="#" onclick="alert('Dispatching scheduled payment reminders.');" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Edit</a>
+      </div>
+
+      <!-- Customer Dues Rows (Page 24) -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">
+        <!-- Customer 1 -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">MS</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Meera Shah</div>
+              <div class="type-caption">Due 30 Oct · 2 bills</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹28,480</div>
+            <button onclick="alert('WhatsApp reminder sent to Meera Shah.');" style="border: none; background: none; cursor: pointer; padding: 4px;">
+              ${lucideIcon("message-circle", 20, 1.75, "var(--graphite)")}
+            </button>
+          </div>
+        </div>
+
+        <!-- Customer 2 -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">RJ</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Rathod Jewellers</div>
+              <div style="font-size: 12.5px; color: #C8283C; font-weight: 600;">64 days overdue</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹14,300</div>
+            <button onclick="alert('Overdue notice dispatched.');" style="border: none; background: none; cursor: pointer; padding: 4px;">
+              ${lucideIcon("message-circle", 20, 1.75, "var(--graphite)")}
+            </button>
+          </div>
+        </div>
+
+        <!-- Customer 3 -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">AK</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Anjali Kapadia</div>
+              <div class="type-caption">Due 30 Oct · 1 bill</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹12,900</div>
+            <button onclick="alert('Reminder sent.');" style="border: none; background: none; cursor: pointer; padding: 4px;">
+              ${lucideIcon("message-circle", 20, 1.75, "var(--graphite)")}
+            </button>
+          </div>
+        </div>
+
+        <!-- Customer 4 -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">PD</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Pooja Desai</div>
+              <div class="type-caption">38 days · partial paid</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹9,650</div>
+            <button onclick="alert('Reminder sent.');" style="border: none; background: none; cursor: pointer; padding: 4px;">
+              ${lucideIcon("message-circle", 20, 1.75, "var(--graphite)")}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Bottom Button: + Record a payment (Graphite #0E0E12 per Page 24) -->
+      <button onclick="alert('Record Ledger Payment modal ready.');" class="btn btn-secondary" style="width: 100%; height: 50px; font-size: 15px;">
+        ${lucideIcon("plus", 18, 2, "#FFFFFF")}
+        <span>Record a payment</span>
+      </button>
+    </div>
+  `;
+}
+
+// --- SCREEN 22: EXPENSES (Page 25) ---
+function renderExpenses() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Month Selector (Page 25) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <h1 class="type-title" style="margin: 0; font-size: 24px;">Expenses</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--graphite); background: var(--paper); border: 1px solid var(--border); padding: 6px 12px; border-radius: var(--radius-pill); cursor: pointer;">
+          <span>October 2026</span>
+          ${lucideIcon("chevron-down", 14, 1.75, "#6B7280")}
+        </div>
+      </div>
+
+      <!-- Spend Total Hero Card (Page 25) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: var(--text-muted);">Spent this month</span>
+          <div style="display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: #0E7C58;">
+            ${lucideIcon("arrow-down-left", 14, 2, "#0E7C58")}
+            <span>6% vs Sep</span>
+          </div>
+        </div>
+        <div class="type-figure" style="font-size: 36px; line-height: 42px; margin-bottom: 20px;">₹1,86,400</div>
+
+        <!-- Category Progress Bars (Page 25) -->
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--graphite);">Salaries</span>
+              <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹92,000</strong>
+            </div>
+            <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+              <div style="width: 49.3%; height: 100%; background: var(--vastra-violet); border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--graphite);">Rent</span>
+              <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹65,000</strong>
+            </div>
+            <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+              <div style="width: 34.8%; height: 100%; background: var(--graphite); border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--graphite);">Logistics & courier</span>
+              <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹14,200</strong>
+            </div>
+            <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+              <div style="width: 7.6%; height: 100%; background: #9CA3AF; border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--graphite);">Electricity & internet</span>
+              <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹8,600</strong>
+            </div>
+            <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+              <div style="width: 4.6%; height: 100%; background: #9CA3AF; border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--graphite);">Other</span>
+              <strong style="color: var(--graphite); font-variant-numeric: tabular-nums;">₹6,600</strong>
+            </div>
+            <div style="height: 6px; background: #E5E7EB; border-radius: 3px; overflow: hidden;">
+              <div style="width: 3.5%; height: 100%; background: #9CA3AF; border-radius: 3px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RECENT Section with Cash book link (Page 25) -->
+      <div style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span class="type-overline">RECENT</span>
+          <a href="#" onclick="switchTab('cashbook')" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Cash book</a>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("truck", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Courier to Ahmedabad</div>
+                <div class="type-caption">Today · Cash · Ravi P.</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,350</div>
+          </div>
+
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("cash", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Tea & snacks</div>
+                <div class="type-caption">Today · Cash drawer</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹420</div>
+          </div>
+
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("building", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Shop rent — October</div>
+                <div class="type-caption">5 Oct · Bank transfer</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹65,000</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Action Button: + Add expense (Vastra Violet #5B3DF5 pill - Page 25) -->
+      <div style="position: fixed; bottom: 84px; right: var(--screen-gutter); z-index: 99;">
+        <button onclick="openAddExpenseModal()" class="btn btn-primary" style="border-radius: var(--radius-pill); padding: 12px 20px; box-shadow: 0 8px 24px rgba(91, 61, 245, 0.35);">
+          ${lucideIcon("plus", 18, 2, "#FFFFFF")}
+          <span>Add expense</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 23: CASH BOOK (Page 26) ---
+function renderCashBook() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 26) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('expenses')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <h1 class="type-title" style="margin: 0; font-size: 24px;">Cash book</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--graphite); background: var(--paper); border: 1px solid var(--border); padding: 6px 12px; border-radius: var(--radius-pill);">
+          ${lucideIcon("clock", 14, 1.75)}
+          <span>Today</span>
+        </div>
+      </div>
+
+      <!-- Hero Dark Card: Expected Closing Cash (Page 26) -->
+      <div class="card-hero-dark" style="margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #9CA3AF; margin-bottom: 4px;">Expected closing cash</div>
+        <div class="type-figure" style="color: #FFFFFF; font-size: 36px; line-height: 42px; margin-bottom: 16px;">₹25,450</div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid #1F1F24; padding-top: 14px;">
+          <div>
+            <div style="font-size: 11px; color: #9CA3AF;">Opening</div>
+            <div style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-top: 2px; font-variant-numeric: tabular-nums;">₹2,000</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; color: #9CA3AF;">Cash in</div>
+            <div style="font-size: 16px; font-weight: 700; color: #34D399; margin-top: 2px; font-variant-numeric: tabular-nums;">+₹25,800</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; color: #9CA3AF;">Cash out</div>
+            <div style="font-size: 16px; font-weight: 700; color: #F87171; margin-top: 2px; font-variant-numeric: tabular-nums;">−₹2,350</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UPI Reconciliation Summary Row (Page 26) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          ${lucideIcon("refresh-cw", 18, 1.75, "var(--graphite)")}
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">UPI reconciliation</div>
+            <div style="font-size: 12px; color: var(--text-muted);">34 of 37 matched to bank · 3 to review</div>
+          </div>
+        </div>
+        ${lucideIcon("chevron-right", 18, 1.75, "#9CA3AF")}
+      </div>
+
+      <!-- Running-Balance Entry List (Page 26) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 24px;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px;">
+          <span>ENTRY</span>
+          <span style="text-align: right;">AMOUNT</span>
+          <span style="text-align: right;">BALANCE</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Sale VX-2039</div>
+            <div class="type-caption">6:55 PM · Ravi</div>
+          </div>
+          <span style="text-align: right; color: #0E7C58; font-weight: 700; font-variant-numeric: tabular-nums;">+₹1,890</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹25,450</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Courier to Ahmed...</div>
+            <div class="type-caption">5:20 PM · Ravi</div>
+          </div>
+          <span style="text-align: right; color: #C8283C; font-weight: 700; font-variant-numeric: tabular-nums;">−₹1,350</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹23,560</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Dues — Pooja Desai</div>
+            <div class="type-caption">4:05 PM · Arjun</div>
+          </div>
+          <span style="text-align: right; color: #0E7C58; font-weight: 700; font-variant-numeric: tabular-nums;">+₹1,500</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹24,910</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Tea & snacks</div>
+            <div class="type-caption">1:30 PM · Ravi</div>
+          </div>
+          <span style="text-align: right; color: #C8283C; font-weight: 700; font-variant-numeric: tabular-nums;">−₹420</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹23,410</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Tailor advance</div>
+            <div class="type-caption">12:10 PM · Arjun</div>
+          </div>
+          <span style="text-align: right; color: #C8283C; font-weight: 700; font-variant-numeric: tabular-nums;">−₹580</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹23,830</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 0; border-top: 1px solid var(--border); align-items: center;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Opening float</div>
+            <div class="type-caption">10:02 AM · Ravi</div>
+          </div>
+          <span style="text-align: right; color: #0E7C58; font-weight: 700; font-variant-numeric: tabular-nums;">+₹2,000</span>
+          <span style="text-align: right; color: var(--graphite); font-weight: 600; font-variant-numeric: tabular-nums;">₹2,000</span>
+        </div>
+      </div>
+
+      <!-- Action Pair: Cash out | Cash in (Page 26) -->
+      <div style="display: flex; gap: 12px;">
+        <button onclick="alert('Cash Out recorded.');" class="btn btn-tertiary" style="flex: 1; height: 50px;">
+          ${lucideIcon("arrow-up-right", 18, 1.75)}
+          <span>Cash out</span>
+        </button>
+        <button onclick="alert('Cash In added.');" class="btn btn-secondary" style="flex: 1; height: 50px;">
+          ${lucideIcon("arrow-down-left", 18, 1.75, "#FFFFFF")}
+          <span>Cash in</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 24: SUPPLIERS (Page 27) ---
+function renderSuppliers() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 27) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 26px;">Suppliers</h1>
+          <div style="font-size: 13px; color: var(--text-muted);">18 suppliers · 5 open purchase orders</div>
+        </div>
+        <button onclick="openPurchaseOrderModal()" style="width: 40px; height: 40px; border-radius: 50%; background: var(--graphite); color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("plus", 20, 2, "#FFFFFF")}
+        </button>
+      </div>
+
+      <!-- You Owe Suppliers Hero Card (Page 27) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-size: 13px; color: var(--text-muted);">You owe suppliers</div>
+            <div class="type-figure" style="font-size: 34px; line-height: 40px; margin-top: 4px;">₹2,86,000</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; color: var(--text-muted);">Due this week</div>
+            <div style="font-size: 18px; font-weight: 700; color: #A35A00; margin-top: 2px; font-variant-numeric: tabular-nums;">₹64,000</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Bar -->
+      <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 14px; margin-bottom: 16px;">
+        ${lucideIcon("search", 18, 1.75, "#6B7280")}
+        <input type="text" placeholder="Search suppliers or GSTIN" style="flex: 1; border: none; outline: none; font-size: 14px; background: transparent; font-family: inherit;">
+      </div>
+
+      <!-- Supplier Cards (Page 27) -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <!-- Card 1: Shree Textiles -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">ST</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Shree Textiles</div>
+                <div class="type-caption">Surat · Kurtas, palazzos</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,42,500</div>
+              <div style="font-size: 12px; color: #A35A00; font-weight: 600;">₹64,000 due Fri</div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+            <button onclick="openPurchaseOrderDetail({id: 'PO-0318'})" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: var(--graphite); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              ${lucideIcon("receipt", 16, 1.75)} 2 open POs
+            </button>
+            <button onclick="alert('Supplier payment recorded.');" class="btn btn-secondary" style="height: 38px; padding: 0 16px; font-size: 13px;">
+              ${lucideIcon("arrow-up-right", 14, 1.75, "#FFFFFF")} Record payment
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Kala Silk House -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">KS</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Kala Silk House</div>
+                <div class="type-caption">Varanasi · Sarees, dupattas</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹96,000</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Due 12 Nov</div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+            <button onclick="openPurchaseOrderDetail({id: 'PO-0319'})" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: var(--graphite); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              ${lucideIcon("receipt", 16, 1.75)} 2 open POs
+            </button>
+            <button onclick="alert('Supplier payment recorded.');" class="btn btn-secondary" style="height: 38px; padding: 0 16px; font-size: 13px;">
+              ${lucideIcon("arrow-up-right", 14, 1.75, "#FFFFFF")} Record payment
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 3: Rajkot Button & Lace -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">RB</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Rajkot Button & Lace</div>
+                <div class="type-caption">Rajkot · Trims, packaging</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹47,500</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Due 20 Nov</div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+            <button onclick="openPurchaseOrderDetail({id: 'PO-0320'})" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: var(--graphite); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              ${lucideIcon("receipt", 16, 1.75)} 1 open PO
+            </button>
+            <button onclick="alert('Supplier payment recorded.');" class="btn btn-secondary" style="height: 38px; padding: 0 16px; font-size: 13px;">
+              ${lucideIcon("arrow-up-right", 14, 1.75, "#FFFFFF")} Record payment
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 25: PURCHASE ORDER DETAIL (Page 28) ---
+function openPurchaseOrderDetail(po = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const poNum = po.id || "PO-0318";
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Status Chip (Partly received - Page 28) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button onclick="switchTab('suppliers')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <span style="font-size: 20px; font-weight: 700; color: var(--graphite);">${poNum}</span>
+          <span class="chip chip-due">Partly received</span>
+        </div>
+        <button onclick="alert('PO document shared via PDF.');" style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("share", 16, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Supplier Info Card with Call Icon (Page 28) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">ST</div>
+          <div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Shree Textiles</div>
+            <div class="type-caption">GSTIN 24ABCFS2210M1Z9 · Surat</div>
+          </div>
+        </div>
+        <button onclick="alert('Calling Shree Textiles (+91 98250 12345)...');" style="border: none; background: #F3F4F6; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("phone", 16, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- 4-Stage Progress Tracker (Created / Sent / Received / Closed - Page 28) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 18px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; gap: 4px;">
+          <div>
+            <div style="width: 24px; height: 24px; border-radius: 50%; background: #0E7C58; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto;">
+              ${lucideIcon("check", 14, 2.2, "#FFFFFF")}
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: var(--graphite);">Created</div>
+            <div style="font-size: 10.5px; color: var(--text-muted);">14 Oct</div>
+          </div>
+          <div>
+            <div style="width: 24px; height: 24px; border-radius: 50%; background: #0E7C58; color: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto;">
+              ${lucideIcon("check", 14, 2.2, "#FFFFFF")}
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: var(--graphite);">Sent</div>
+            <div style="font-size: 10.5px; color: var(--text-muted);">14 Oct</div>
+          </div>
+          <div>
+            <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--vastra-violet); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto;">
+              <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--vastra-violet);"></div>
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: var(--vastra-violet);">Received</div>
+            <div style="font-size: 10.5px; color: var(--vastra-violet); font-weight: 600;">62 / 80</div>
+          </div>
+          <div>
+            <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid #D1D5DB; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto;">
+              ${lucideIcon("lock", 12, 1.75, "#9CA3AF")}
+            </div>
+            <div style="font-size: 12px; font-weight: 700; color: #9CA3AF;">Closed</div>
+            <div style="font-size: 10.5px; color: #9CA3AF;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-Line Table (ITEM | ORD | RECD | OPEN - Page 28) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 0.8fr 0.8fr; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
+          <span>ITEM</span>
+          <span style="text-align: center;">ORD</span>
+          <span style="text-align: center;">RECD</span>
+          <span style="text-align: center;">OPEN</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 0.8fr 0.8fr; padding: 8px 0; font-size: 13px; border-top: 1px solid #F3F4F6;">
+          <div>
+            <div style="font-weight: 600; color: var(--graphite);">Chanderi silk kurta</div>
+            <div class="type-caption">Indigo M · ₹1,200</div>
+          </div>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">20</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">20</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums; color: var(--text-muted);">0</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 0.8fr 0.8fr; padding: 8px 0; font-size: 13px; border-top: 1px solid #F3F4F6;">
+          <div>
+            <div style="font-weight: 600; color: var(--graphite);">Chanderi silk kurta</div>
+            <div class="type-caption">Indigo L · ₹1,200</div>
+          </div>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">20</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">18</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums; color: #A35A00; font-weight: 700;">2</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 0.8fr 0.8fr; padding: 8px 0; font-size: 13px; border-top: 1px solid #F3F4F6;">
+          <div>
+            <div style="font-weight: 600; color: var(--graphite);">Linen Nehru jacket</div>
+            <div class="type-caption">Charcoal 40 · ₹1,100</div>
+          </div>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">20</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">12</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums; color: #A35A00; font-weight: 700;">8</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2.2fr 0.8fr 0.8fr 0.8fr; padding: 8px 0; font-size: 13px; border-top: 1px solid #F3F4F6;">
+          <div>
+            <div style="font-weight: 600; color: var(--graphite);">Cotton palazzo</div>
+            <div class="type-caption">Rust L · ₹420</div>
+          </div>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">20</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums;">12</span>
+          <span style="text-align: center; font-variant-numeric: tabular-nums; color: #A35A00; font-weight: 700;">8</span>
+        </div>
+      </div>
+
+      <!-- Financial Totals (Cost / Tax / Total - Page 28) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">Value at cost</span>
+          <span style="font-weight: 600; color: var(--graphite); font-variant-numeric: tabular-nums;">₹78,400</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px;">
+          <span style="color: var(--text-muted);">CGST + SGST 5%</span>
+          <span style="font-weight: 600; color: var(--graphite); font-variant-numeric: tabular-nums;">₹3,920</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0 0 0; border-top: 1px solid var(--border); margin-top: 6px;">
+          <span style="font-size: 16px; font-weight: 700; color: var(--graphite);">PO total</span>
+          <span style="font-size: 22px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹82,320</span>
+        </div>
+      </div>
+
+      <!-- Action Pair: Return 4 damaged | Receive 18 more (Page 28) -->
+      <div style="display: flex; gap: 12px;">
+        <button onclick="alert('Damaged return dispatch order created for 4 units.');" class="btn btn-tertiary" style="flex: 1; height: 50px;">
+          ${lucideIcon("arrow-left-right", 16, 1.75)}
+          <span>Return 4 damaged</span>
+        </button>
+        <button onclick="openReceiveGoodsScreen({po: 'PO-0318'})" class="btn btn-primary" style="flex: 1; height: 50px;">
+          ${lucideIcon("package", 16, 1.75, "#FFFFFF")}
+          <span>Receive 18 more</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+
+
+// --- SCREEN 26: DEALER ORDERS LIST (Page 29) ---
+function renderDealers() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Network Icon (Page 29) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 26px;">Dealer orders</h1>
+          <div style="font-size: 13px; color: var(--text-muted);">B2B network · 12 connected dealers</div>
+        </div>
+        <button onclick="switchTab('network')" style="width: 40px; height: 40px; border-radius: 50%; background: var(--paper); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("network", 18, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Segmented Tab Toggle: Incoming (active) | Placed by us (Page 29) -->
+      <div class="segmented-control" style="margin-bottom: 16px;">
+        <button type="button" class="segment-btn active">Incoming</button>
+        <button type="button" class="segment-btn">Placed by us</button>
+      </div>
+
+      <!-- Status Filter Chips with Counts (New 3 [active black] / To pack 6 / Dispatched 4 / Delivered) -->
+      <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 16px;">
+        <button class="segment-btn active" style="background: var(--graphite); color: #FFFFFF; border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+          <span>New</span>
+          <span style="background: var(--vastra-violet); color: white; padding: 1px 6px; border-radius: var(--radius-pill); font-size: 11px;">3</span>
+        </button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; white-space: nowrap;">To pack 6</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; white-space: nowrap;">Dispatched 4</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px; white-space: nowrap;">Delivered</button>
+      </div>
+
+      <!-- Order Cards List (Page 29) -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Order 1: Shiv Garments (New) -->
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; cursor: pointer;" onclick="openDealerOrderDetail({id: 'DO-1187'})">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">SG</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Shiv Garments</div>
+                <div class="type-caption">DO-1187 · 120 pcs · Jamnagar</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,95,000</div>
+              <div class="chip chip-dispatched" style="margin-top: 4px;">New</div>
+            </div>
+          </div>
+
+          <!-- Lifecycle Progress Bar (1/4 filled) -->
+          <div style="height: 4px; background: #E5E7EB; border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
+            <div style="width: 25%; height: 100%; background: var(--graphite);"></div>
+          </div>
+
+          <!-- Contextual Action Buttons: Reject | Accept partial | Accept all (Page 29) -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button onclick="alert('Order DO-1187 rejected.');" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: #C8283C; cursor: pointer; padding: 8px 12px;">Reject</button>
+            <button onclick="alert('Partial allocation dialog opened.');" class="btn btn-tertiary" style="flex: 1; height: 42px; font-size: 13px;">Accept partial</button>
+            <button onclick="alert('Order accepted in full. Stock reserved.'); openDealerOrderDetail({id: 'DO-1187'});" class="btn btn-primary" style="flex: 1.2; height: 42px; font-size: 13px;">Accept all</button>
+          </div>
+        </div>
+
+        <!-- Order 2: Mahalaxmi Fashion (Packing) -->
+        <div onclick="openDealerOrderDetail({id: 'DO-1179', status: 'Packing'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">MF</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Mahalaxmi Fashion</div>
+                <div class="type-caption">DO-1179 · 64 pcs · Morbi</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹92,300</div>
+              <div class="chip chip-due" style="margin-top: 4px;">Packing</div>
+            </div>
+          </div>
+
+          <!-- Lifecycle Progress Bar (2/4 filled) -->
+          <div style="height: 4px; background: #E5E7EB; border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
+            <div style="width: 50%; height: 100%; background: var(--graphite);"></div>
+          </div>
+
+          <!-- Context Chip: Assigned to Suresh · Dispatcher -->
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted);">
+            <div style="width: 22px; height: 22px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;">SK</div>
+            <span>Assigned to Suresh · Dispatcher</span>
+          </div>
+        </div>
+
+        <!-- Order 3: Patel Cloth Centre (Dispatched) -->
+        <div onclick="openDealerOrderDetail({id: 'DO-1171', status: 'Dispatched'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;">PC</div>
+              <div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Patel Cloth Centre</div>
+                <div class="type-caption">DO-1171 · 40 pcs · Gondal</div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 16px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹58,200</div>
+              <div class="chip chip-paid" style="margin-top: 4px;">Dispatched</div>
+            </div>
+          </div>
+
+          <!-- Lifecycle Progress Bar (3/4 filled) -->
+          <div style="height: 4px; background: #E5E7EB; border-radius: 2px; overflow: hidden; margin-bottom: 14px;">
+            <div style="width: 75%; height: 100%; background: var(--graphite);"></div>
+          </div>
+
+          <!-- Context Chip: LR 77210 · VRL Logistics -->
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted);">
+            <div style="width: 22px; height: 22px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;">VR</div>
+            <span>LR 77210 · VRL Logistics</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 27: DEALER ORDER DETAIL (Page 30) ---
+function openDealerOrderDetail(order = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const orderNum = order.id || "DO-1187";
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Chat Icon (Page 30) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('dealers')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <div>
+            <h1 class="type-title" style="margin: 0; font-size: 22px;">${orderNum}</h1>
+            <div style="font-size: 12.5px; color: var(--text-muted);">Shiv Garments · Jamnagar</div>
+          </div>
+        </div>
+        <button onclick="alert('Opening dealer WhatsApp messaging...');" style="border: none; background: var(--paper); border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("message-circle", 18, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Hero Dark Price Card (Page 30) -->
+      <div class="card-hero-dark" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-size: 12.5px; color: #9CA3AF;">Dealer price · 120 pcs</div>
+            <div class="type-figure" style="color: #FFFFFF; font-size: 34px; line-height: 40px; margin-top: 4px;">₹1,95,000</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.12); padding: 6px 12px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; color: white;">
+            ${lucideIcon("lock", 12, 1.75, "#FFFFFF")}
+            <span>Stock reserved</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vertical Status Timeline (Page 30) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; margin-bottom: 20px;">
+        <!-- Step 1: Submitted -->
+        <div style="display: flex; gap: 14px; margin-bottom: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; background: #0E7C58; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("check", 12, 2.2, "#FFFFFF")}
+            </div>
+            <div style="width: 2px; height: 32px; background: #0E7C58;"></div>
+          </div>
+          <div style="flex: 1; display: flex; justify-content: space-between;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Submitted</div>
+              <div style="font-size: 12px; color: var(--text-muted);">By Shiv Garments</div>
+            </div>
+            <span style="font-size: 12px; color: var(--text-muted);">26 Oct, 11:20</span>
+          </div>
+        </div>
+
+        <!-- Step 2: Accepted -->
+        <div style="display: flex; gap: 14px; margin-bottom: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; background: #0E7C58; display: flex; align-items: center; justify-content: center;">
+              ${lucideIcon("check", 12, 2.2, "#FFFFFF")}
+            </div>
+            <div style="width: 2px; height: 32px; background: #0E7C58;"></div>
+          </div>
+          <div style="flex: 1; display: flex; justify-content: space-between;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Accepted</div>
+              <div style="font-size: 12px; color: var(--text-muted);">120 of 120 pcs reserved</div>
+            </div>
+            <span style="font-size: 12px; color: var(--text-muted);">26 Oct, 12:05</span>
+          </div>
+        </div>
+
+        <!-- Step 3: Packing (Active Violet) -->
+        <div style="display: flex; gap: 14px; margin-bottom: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--vastra-violet); display: flex; align-items: center; justify-content: center;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--vastra-violet);"></div>
+            </div>
+            <div style="width: 2px; height: 32px; background: #E5E7EB;"></div>
+          </div>
+          <div style="flex: 1; display: flex; justify-content: space-between;">
+            <div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Packing</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Suresh is picking items</div>
+            </div>
+            <span style="font-size: 12px; font-weight: 600; color: var(--vastra-violet);">Now</span>
+          </div>
+        </div>
+
+        <!-- Step 4: Dispatched -->
+        <div style="display: flex; gap: 14px; margin-bottom: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #D1D5DB;"></div>
+            <div style="width: 2px; height: 32px; background: #E5E7EB;"></div>
+          </div>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #9CA3AF;">Dispatched</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Stock leaves on dispatch</div>
+          </div>
+        </div>
+
+        <!-- Step 5: Delivered -->
+        <div style="display: flex; gap: 14px; margin-bottom: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #D1D5DB;"></div>
+            <div style="width: 2px; height: 32px; background: #E5E7EB;"></div>
+          </div>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #9CA3AF;">Delivered</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Dealer confirms receipt</div>
+          </div>
+        </div>
+
+        <!-- Step 6: Closed -->
+        <div style="display: flex; gap: 14px;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #D1D5DB;"></div>
+          </div>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #9CA3AF;">Closed</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Invoice settled</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Line-Item List (Page 30) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px;">
+          <span style="font-weight: 600; color: var(--graphite);">Chanderi silk kurta · S–XL</span>
+          <span style="font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">60 × ₹1,760</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px;">
+          <span style="font-weight: 600; color: var(--graphite);">Mul cotton anarkali · S–XL</span>
+          <span style="font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">40 × ₹1,480</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; font-size: 14px;">
+          <span style="font-weight: 600; color: var(--graphite);">Khadi kurta pyjama · 38–44</span>
+          <span style="font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">20 × ₹1,510</span>
+        </div>
+      </div>
+
+      <!-- Assigned Staff Card with Reassign Link (Page 30) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">SK</div>
+          <div>
+            <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Suresh Kumar</div>
+            <div class="type-caption">Packing & dispatch</div>
+          </div>
+        </div>
+        <a href="#" onclick="alert('Staff reassignment sheet opened.');" style="font-size: 13.5px; font-weight: 600; color: var(--vastra-violet); text-decoration: none;">Reassign</a>
+      </div>
+
+      <!-- Sticky Bottom Button: Mark as packed (Vastra Violet #5B3DF5 - Page 30) -->
+      <button onclick="alert('Order DO-1187 marked as PACKED. Ready for carrier dispatch.'); switchTab('dealers');" class="btn btn-primary" style="width: 100%; height: 50px; font-size: 15px;">
+        ${lucideIcon("package", 18, 1.75, "#FFFFFF")}
+        <span>Mark as packed</span>
+      </button>
+    </div>
+  `;
+}
+
+// --- SCREEN 28: BUSINESS NETWORK (Page 31) ---
+function renderBusinessNetwork() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <h1 class="type-title" style="margin: 0; font-size: 24px;">Business network</h1>
+      </div>
+
+      <!-- Business Code Hero Card (Page 31) -->
+      <div class="card-hero-dark" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: #9CA3AF;">Your business code</span>
+          ${lucideIcon("network", 22, 1.75, "#9CA3AF")}
+        </div>
+        <div class="type-figure" style="color: #FFFFFF; font-size: 34px; letter-spacing: 1px; margin-bottom: 12px;">VX-ODF-24</div>
+        <p style="font-size: 13px; color: #D1D5DB; line-height: 1.4; margin: 0 0 18px 0;">Dealers who connect with this code can order from your catalogue at the price tier you assign them.</p>
+
+        <!-- Action Row: Share invite | Copy -->
+        <div style="display: flex; gap: 10px;">
+          <button onclick="alert('Business invite link copied for sharing!');" style="flex: 1; height: 44px; background: #FFFFFF; color: var(--graphite); border: none; border-radius: var(--radius-control); font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("share", 16, 1.75, "var(--graphite)")}
+            <span>Share invite</span>
+          </button>
+          <button onclick="navigator.clipboard.writeText('VX-ODF-24'); alert('Code copied!');" style="width: 44px; height: 44px; background: rgba(255,255,255,0.12); color: white; border: none; border-radius: var(--radius-control); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            ${lucideIcon("copy", 18, 1.75, "#FFFFFF")}
+          </button>
+        </div>
+      </div>
+
+      <!-- REQUESTS · 2 (Page 31) -->
+      <div style="margin-bottom: 24px;">
+        <span class="type-overline" style="display: block; margin-bottom: 12px;">REQUESTS · 2</span>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">NT</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Navrang Textiles</div>
+                <div class="type-caption">Bhavnagar · wants dealer access</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button onclick="alert('Edit price tier');" style="width: 36px; height: 36px; border: 1px solid var(--border); background: var(--paper); border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                ${lucideIcon("edit", 16, 1.75)}
+              </button>
+              <button onclick="alert('Navrang Textiles approved as Dealer partner.'); this.parentElement.parentElement.remove();" style="width: 36px; height: 36px; background: var(--graphite); color: white; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                ${lucideIcon("check", 16, 2.2, "#FFFFFF")}
+              </button>
+            </div>
+          </div>
+
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">GW</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Gokul Wholesale</div>
+                <div class="type-caption">Ahmedabad · wants wholesale</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button onclick="alert('Edit price tier');" style="width: 36px; height: 36px; border: 1px solid var(--border); background: var(--paper); border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                ${lucideIcon("edit", 16, 1.75)}
+              </button>
+              <button onclick="alert('Gokul Wholesale approved.'); this.parentElement.parentElement.remove();" style="width: 36px; height: 36px; background: var(--graphite); color: white; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                ${lucideIcon("check", 16, 2.2, "#FFFFFF")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONNECTED · 12 (Page 31) -->
+      <div>
+        <span class="type-overline" style="display: block; margin-bottom: 12px;">CONNECTED · 12</span>
+
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">SG</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Shiv Garments</div>
+                <div class="type-caption">Jamnagar · 28 orders</div>
+              </div>
+            </div>
+            <span class="chip chip-dispatched">Dealer</span>
+          </div>
+
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">MF</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Mahalaxmi Fashion</div>
+                <div class="type-caption">Morbi · 17 orders</div>
+              </div>
+            </div>
+            <span class="chip chip-dispatched">Dealer</span>
+          </div>
+
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 12px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">PC</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Patel Cloth Centre</div>
+                <div class="type-caption">Gondal · 9 orders</div>
+              </div>
+            </div>
+            <span class="chip chip-draft" style="color: var(--graphite);">Wholesale</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 29: CUSTOMERS LIST (Page 32) ---
+function renderCustomers() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 32) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h1 class="type-title" style="margin: 0; font-size: 26px;">Customers</h1>
+          <div style="font-size: 13px; color: var(--text-muted);">2,418 people · 312 this month</div>
+        </div>
+        <button onclick="alert('Add Customer dialog opened');" style="width: 40px; height: 40px; border-radius: 50%; background: var(--graphite); color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("user-plus", 18, 1.75, "#FFFFFF")}
+        </button>
+      </div>
+
+      <!-- Search Bar -->
+      <div style="display: flex; align-items: center; gap: 10px; background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 10px 14px; margin-bottom: 14px;">
+        ${lucideIcon("search", 18, 1.75, "#6B7280")}
+        <input type="text" placeholder="Name or mobile number" style="flex: 1; border: none; outline: none; font-size: 14px; background: transparent; font-family: inherit;">
+      </div>
+
+      <!-- Filter Chips: All [active black] / With dues · 9 / Top spenders (Page 32) -->
+      <div style="display: flex; gap: 8px; margin-bottom: 18px;">
+        <button class="segment-btn active" style="background: var(--graphite); color: #FFFFFF; border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">All</button>
+        <button class="segment-btn" onclick="switchTab('dues')" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">With dues · 9</button>
+        <button class="segment-btn" style="background: var(--paper); color: var(--graphite); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 14px; font-size: 13px;">Top spenders</button>
+      </div>
+
+      <!-- Customer Rows List (Page 32) -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- Meera Shah -->
+        <div onclick="openCustomerDetail({name: 'Meera Shah', phone: '98980 22145', due: '28,480', total: '1,42,800'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">MS</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Meera Shah</div>
+              <div class="type-caption">98980 22145 · 2 days ago</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹1,42,800</div>
+            <div style="font-size: 12px; color: #A35A00; font-weight: 600; margin-top: 2px;">₹28,480 due</div>
+          </div>
+        </div>
+
+        <!-- Karan Mehta -->
+        <div onclick="openCustomerDetail({name: 'Karan Mehta', phone: '99099 31870', due: null, total: '38,450'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">KM</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Karan Mehta</div>
+              <div class="type-caption">99099 31870 · today</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹38,450</div>
+          </div>
+        </div>
+
+        <!-- Anjali Kapadia -->
+        <div onclick="openCustomerDetail({name: 'Anjali Kapadia', phone: '98252 66014', due: '12,900', total: '96,200'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">AK</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Anjali Kapadia</div>
+              <div class="type-caption">98252 66014 · 1 week ago</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹96,200</div>
+            <div style="font-size: 12px; color: #A35A00; font-weight: 600; margin-top: 2px;">₹12,900 due</div>
+          </div>
+        </div>
+
+        <!-- Nisha Joshi -->
+        <div onclick="openCustomerDetail({name: 'Nisha Joshi', phone: '97277 50431', due: null, total: '21,760'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">NJ</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Nisha Joshi</div>
+              <div class="type-caption">97277 50431 · yesterday</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹21,760</div>
+          </div>
+        </div>
+
+        <!-- Pooja Desai -->
+        <div onclick="openCustomerDetail({name: 'Pooja Desai', phone: '98795 11920', due: '9,650', total: '64,300'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">PD</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Pooja Desai</div>
+              <div class="type-caption">98795 11920 · 38 days ago</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹64,300</div>
+            <div style="font-size: 12px; color: #A35A00; font-weight: 600; margin-top: 2px;">₹9,650 due</div>
+          </div>
+        </div>
+
+        <!-- Hardik Vyas -->
+        <div onclick="openCustomerDetail({name: 'Hardik Vyas', phone: '90990 44726', due: null, total: '17,980'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">HV</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Hardik Vyas</div>
+              <div class="type-caption">90990 44726 · 3 weeks ago</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹17,980</div>
+          </div>
+        </div>
+
+        <!-- Riya Trivedi -->
+        <div onclick="openCustomerDetail({name: 'Riya Trivedi', phone: '94262 80115', due: null, total: '12,640'})" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--graphite);">RT</div>
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Riya Trivedi</div>
+              <div class="type-caption">94262 80115 · 1 month ago</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹12,640</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 30: CUSTOMER DETAIL (Page 33) ---
+function openCustomerDetail(cust = {}) {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  const name = cust.name || "Meera Shah";
+  const phone = cust.phone || "98980 22145";
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with Edit Pen (Page 33) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <button onclick="switchTab('customers')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <button style="border: none; background: var(--paper); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("edit", 16, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Avatar & Name Header Block (Page 33) -->
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; margin: 0 auto 12px auto;">
+          MS
+        </div>
+        <h1 class="type-title" style="margin: 0 0 4px 0; font-size: 24px;">${name}</h1>
+        <div style="font-size: 13.5px; color: var(--text-muted);">+91 ${phone} · customer since 2023</div>
+      </div>
+
+      <!-- 3-Action Row: Call | WhatsApp | New bill (Page 33) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 10px; margin-bottom: 20px;">
+        <button onclick="alert('Calling ${phone}...');" class="btn btn-tertiary" style="height: 44px; font-size: 13.5px;">
+          ${lucideIcon("phone", 16, 1.75)} Call
+        </button>
+        <button onclick="alert('Opening WhatsApp for ${phone}...');" class="btn btn-tertiary" style="height: 44px; font-size: 13.5px;">
+          ${lucideIcon("message-circle", 16, 1.75, "#0E7C58")} WhatsApp
+        </button>
+        <button onclick="switchTab('pos')" class="btn btn-secondary" style="height: 44px; font-size: 13.5px;">
+          ${lucideIcon("receipt", 16, 1.75, "#FFFFFF")} New bill
+        </button>
+      </div>
+
+      <!-- 3-Stat Row (Lifetime / Visits / Usual size - Page 33) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Lifetime</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">₹1.43L</div>
+        </div>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Visits</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--graphite); margin-top: 4px; font-variant-numeric: tabular-nums;">23</div>
+        </div>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px;">
+          <div class="type-overline">Usual size</div>
+          <div style="font-size: 18px; font-weight: 700; color: var(--graphite); margin-top: 4px;">M</div>
+        </div>
+      </div>
+
+      <!-- Store Credit Due Card (Amber surface per Page 33) -->
+      <div style="background: #FEF8ED; border: 1px solid #FDE68A; border-radius: var(--radius-card); padding: 18px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+          <span style="font-size: 13px; color: #78350F; font-weight: 600;">Store credit due</span>
+          <div style="text-align: right; font-size: 11.5px; color: #92400E; font-weight: 600;">
+            <div>Due 30 Oct</div>
+            <div>Reminder on 28th</div>
+          </div>
+        </div>
+        <div class="type-figure" style="color: #78350F; font-size: 34px; line-height: 40px; margin-bottom: 16px;">₹28,480</div>
+
+        <button onclick="alert('Payment receipt modal opened for Meera Shah.');" class="btn btn-secondary" style="width: 100%; height: 46px; font-size: 14.5px;">
+          Collect payment
+        </button>
+      </div>
+
+      <!-- Activity List (Chronological credit/payments - Page 33) -->
+      <div>
+        <h2 style="font-size: 16px; font-weight: 700; color: var(--graphite); margin: 0 0 12px 0;">Activity</h2>
+
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("receipt", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">VX-2040 · on credit</div>
+                <div class="type-caption">24 Oct · 3 items</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹3,480</div>
+          </div>
+
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #E8F5E9; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("arrow-down-left", 18, 2, "#0E7C58")}
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">Payment received</div>
+                <div class="type-caption">20 Oct · UPI</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: #0E7C58; font-variant-numeric: tabular-nums;">+₹10,000</div>
+          </div>
+
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("receipt", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">VX-1962 · on credit</div>
+                <div class="type-caption">12 Oct · Banarasi saree</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹25,000</div>
+          </div>
+
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center;">
+                ${lucideIcon("cash", 18, 1.75, "var(--graphite)")}
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--graphite);">VX-1871 · paid</div>
+                <div class="type-caption">28 Sep · Cash</div>
+              </div>
+            </div>
+            <div style="font-size: 15px; font-weight: 700; color: var(--graphite); font-variant-numeric: tabular-nums;">₹6,240</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 31: STAFF (Page 34) ---
+function renderUsers() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header with + Invite button (Page 34) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+            ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+          </button>
+          <h1 class="type-title" style="margin: 0; font-size: 24px;">Staff</h1>
+        </div>
+        <button onclick="alert('Staff invite link copied!');" class="btn btn-secondary" style="height: 38px; padding: 0 14px; font-size: 13px; border-radius: var(--radius-pill);">
+          ${lucideIcon("user-plus", 14, 2, "#FFFFFF")}
+          <span>Invite</span>
+        </button>
+      </div>
+
+      <!-- WAITING FOR APPROVAL · 2 (Page 34) -->
+      <div style="margin-bottom: 24px;">
+        <span class="type-overline" style="display: block; margin-bottom: 12px;">WAITING FOR APPROVAL · 2</span>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Card 1: Ravi Patel -->
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">RP</div>
+                <div>
+                  <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Ravi Patel</div>
+                  <div class="type-caption">Yagnik Road · requested today</div>
+                </div>
+              </div>
+              <span class="chip chip-draft">Cashier</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <button onclick="alert('Request rejected'); this.closest('div[style*=\'background: var(--paper)\']').remove();" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: #C8283C; cursor: pointer; padding: 8px 12px;">Reject</button>
+              <button onclick="alert('Ravi Patel approved as Cashier!'); this.closest('div[style*=\'background: var(--paper)\']').remove();" class="btn btn-primary" style="flex: 1; height: 42px; font-size: 13.5px;">
+                ${lucideIcon("check", 16, 2, "#FFFFFF")} Approve as Cashier
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 2: Mitesh Kotak -->
+          <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: #EDE9FE; color: var(--vastra-violet); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">MK</div>
+                <div>
+                  <div style="font-size: 15px; font-weight: 700; color: var(--graphite);">Mitesh Kotak</div>
+                  <div class="type-caption">Main godown · requested yesterday</div>
+                </div>
+              </div>
+              <span class="chip chip-draft">Inventory</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <button onclick="alert('Request rejected'); this.closest('div[style*=\'background: var(--paper)\']').remove();" style="border: none; background: none; font-size: 13.5px; font-weight: 600; color: #C8283C; cursor: pointer; padding: 8px 12px;">Reject</button>
+              <button onclick="alert('Mitesh Kotak approved as Inventory!'); this.closest('div[style*=\'background: var(--paper)\']').remove();" class="btn btn-primary" style="flex: 1; height: 42px; font-size: 13.5px;">
+                ${lucideIcon("check", 16, 2, "#FFFFFF")} Approve as Inventory
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEAM · 7 (Page 34) -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span class="type-overline">TEAM · 7</span>
+          <span style="font-size: 12.5px; color: var(--text-muted);">2 branches</span>
+        </div>
+
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <!-- Arjun Odedara -->
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">AO</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Arjun Odedara</div>
+                <div class="type-caption">Both branches · active now</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: var(--graphite); color: white; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700;">Owner</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+
+          <!-- Nirali Odedara -->
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">NO</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Nirali Odedara</div>
+                <div class="type-caption">Both branches</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: var(--graphite); color: white; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700;">Admin</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+
+          <!-- Suresh Kumar -->
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">SK</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Suresh Kumar</div>
+                <div class="type-caption">Main godown</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="chip chip-draft">Dispatcher</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+
+          <!-- Bhavna Dave -->
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">BD</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: var(--graphite);">Bhavna Dave</div>
+                <div class="type-caption">Yagnik Road</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="chip chip-draft">Accountant</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+
+          <!-- Jay Thakkar (Deactivated State per Page 34) -->
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; opacity: 0.55;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #E5E7EB; color: #6B7280; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">JT</div>
+              <div>
+                <div style="font-size: 14.5px; font-weight: 700; color: #6B7280;">Jay Thakkar</div>
+                <div class="type-caption">Deactivated 12 Oct</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="chip chip-draft" style="color: #9CA3AF;">Cashier</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 32: SETTINGS (Page 35) ---
+function renderSettingsScreen() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Header (Page 35) -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+        <button onclick="switchTab('more')" style="border: none; background: none; cursor: pointer; padding: 4px;">
+          ${lucideIcon("arrow-left", 22, 1.75, "var(--graphite)")}
+        </button>
+        <h1 class="type-title" style="margin: 0; font-size: 24px;">Settings</h1>
+      </div>
+
+      <!-- LANGUAGE Section (English / हिन्दी / ગુજરાતી pill group - Page 35) -->
+      <div style="margin-bottom: 24px;">
+        <span class="type-overline" style="display: block; margin-bottom: 8px;">LANGUAGE</span>
+        <div class="segmented-control">
+          <button type="button" class="segment-btn ${state.lang==='en'?'active':''}" onclick="setAppLanguage('en'); renderSettingsScreen();">English</button>
+          <button type="button" class="segment-btn ${state.lang==='hi'?'active':''}" onclick="setAppLanguage('hi'); renderSettingsScreen();">हिन्दी</button>
+          <button type="button" class="segment-btn ${state.lang==='gu'?'active':''}" onclick="setAppLanguage('gu'); renderSettingsScreen();">ગુજરાતી</button>
+        </div>
+      </div>
+
+      <!-- BILLING Section (Page 35) -->
+      <div style="margin-bottom: 24px;">
+        <span class="type-overline" style="display: block; margin-bottom: 8px;">BILLING</span>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <div onclick="openStoreSettingsModal()" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("cash", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Default payment</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>Cash</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+
+          <div onclick="switchTab('themes')" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("palette", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Invoice theme</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>Modern Minimal</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+
+          <div onclick="alert('Credit reminder automation: 28-30 of each month active.');" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("clock", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Credit reminders</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>28–30 monthly</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STORE Section (Page 35) -->
+      <div style="margin-bottom: 24px;">
+        <span class="type-overline" style="display: block; margin-bottom: 8px;">STORE</span>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <div onclick="alert('Business profile: Odedara Fashions, Rajkot.');" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("store", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Business profile</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>Odedara Fashions</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+
+          <div onclick="alert('Branches: Rajkot Flagship & Aji GIDC Godown.');" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("building", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Branches & godowns</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>2</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+
+          <div onclick="renderOnboardingTaxBilling()" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("receipt", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Tax & GST</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px;">
+              <span>5%</span>
+              ${lucideIcon("chevron-right", 16, 1.75)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNT Section (Connected dot + Sign-in security - Page 35) -->
+      <div style="margin-bottom: 28px;">
+        <span class="type-overline" style="display: block; margin-bottom: 8px;">ACCOUNT</span>
+        <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden;">
+          <div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("shield", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Server</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13.5px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #0E7C58;"></span>
+              <span style="color: #0E7C58; font-weight: 600;">Connected</span>
+              ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+            </div>
+          </div>
+
+          <div onclick="alert('Security credentials & session tokens valid.');" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${lucideIcon("lock", 18, 1.75, "#6B7280")}
+              <span style="font-size: 14.5px; font-weight: 600; color: var(--graphite);">Sign-in & security</span>
+            </div>
+            ${lucideIcon("chevron-right", 16, 1.75, "#9CA3AF")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Full-Width Red Sign Out Button (Page 35) -->
+      <button onclick="logout()" style="width: 100%; border: none; background: none; color: #C8283C; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; cursor: pointer; margin-bottom: 20px;">
+        ${lucideIcon("log-out", 18, 1.75, "#C8283C")}
+        <span>Sign out</span>
+      </button>
+
+      <div style="text-align: center; font-size: 12px; color: var(--text-muted);">
+        Vastrenix 2.4.0
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 33: "MORE" HUB SCREEN (Page 36) ---
+function renderMoreHub() {
+  const container = document.getElementById("tab-content");
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="max-width: 460px; margin: 0 auto; padding-bottom: 84px;">
+      <!-- Profile Header Card with Settings Gear (Page 36) -->
+      <div style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 48px; height: 48px; border-radius: 14px; background: var(--graphite); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px;">
+            AO
+          </div>
+          <div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--graphite);">Arjun Odedara</div>
+            <div style="font-size: 13px; color: var(--text-muted);">Owner · Odedara Fashions</div>
+          </div>
+        </div>
+        <button onclick="renderSettingsScreen()" style="border: none; background: #F3F4F6; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          ${lucideIcon("settings", 20, 1.75, "var(--graphite)")}
+        </button>
+      </div>
+
+      <!-- Section SELL (Invoices, Dues·9, Customers, Shift) -->
+      <div style="margin-bottom: 22px;">
+        <span class="type-overline" style="display: block; margin-bottom: 10px;">SELL</span>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          <button onclick="switchTab('invoices')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("receipt", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Invoices</span>
+          </button>
+          <button onclick="switchTab('dues')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; cursor: pointer;">
+            <span style="position: absolute; top: 8px; right: 8px; background: var(--vastra-violet); color: white; font-size: 10px; font-weight: 800; border-radius: var(--radius-pill); padding: 1px 6px;">9</span>
+            ${lucideIcon("wallet", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Dues</span>
+          </button>
+          <button onclick="switchTab('customers')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("users", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Customers</span>
+          </button>
+          <button onclick="switchTab('shift')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("clock", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Shift</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section STOCK (Items, Low stock·14, Receive, Transfers) -->
+      <div style="margin-bottom: 22px;">
+        <span class="type-overline" style="display: block; margin-bottom: 10px;">STOCK</span>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          <button onclick="switchTab('inventory')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("shirt", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Items</span>
+          </button>
+          <button onclick="switchTab('lowstock')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; cursor: pointer;">
+            <span style="position: absolute; top: 8px; right: 8px; background: var(--vastra-violet); color: white; font-size: 10px; font-weight: 800; border-radius: var(--radius-pill); padding: 1px 6px;">14</span>
+            ${lucideIcon("alert-triangle", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Low stock</span>
+          </button>
+          <button onclick="openReceiveGoodsScreen()" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("package", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Receive</span>
+          </button>
+          <button onclick="switchTab('transfers')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("arrow-left-right", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Transfers</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section MONEY (Expenses, Cash book, Suppliers, Reports) -->
+      <div style="margin-bottom: 22px;">
+        <span class="type-overline" style="display: block; margin-bottom: 10px;">MONEY</span>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          <button onclick="switchTab('expenses')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("receipt", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Expenses</span>
+          </button>
+          <button onclick="switchTab('cashbook')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("cash", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Cash book</span>
+          </button>
+          <button onclick="switchTab('suppliers')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("building", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Suppliers</span>
+          </button>
+          <button onclick="alert('Analytics & P&L reports module.');" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("bar-chart", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Reports</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section NETWORK & TEAM (Dealers·3, Network·2, Staff·2, Themes) -->
+      <div>
+        <span class="type-overline" style="display: block; margin-bottom: 10px;">NETWORK & TEAM</span>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          <button onclick="switchTab('dealers')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; cursor: pointer;">
+            <span style="position: absolute; top: 8px; right: 8px; background: var(--vastra-violet); color: white; font-size: 10px; font-weight: 800; border-radius: var(--radius-pill); padding: 1px 6px;">3</span>
+            ${lucideIcon("truck", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Dealers</span>
+          </button>
+          <button onclick="switchTab('network')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; cursor: pointer;">
+            <span style="position: absolute; top: 8px; right: 8px; background: var(--vastra-violet); color: white; font-size: 10px; font-weight: 800; border-radius: var(--radius-pill); padding: 1px 6px;">2</span>
+            ${lucideIcon("network", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Network</span>
+          </button>
+          <button onclick="switchTab('users')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; cursor: pointer;">
+            <span style="position: absolute; top: 8px; right: 8px; background: var(--vastra-violet); color: white; font-size: 10px; font-weight: 800; border-radius: var(--radius-pill); padding: 1px 6px;">2</span>
+            ${lucideIcon("users", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Staff</span>
+          </button>
+          <button onclick="switchTab('themes')" style="background: var(--paper); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+            ${lucideIcon("palette", 24, 1.75, "var(--graphite)")}
+            <span style="font-size: 12.5px; font-weight: 600; color: var(--graphite);">Themes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// --- SCREEN 34: BOTTOM NAVIGATION (Page 3 & all) ---
+function renderBottomNav() {
+  return `
+    <nav class="mobile-bottom-nav">
+      <!-- 1: Home -->
+      <button class="mobile-nav-btn ${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard" onclick="switchTab('dashboard')">
+        ${lucideIcon("home", 24, 1.75, state.activeTab === 'dashboard' ? "var(--vastra-violet)" : "#6B7280")}
+        <span>Home</span>
+      </button>
+
+      <!-- 2: Items -->
+      <button class="mobile-nav-btn ${state.activeTab === 'inventory' ? 'active' : ''}" data-tab="inventory" onclick="switchTab('inventory')">
+        ${lucideIcon("shirt", 24, 1.75, state.activeTab === 'inventory' ? "var(--vastra-violet)" : "#6B7280")}
+        <span>Items</span>
+      </button>
+
+      <!-- 3: Raised Center + Button (Page 3: Black Graphite squircle with white + icon) -->
+      <button class="nav-center-create-btn" onclick="switchTab('pos')" title="New Bill / Fast POS">
+        ${lucideIcon("plus", 26, 2.2, "#FFFFFF")}
+      </button>
+
+      <!-- 4: Orders -->
+      <button class="mobile-nav-btn ${state.activeTab === 'orders' || state.activeTab === 'dealers' ? 'active' : ''}" data-tab="orders" onclick="switchTab('orders')">
+        ${lucideIcon("truck", 24, 1.75, (state.activeTab === 'orders' || state.activeTab === 'dealers') ? "var(--vastra-violet)" : "#6B7280")}
+        <span>Orders</span>
+      </button>
+
+      <!-- 5: More (Grid outline icon) -->
+      <button class="mobile-nav-btn ${state.activeTab === 'more' ? 'active' : ''}" data-tab="more" onclick="switchTab('more')">
+        ${lucideIcon("grid", 24, 1.75, state.activeTab === 'more' ? "var(--vastra-violet)" : "#6B7280")}
+        <span>More</span>
+      </button>
+    </nav>
+  `;
+}
+
+
+
+// ============================================================================
+// VASTRENIX 34-SCREEN ROUTER & SHELL ENGINE
+// ============================================================================
+
+function setAppLanguage(lang) {
+  state.lang = lang;
+  localStorage.setItem("vastrenix_lang", lang);
+  renderApp();
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  // Update mobile bottom nav active states and icon strokes
+  document.querySelectorAll(".mobile-nav-btn").forEach(el => {
+    const dataTab = el.getAttribute("data-tab");
+    const isAct = dataTab === tab || 
+                  (tab === 'dashboard' && dataTab === 'home') ||
+                  (tab === 'inventory' && dataTab === 'items') ||
+                  (tab === 'dealers' && dataTab === 'orders');
+    el.classList.toggle("active", isAct);
+    const svg = el.querySelector("svg");
+    if (svg) {
+      svg.setAttribute("stroke", isAct ? "var(--vastra-violet)" : "#6B7280");
+    }
+  });
+  renderCurrentTab();
+  updateOfflineIndicator();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderCurrentTab() {
+  switch (state.activeTab) {
+    case "dashboard":
+    case "home":
+      renderDashboard();
+      break;
+    case "inventory":
+    case "items":
+      renderInventory();
+      break;
+    case "pos":
+      renderPOS();
+      break;
+    case "orders":
+    case "dealers":
+      renderDealers();
+      break;
+    case "more":
+      renderMoreHub();
+      break;
+    case "invoices":
+      renderInvoices();
+      break;
+    case "dues":
+      renderDues();
+      break;
+    case "expenses":
+      renderExpenses();
+      break;
+    case "cashbook":
+      renderCashBook();
+      break;
+    case "suppliers":
+      renderSuppliers();
+      break;
+    case "network":
+      renderBusinessNetwork();
+      break;
+    case "customers":
+      renderCustomers();
+      break;
+    case "users":
+      renderUsers();
+      break;
+    case "settings":
+      renderSettingsScreen();
+      break;
+    case "shift":
+      renderCloseShift();
+      break;
+    case "themes":
+      renderInvoiceThemesPicker();
+      break;
+    case "lowstock":
+      renderLowStock();
+      break;
+    case "transfers":
+      renderStockMovement();
+      break;
+    default:
+      renderDashboard();
+      break;
+  }
+}
+
+async function renderApp() {
+  const root = document.getElementById("app");
+  if (!root) return;
+
+  if (!state.token) {
+    renderLoginScreen();
+    return;
+  }
+
+  root.innerHTML = `
+    <div style="min-height: 100vh; background: var(--mist); display: flex; flex-direction: column; padding-bottom: 74px; box-sizing: border-box;">
+      <main id="tab-content" style="flex: 1; width: 100%; box-sizing: border-box; padding: 20px var(--screen-gutter) 16px var(--screen-gutter);"></main>
+      ${renderBottomNav()}
+    </div>
+    <div id="modal-container"></div>
+  `;
+
+  renderCurrentTab();
+  updateOfflineIndicator();
 }
