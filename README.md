@@ -1,145 +1,118 @@
-# VASTRENIX
+# Vastrenix
 
-**"Your Business, Beautifully in Sync."**  
-*Clothing Business ERP, Multi-Branch Inventory, POS Billing, Dealer Network & Commerce Platform*
-
----
-
-## 1. Executive Summary & Design System
-
-VASTRENIX is an enterprise-grade, cross-platform clothing business management platform built for garment retailers, boutiques, manufacturers, distributors, and connected multi-dealer networks. It bridges modern SaaS clarity with textile craftsmanship aesthetics:
-
-- **Warm Editorial SaaS Aesthetic:** Eliminates harsh AI-style neon accents and generic marketplace clip-art in favor of warm ivory surfaces (`#FAF8F3`), deep ink navy (`#192B3A`), balancing soft teal (`#218C82`), muted amber (`#D99A43`), and soft coral (`#D96F65`).
-- **Tabular Numerals & High Legibility:** Prices, SKU codes, rack locations, and tax totals maintain strict alignment.
-- **Multilingual Support:** English, Hindi (हिन्दी), and Gujarati (ગુજરાતી).
-
-### Brand Assets
-
-- **Primary Logo:** `brand/vastrenix-logo-light.svg`
-- **Dark Surface Logo:** `brand/vastrenix-logo-dark.svg`
-- **Monochrome Thermal / Stamp:** `brand/vastrenix-logo-monochrome.svg`
-- **App & Favicon Mark:** `brand/vastrenix-icon.svg` & `brand/favicon.svg`
-- **Brand Guidelines:** `brand/brand-guidelines.md`
+POS billing, garment stock, invoices, dues, dealer orders and staff for Indian clothing stores.
+One codebase runs as an **Android app (APK)**, a **website**, or fully **offline on one device**.
 
 ---
 
-## 2. Core Modules
+## Folder guide
 
-### 1. Garment Catalog & Variant Matrix
-- Textile garment attributes: Fabric, Material, Pattern, Season, Gender, Fit, HSN/SAC (`6205`, `6203`, etc.), Tax Rate.
-- Size & Color matrix with individual SKU, Barcode, Retail Price, Wholesale Price, and Dealer Price.
-- Multi-location stock breakdown: On-Hand, Reserved, Available, In-Transit, Damaged, and Rack Location.
-
-### 2. Low-Stock & Reorder Intelligence
-- Real-time evaluation at the variant and location level.
-- Automated generation of in-app alerts and notifications when available stock falls below safety thresholds.
-
-### 3. POS Sales Billing & Six Built-in Invoice Themes
-- Barcode lookup, variant picker, split discounts, taxes, and customer balances.
-- Real-time stock deduction with server-side validation.
-- Direct PDF generation and interactive HTML previews across **6 configurable themes**:
-  1. **Classic GST:** Tax invoice with HSN breakdown, CGST/SGST/IGST, terms.
-  2. **Modern Minimal:** Editorial typography, minimal lines, and UPI QR code.
-  3. **Premium Boutique:** Luxury serif headings, atelier details, return policy.
-  4. **Wholesale & Dealer:** Compact matrix with size columns, pack counts, transport LR.
-  5. **Compact Thermal:** High-contrast 80mm/58mm POS receipt.
-  6. **International Commercial:** Multi-currency, export terms, country of origin.
-
-### 4. Cashier Shift & Cash Management
-- Cashier shift open/close workflow with automatic calculation of expected cash from sales.
-- Reconciliation recording exact, shortage, or excess differences.
-- Business expense logging and net cash flow reporting.
-
-### 5. Connected Dealer B2B Network
-- End-to-end lifecycle: `Draft` → `Submitted` → `Accepted` (atomic stock reservation) → `Dispatched` (LR transport tracking) → `Delivered` (stock increment at buyer branch) → `Closed`.
-
-### 6. Staff Self-Signup & Store Admin Approval Workflow
-- **Public Store Directory:** Prospective staff can pick their store from available businesses during registration.
-- **Pending Approval Gate:** When staff registers, their account is placed into `PENDING_APPROVAL` status. Attempting to log in before approval returns:
-  `"Your staff account is currently pending approval by the Store Administrator of '<Store Name>'."`
-- **Store Admin Panel:** Store owners/admins have a dedicated **"Pending Staff Approvals"** banner where they can review candidate full name, email, phone, requested role, and click **"Approve Staff"** or **"Reject"**.
-- **Prominent Store Identity for Staff:** Once logged in, the application prominently showcases the Store Name in both the top navigation bar and sidebar card:
-  `Store: Surat Flagship Store • Staff: Pooja Sharma (CASHIER)`
+| Path | What it is |
+|---|---|
+| `www/` | The complete app (HTML, CSS, JavaScript). This is what goes inside the APK. |
+| `www/js/config.js` | **Your Firebase keys go here.** Empty = offline, device-only mode. |
+| `www/js/*.js` | App code: `core` (data layer, rendering), `billing`, `stock`, `money`, `network` (dealers, staff, settings), `i18n` (Hindi/Gujarati), `platform` (Firebase login, Android features). |
+| `firestore.rules` | Server-side security: store isolation, staff approval, roles. |
+| `capacitor.config.json` | Android app id/name (`com.vastrenix.app`). |
+| `.github/workflows/android.yml` | Builds the APK automatically on GitHub. |
+| `assets/` | App icon and splash screen source images. |
 
 ---
 
-## 3. Native Mac & Android Builds Ready
+## Step 1 — Firebase setup (10 minutes, one time)
 
-| Platform | Build Artifact Location | Description |
-| :--- | :--- | :--- |
-| **macOS Native App** | [`dist/mac/VASTRENIX.app`](file:///Users/codekajugad/Desktop/Vastranix/dist/mac/VASTRENIX.app) | Standalone macOS application bundle compiled with embedded server and GUI auto-launcher. |
-| **Android Release APK** | [`dist/android/vastrenix-release.apk`](file:///Users/codekajugad/Desktop/Vastranix/dist/android/vastrenix-release.apk) | Installable Android release APK with offline caching and POS hardware support. |
+Without this the app still works, but only on one phone with no team sync.
+
+1. Go to <https://console.firebase.google.com> → **Add project** → name it `vastrenix`.
+2. **Build → Authentication → Get started → Email/Password → Enable**.
+3. **Build → Firestore Database → Create database** → choose region **asia-south1 (Mumbai)** → *Production mode*.
+4. Firestore → **Rules** tab → delete everything → paste the full contents of `firestore.rules` → **Publish**.
+5. **Project settings (gear icon) → Your apps → Web (`</>`)** → register app → copy the `firebaseConfig` values.
+6. Open `www/js/config.js` and fill in `apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`.
+
+> Firebase web API keys are safe to ship inside the app — access is controlled by `firestore.rules`, not by hiding the key.
 
 ---
 
-## 4. Quick Start & Setup
+## Step 2 — Get the APK
 
-### Requirements
-- Python 3.9+
-- SQLite (included) or PostgreSQL (optional via Docker)
+### Option A: GitHub builds it for you (no Android Studio needed)
 
-### Installation
+1. Create a free account at <https://github.com> → **New repository** → name `vastrenix` → *Private* → Create.
+2. On the empty repo page click **uploading an existing file** → drag in **everything inside this `vastrenix` folder**
+   (including the hidden `.github` folder — on Windows/Mac enable "show hidden files" first) → **Commit changes**.
+3. Open the **Actions** tab. The *Build Android APK* run starts by itself (about 6–8 minutes).
+4. When it shows a green tick, open the run → **Artifacts** → download **vastrenix-apk** → unzip → `app-debug.apk`.
+5. Send the APK to your phone (WhatsApp/Drive) → open it → allow *Install unknown apps* → Install.
+
+Every time you change something and commit, a fresh APK is built.
+
+### Option B: Build on your computer with Android Studio
+
+Needs: Node.js 20+, Android Studio (Hedgehog or newer), JDK 17.
+
 ```bash
-# 1. Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 2. Install backend dependencies
-pip install -r <(cat <<EOF
-fastapi
-uvicorn
-pydantic
-pydantic-settings
-email-validator
-sqlalchemy
-alembic
-pyjwt
-cryptography
-bcrypt
-python-multipart
-reportlab<4.1
-qrcode
-pillow
-httpx
-pytest
-EOF
-)
-
-# 3. Populate demo database
-python backend/seed_demo.py
-
-# 4. Start the server
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+npm install
+npm run vendor            # copies Firebase/QR/PDF libraries into www/vendor
+npx cap add android       # first time only
+npm run android:icons     # app icon + splash
+npx cap sync android
+npx cap open android      # opens Android Studio
 ```
 
-Once running:
-- **Interactive Web App & POS:** Open [http://localhost:8000](http://localhost:8000)
-- **API Swagger Documentation:** Open [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Health Check:** Open [http://localhost:8000/health](http://localhost:8000/health)
+In Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+APK appears at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### Signed release APK / Play Store
+
+Android Studio → **Build → Generate Signed Bundle / APK** → create a keystore (keep it safe — you need the same one for every update).
+For automatic signed builds on GitHub, add these repository secrets (**Settings → Secrets and variables → Actions**):
+`KEYSTORE_BASE64` (output of `base64 -w0 release.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+The workflow then also produces a signed release APK. For the Play Store, upload an **AAB** (`./gradlew bundleRelease`).
 
 ---
 
-## 4. Demo Login Credentials
+## Step 3 — First run
 
-| Role | Email | Password | Business |
-| :--- | :--- | :--- | :--- |
-| **Business Owner** | `demo@vastrenix.com` | `VastrenixDemo2026!` | Vastrenix Heritage Garments (Surat) |
-| **Cashier** | `cashier@vastrenix.com` | `CashierPass123!` | Flagship Billing Terminal |
-| **Connected Dealer** | `kaveri@boutique.com` | `KaveriPass123!` | Kaveri Haute Boutique (Mumbai) |
+1. Open the app → **New here? Create account** → enter your name, email, password.
+2. Choose **I own a store → Create a new store** → finish the 5-step setup (business, GST, invoice look, payments, team).
+   Turn on **Start with demo data** to try every screen; remove it later in **Settings → Data**.
+3. Your **store code** (e.g. `VX-ODF-AB12`) is shown in **More → Account** and **Dealers → Network**.
+
+**Adding staff:** they install the same APK → create an account → **I work at a store** → enter your store code →
+their request appears in **Staff** → choose a role → **Approve**. Roles: Admin, Branch manager, Cashier, Inventory manager,
+Purchase manager, Accountant, Dispatcher, Auditor (read-only, enforced by the server).
 
 ---
 
-## 5. Automated Test Suite
+## Run as a website (optional)
 
-Run the full end-to-end verification test suite:
 ```bash
-PYTHONPATH=. ./.venv/bin/pytest backend/tests/ -v
+npm run serve             # http://localhost:8080
 ```
 
-### Verified Test Results:
-- `test_first_working_business_flow`: **PASSED** (Product creation → Size/color variants → Purchase GRN receipt → POS sale → Invoice PDF generation → Inventory update → Low-stock alert).
-- `test_all_six_invoice_themes`: **PASSED** (Verifies ReportLab PDF generation and HTML preview for all 6 themes).
-- `test_b2b_dealer_network_lifecycle`: **PASSED** (Order submitted → Seller accepted → Atomic reservation → Dispatched with LR → Buyer delivered).
-- `test_rbac_and_tenant_isolation`: **PASSED** (Cashier restricted from adjustments/invites; Cross-tenant data isolation verified).
-- `test_cashier_shift_reconciliation`: **PASSED** (Opening float → Cash sales calculation → Reconciled closing count).
-- `test_online_storefront_and_sync`: **PASSED** (Public checkout → Stock decrement → Offline queue idempotency).
+Or host it free on Firebase: `npm i -g firebase-tools && firebase login && firebase use --add && firebase deploy`
+(this also publishes `firestore.rules`).
+
+---
+
+## How the data stays safe
+
+- **Stock-safe billing:** every sale takes a short lock on the store, re-reads the latest stock and only then saves —
+  two counters can never sell the same last piece, and invoice numbers never repeat or skip.
+- **Posted invoices are locked.** Returns go through credit notes, which restore stock and adjust credit.
+- **Offline cache:** Firestore keeps a local copy, so screens open instantly and survive brief network drops.
+  Billing itself needs a connection so the stock check is real.
+- **Tenant isolation:** each store's data lives under its owner's account; the rules stop anyone else reading it.
+
+## Customising
+
+- Brand colours: top of `www/css/app.css` (`--accent`, `--hero`, …).
+- Invoice layouts: `renderInvoiceEn()` in `www/js/money.js` (one renderer for preview, thumbnails and PDF).
+- Translations: `www/js/i18n.js` — every English string has a key; add or edit Hindi (`hi`) and Gujarati (`gu`).
+- App id / name: `capacitor.config.json` (change **before** the first `npx cap add android`).
+
+## Known limits
+
+- Barcode scanning works with USB/Bluetooth scanners (they type the code). Camera scanning can be added with a Capacitor barcode plugin.
+- No direct printing to thermal printers yet — use **PDF → Share → printer app**, or the Compact Thermal theme with a print app.

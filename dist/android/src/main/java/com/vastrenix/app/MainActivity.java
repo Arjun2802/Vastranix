@@ -53,17 +53,17 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Professional Immersive System Bars (Navy Theme)
+        // Professional Immersive System Bars (Graphite Theme #0E0E12)
         Window window = getWindow();
-        window.getDecorView().setBackgroundColor(0xFFFAF8F3);
+        window.getDecorView().setBackgroundColor(0xFF0E0E12);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(0xFF101E2B);
-            window.setNavigationBarColor(0xFF101E2B);
+            window.setStatusBarColor(0xFF0E0E12);
+            window.setNavigationBarColor(0xFF0E0E12);
         }
 
         webView = new WebView(this);
-        webView.setBackgroundColor(0xFFFAF8F3);
+        webView.setBackgroundColor(0xFF0E0E12);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -183,15 +183,46 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleExternalUrl(view, Uri.parse(url));
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri uri = request.getUrl();
+                return handleExternalUrl(view, request.getUrl());
+            }
+
+            private boolean handleExternalUrl(WebView view, Uri uri) {
+                if (uri == null) return false;
                 String urlStr = uri.toString();
+                if (urlStr.startsWith("file://") || urlStr.startsWith("data:") || urlStr.startsWith("blob:") || urlStr.startsWith("javascript:")) {
+                    return false;
+                }
                 if (urlStr.endsWith(".pdf") || urlStr.contains("/pdf")) {
                     String fileName = "invoice_" + System.currentTimeMillis() + ".pdf";
                     downloadAndOpenPdf(urlStr, fileName);
                     return true;
                 }
-                return false;
+                try {
+                    Intent intent;
+                    if (urlStr.startsWith("intent:")) {
+                        intent = Intent.parseUri(urlStr, Intent.URI_INTENT_SCHEME);
+                    } else {
+                        intent = new Intent(Intent.ACTION_VIEW, uri);
+                    }
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Cannot launch external URL: " + urlStr, e);
+                    try {
+                        if (urlStr.contains("wa.me") || urlStr.contains("whatsapp")) {
+                            Intent webWa = new Intent(Intent.ACTION_VIEW, Uri.parse(urlStr));
+                            webWa.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(webWa);
+                        }
+                    } catch (Exception ignored) {}
+                }
+                return true;
             }
         });
 
@@ -430,6 +461,56 @@ public class MainActivity extends Activity {
                     conn.disconnect();
                 }
             }
+        }
+
+        @JavascriptInterface
+        public void openExternalUrl(String url) {
+            mainHandler.post(() -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Cannot open external URL: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void savePdfFromBase64(String base64Data, String fileName) {
+            new Thread(() -> {
+                try {
+                    File downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
+                    File savedFile = null;
+                    byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+
+                    if (downloadsDir != null && (downloadsDir.exists() || downloadsDir.mkdirs())) {
+                        savedFile = new File(downloadsDir, fileName);
+                        try (FileOutputStream fos = new FileOutputStream(savedFile)) {
+                            fos.write(bytes);
+                        }
+                    }
+
+                    File cacheDir = new File(getCacheDir(), "invoices");
+                    if (!cacheDir.exists()) cacheDir.mkdirs();
+                    File viewFile = new File(cacheDir, fileName);
+                    try (FileOutputStream fos = new FileOutputStream(viewFile)) {
+                        fos.write(bytes);
+                    }
+
+                    final String msg = (savedFile != null)
+                        ? "Invoice saved to Downloads (" + fileName + ")"
+                        : "Invoice saved";
+
+                    mainHandler.post(() -> {
+                        Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
+                        launchPdfViewer(viewFile);
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "Error saving base64 PDF: " + e.getMessage(), e);
+                    mainHandler.post(() -> Toast.makeText(MainActivity.this, "Save failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                }
+            }).start();
         }
 
         @JavascriptInterface

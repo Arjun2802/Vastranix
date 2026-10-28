@@ -1,110 +1,50 @@
 rules_version = '2';
+// Vastrenix security rules.
+// Each store lives under /stores/{ownerUid}. Only the owner and approved (active) staff can read or write it.
+// Staff approval, roles and access requests are enforced here, not just in the app.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
 
-    // Default deny all access
-    match /{document=**} {
-      allow read, write: if false;
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Helper Functions
-    function isAuthenticated() {
-      return request.auth != null;
+    // Store codes let staff find a store to join.
+    match /codes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.storeId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.storeId == request.auth.uid;
     }
 
-    function isStaffDocApproved(businessId) {
-      return exists(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.is_approved == true;
-    }
+    match /stores/{sid} {
+      function isOwner() { return signedIn() && request.auth.uid == sid; }
+      function staffPath() { return /databases/$(database)/documents/stores/$(sid)/staff/$(request.auth.uid); }
+      function isStaff() { return signedIn() && exists(staffPath()) && get(staffPath()).data.status == 'active'; }
+      function role() { return get(staffPath()).data.role; }
+      function isAdmin() { return isOwner() || (isStaff() && role() == 'admin'); }
+      function canWrite() { return isOwner() || (isStaff() && role() != 'auditor'); }
 
-    function isStaffMember(businessId) {
-      return isAuthenticated() && (
-        (request.auth.token.business_id == businessId) ||
-        isStaffDocApproved(businessId)
-      );
-    }
-
-    function getStaffRole(businessId) {
-      return get(/databases/$(database)/documents/businesses/$(businessId)/staff/$(request.auth.uid)).data.role;
-    }
-
-    function isBusinessAdminOrOwner(businessId) {
-      return isStaffMember(businessId) &&
-        (getStaffRole(businessId) == 'OWNER' || getStaffRole(businessId) == 'ADMIN');
-    }
-
-    // Public Directory (Public store lookup for staff self-signup)
-    match /public_stores/{businessId} {
-      allow read: if true;
-      allow write: if isBusinessAdminOrOwner(businessId);
-    }
-
-    // User Self Document
-    match /users/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Multi-Tenant Business Root: businesses/{businessId}
-    match /businesses/{businessId} {
-      allow read: if isStaffMember(businessId);
-      allow write: if isBusinessAdminOrOwner(businessId);
-
-      // Staff Subcollection: businesses/{businessId}/staff/{uid}
-      match /staff/{staffId} {
-        allow read: if isStaffMember(businessId);
-        // Self-signup for pending approval: can create if unapproved
-        allow create: if isAuthenticated() && request.auth.uid == staffId && request.resource.data.is_approved == false;
-        // Staff can NEVER edit their own role or is_approved field
-        allow update: if isBusinessAdminOrOwner(businessId) && (request.auth.uid != staffId || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'is_approved']));
-        allow delete: if isBusinessAdminOrOwner(businessId) && request.auth.uid != staffId;
+      // Everything in the store (products, ledger, customers, orders, shifts, ...)
+      match /{coll}/{docId} {
+        allow read: if (isOwner() || isStaff()) && coll != 'requests';
+        allow write: if canWrite() && !(coll in ['staff', 'requests']) && !(coll == 'meta' && docId == 'store');
       }
-
-      // Catalog Products & Variants: Read allowed for staff; direct writes denied (managed via FastAPI backend)
-      match /products/{productId} {
-        allow read: if isStaffMember(businessId);
-        allow write: if false;
+      // Store profile: anyone signed in can read it (so staff see the store name when requesting access); only admins change it.
+      match /meta/store {
+        allow read: if signedIn();
+        allow write: if isAdmin();
       }
-
-      match /variants/{variantId} {
-        allow read: if isStaffMember(businessId);
-        // Direct client writes to stock levels denied; inventory decrements handled strictly via backend transactions
-        allow write: if false;
+      // Team: only owner/admins approve, change roles or deactivate.
+      match /staff/{uid} {
+        allow read: if isOwner() || isStaff() || (signedIn() && request.auth.uid == uid);
+        allow write: if isAdmin();
       }
-
-      // POS Invoices (Append-Only / Financial Immutability)
-      match /invoices/{invoiceId} {
-        allow read: if isStaffMember(businessId);
-        allow create: if isStaffMember(businessId) &&
-          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
-        // Never allow update or delete — strictly append-only
-        allow update: if false;
-        allow delete: if false;
-      }
-
-      // Cash Shifts & Drawer Sessions
-      match /cash_shifts/{shiftId} {
-        allow read: if isStaffMember(businessId);
-        allow create, update: if isStaffMember(businessId) &&
-          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'CASHIER']);
-        allow delete: if false;
-      }
-
-      // Store Expenses (Restricted to Management & Accounts)
-      match /expenses/{expenseId} {
-        allow read, write: if isStaffMember(businessId) &&
-          (getStaffRole(businessId) in ['OWNER', 'ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER']);
-      }
-
-      // B2B Dealer Orders
-      match /dealer_orders/{orderId} {
-        allow read: if isStaffMember(businessId);
-        allow write: if false; // All state transitions handled via backend Admin SDK
-      }
-
-      // Idempotency Records
-      match /idempotency/{key} {
-        allow read: if isStaffMember(businessId);
-        allow write: if false; // Backend only
+      // Access requests: a person may file their own (status pending); admins decide.
+      match /requests/{uid} {
+        allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+        allow create, update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.status == 'pending');
+        allow delete: if isAdmin();
       }
     }
   }

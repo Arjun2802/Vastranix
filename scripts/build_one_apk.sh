@@ -58,12 +58,13 @@ mkdir -p "$BUILD_DIR/compiled_res" "$BUILD_DIR/classes" "$BUILD_DIR/dex" "$BUILD
 echo "=== 2. Compiling resources with aapt2 (adaptive icon, file_paths, network security) ==="
 $BUILD_TOOLS/aapt2 compile --dir "$RES_DIR" -o "$BUILD_DIR/compiled_res.zip"
 
-echo "=== 3. Packaging updated web client assets (UI energy & Spark Firebase) ==="
+echo "=== 3. Packaging updated web client assets (Vastrenix www) ==="
 mkdir -p "$BUILD_DIR/assets/web"
-cp -r frontend/web/* "$BUILD_DIR/assets/web/"
-cp frontend/web/index.html "$BUILD_DIR/assets/"
-cp -r frontend/web/static "$BUILD_DIR/assets/"
-cp -r brand "$BUILD_DIR/assets/"
+cp -r www/* "$BUILD_DIR/assets/web/"
+cp -r www/* "$BUILD_DIR/assets/"
+if [ -d "assets" ]; then
+    cp -r assets/* "$BUILD_DIR/assets/"
+fi
 if [ -f "google-services.json" ]; then
     cp google-services.json "$BUILD_DIR/assets/"
 fi
