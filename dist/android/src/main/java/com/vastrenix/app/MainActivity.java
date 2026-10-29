@@ -70,12 +70,6 @@ public class MainActivity extends Activity {
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{ android.Manifest.permission.CAMERA }, 1002);
-            }
-        }
-
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -150,30 +144,30 @@ public class MainActivity extends Activity {
                 filePathCallback = callback;
 
                 try {
-                    // 1. Prepare Camera capture intent
+                    java.util.ArrayList<Intent> extraIntents = new java.util.ArrayList<>();
                     Intent takePictureIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-                    File photosDir = new File(getCacheDir(), "photos");
-                    if (!photosDir.exists()) photosDir.mkdirs();
-                    File photoFile = new File(photosDir, "img_" + System.currentTimeMillis() + ".jpg");
-                    cameraCaptureUri = VastrenixFileProvider.getUriForFile(MainActivity.this, photoFile);
-                    takePictureIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraCaptureUri);
-                    takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+                        try {
+                            File photosDir = new File(getCacheDir(), "photos");
+                            if (!photosDir.exists()) photosDir.mkdirs();
+                            File photoFile = new File(photosDir, "img_" + System.currentTimeMillis() + ".jpg");
+                            cameraCaptureUri = VastrenixFileProvider.getUriForFile(MainActivity.this, photoFile);
+                            takePictureIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraCaptureUri);
+                            takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                            extraIntents.add(takePictureIntent);
+                        } catch (Exception ex) {
+                            Log.e(TAG, "Camera file prep error", ex);
+                        }
+                    }
 
-                    // 2. Prepare Gallery / File picker intent
                     Intent pickIntent = new Intent(Intent.ACTION_GET_CONTENT);
                     pickIntent.addCategory(Intent.CATEGORY_OPENABLE);
                     pickIntent.setType("image/*");
 
-                    // 3. Fallback to params intent if available
-                    Intent contentIntent = null;
-                    try {
-                        contentIntent = params.createIntent();
-                    } catch (Exception ignored) {}
-
-                    Intent baseIntent = (contentIntent != null) ? contentIntent : pickIntent;
-
-                    Intent chooserIntent = Intent.createChooser(baseIntent, "Select or Take Photo");
-                    chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{ takePictureIntent });
+                    Intent chooserIntent = Intent.createChooser(pickIntent, "Select or Take Photo");
+                    if (!extraIntents.isEmpty()) {
+                        chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, extraIntents.toArray(new Intent[0]));
+                    }
 
                     startActivityForResult(chooserIntent, 1001);
                     return true;

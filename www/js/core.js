@@ -468,6 +468,7 @@ function render() {
   afterFns.forEach(function (f) { try { f(); } catch (e) { console.warn(e); } });
   postRender();
 }
+var A = window.A = window.A || {};
 /* inputs bound with data-m write straight to state without a re-render; data-r="1" asks for one */
 document.addEventListener('input', function (e) {
   var el = e.target, m = el.getAttribute && el.getAttribute('data-m'); if (!m) return;
@@ -496,12 +497,6 @@ document.addEventListener('click', function (e) {
   e.preventDefault();
   var fn = A[el.getAttribute('data-a')]; if (fn) fn(el.dataset, el, e);
 });
-A.triggerUpload = function (d) {
-  var id = d && d.for;
-  if (!id) return;
-  var inp = document.getElementById(id);
-  if (inp) inp.click();
-};
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && S.sheet) { closeSheet(); return; }
   var el = e.target; if (e.key === 'Enter' && el.getAttribute && el.getAttribute('data-enter')) { var fn = A[el.getAttribute('data-enter')]; if (fn) { e.preventDefault(); fn(el.dataset, el, e); } }
@@ -593,11 +588,17 @@ function sheetWrap(title, body, foot, wide) {
 function busyBtn(label, action, cls, attrs, busyKey) { var b = S.busy && (!busyKey || S.busy === busyKey); return '<button type="button" class="btn ' + (cls || 'primary') + '" data-a="' + action + '" ' + (attrs || '') + (b ? ' disabled' : '') + '>' + (b ? '<span class="spin"></span>' : '') + esc(label) + '</button>'; }
 
 /* ===================== GENERIC ACTIONS ===================== */
-var A = {
+Object.assign(A, {
   set: function (d) { var v = d.v; if (v === 'true') v = true; else if (v === 'false') v = false; setPath(S, d.k, v); schedule(); },
   go: function (d) { go(d.r); },
   back: function () { backSub(); },
   close: function () { closeSheet(); },
   openSub: function (d) { openSub(d.k, d); },
+  triggerUpload: function (d) {
+    var id = d && d.for;
+    if (!id) return;
+    var inp = document.getElementById(id);
+    if (inp) inp.click();
+  },
   noop: function () { }
-};
+});

@@ -74,9 +74,12 @@ public class VastrenixFileProvider extends ContentProvider {
         Context context = getContext();
         if (context == null) return null;
 
-        File file = new File(new File(context.getCacheDir(), "invoices"), fileName);
+        File file = new File(new File(context.getCacheDir(), "photos"), fileName);
         if (!file.exists()) {
-            file = new File(new File(context.getFilesDir(), "invoices"), fileName);
+            file = new File(new File(context.getCacheDir(), "invoices"), fileName);
+            if (!file.exists()) {
+                file = new File(new File(context.getFilesDir(), "invoices"), fileName);
+            }
         }
 
         String[] cols = projection != null ? projection : new String[]{
