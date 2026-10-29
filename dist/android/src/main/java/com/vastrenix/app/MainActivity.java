@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri cameraCaptureUri;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @SuppressLint({"SetJavaScriptEnabled", "NewApi"})
@@ -68,6 +69,12 @@ public class MainActivity extends Activity {
         webView.setHorizontalScrollBarEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{ android.Manifest.permission.CAMERA }, 1002);
+            }
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -138,16 +145,55 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (filePathCallback != null) {
                     filePathCallback.onReceiveValue(null);
+                    filePathCallback = null;
                 }
                 filePathCallback = callback;
-                Intent intent = params.createIntent();
+
                 try {
-                    startActivityForResult(intent, 1001);
+                    // 1. Prepare Camera capture intent
+                    Intent takePictureIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                    File photosDir = new File(getCacheDir(), "photos");
+                    if (!photosDir.exists()) photosDir.mkdirs();
+                    File photoFile = new File(photosDir, "img_" + System.currentTimeMillis() + ".jpg");
+                    cameraCaptureUri = VastrenixFileProvider.getUriForFile(MainActivity.this, photoFile);
+                    takePictureIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraCaptureUri);
+                    takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+                    // 2. Prepare Gallery / File picker intent
+                    Intent pickIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                    pickIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                    pickIntent.setType("image/*");
+
+                    // 3. Fallback to params intent if available
+                    Intent contentIntent = null;
+                    try {
+                        contentIntent = params.createIntent();
+                    } catch (Exception ignored) {}
+
+                    Intent baseIntent = (contentIntent != null) ? contentIntent : pickIntent;
+
+                    Intent chooserIntent = Intent.createChooser(baseIntent, "Select or Take Photo");
+                    chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{ takePictureIntent });
+
+                    startActivityForResult(chooserIntent, 1001);
+                    return true;
                 } catch (Exception e) {
-                    filePathCallback = null;
-                    return false;
+                    Log.e(TAG, "Chooser setup failed, falling back to basic picker", e);
+                    try {
+                        Intent fallbackIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                        fallbackIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                        fallbackIntent.setType("image/*");
+                        startActivityForResult(fallbackIntent, 1001);
+                        return true;
+                    } catch (Exception ex2) {
+                        Log.e(TAG, "All file chooser intents failed", ex2);
+                        if (filePathCallback != null) {
+                            filePathCallback.onReceiveValue(null);
+                            filePathCallback = null;
+                        }
+                        return false;
+                    }
                 }
-                return true;
             }
         });
 
@@ -235,20 +281,31 @@ public class MainActivity extends Activity {
         if (requestCode == 1001) {
             if (filePathCallback != null) {
                 Uri[] results = null;
-                if (resultCode == Activity.RESULT_OK && data != null) {
-                    if (data.getData() != null) {
+                if (resultCode == Activity.RESULT_OK) {
+                    if (data != null && data.getData() != null) {
                         results = new Uri[]{data.getData()};
-                    } else if (data.getClipData() != null) {
+                    } else if (data != null && data.getClipData() != null) {
                         int count = data.getClipData().getItemCount();
                         results = new Uri[count];
                         for (int i = 0; i < count; i++) {
                             results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                    } else if (cameraCaptureUri != null) {
+                        try {
+                            String fileName = cameraCaptureUri.getLastPathSegment();
+                            File photoFile = new File(new File(getCacheDir(), "photos"), fileName);
+                            if (photoFile.exists() && photoFile.length() > 0) {
+                                results = new Uri[]{ cameraCaptureUri };
+                            }
+                        } catch (Exception ex) {
+                            Log.e(TAG, "Error resolving camera capture output", ex);
                         }
                     }
                 }
                 filePathCallback.onReceiveValue(results);
                 filePathCallback = null;
             }
+            cameraCaptureUri = null;
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }

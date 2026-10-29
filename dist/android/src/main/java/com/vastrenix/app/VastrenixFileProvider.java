@@ -41,20 +41,29 @@ public class VastrenixFileProvider extends ContentProvider {
             throw new FileNotFoundException("Invalid file path in URI: " + uri);
         }
 
-        File invoicesDir = new File(context.getCacheDir(), "invoices");
-        File file = new File(invoicesDir, fileName);
+        File file = new File(new File(context.getCacheDir(), "photos"), fileName);
+        if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
 
         if (!file.exists()) {
-            // Also check files dir
-            File altDir = new File(context.getFilesDir(), "invoices");
-            file = new File(altDir, fileName);
+            File invoicesDir = new File(context.getCacheDir(), "invoices");
+            File inv = new File(invoicesDir, fileName);
+            if (inv.exists()) {
+                file = inv;
+            } else {
+                File altDir = new File(context.getFilesDir(), "invoices");
+                File alt = new File(altDir, fileName);
+                if (alt.exists()) {
+                    file = alt;
+                }
+            }
         }
 
-        if (!file.exists()) {
-            throw new FileNotFoundException("File not found: " + fileName);
+        int pfdMode = ParcelFileDescriptor.MODE_READ_ONLY;
+        if (mode != null && (mode.contains("w") || mode.contains("rw"))) {
+            pfdMode = ParcelFileDescriptor.MODE_READ_WRITE | ParcelFileDescriptor.MODE_CREATE;
         }
 
-        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+        return ParcelFileDescriptor.open(file, pfdMode);
     }
 
     @Override

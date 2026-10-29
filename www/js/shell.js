@@ -187,6 +187,27 @@ A.obNext = async function () {
       categories: ['Kurtas', 'Sarees', 'Dupattas', 'Bottoms', 'Menswear', 'Kidswear', 'Fabric'], code: 'VX-' + prefixFor(f.name) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
       ownerId: ME.id || null, ownerName: ME.name || '', createdAt: Date.now()
     });
+    // Create 7-day free trial subscription document for new business
+    var existingSub = await fresh('meta/subscription');
+    if (!existingSub) {
+      var subNow = Date.now();
+      var subDoc = {
+        businessId: ME.id,
+        status: 'trialing',
+        trialStartedAt: subNow,
+        trialEndsAt: subNow + 7 * 864e5,
+        trialThreeDUsed: 0,
+        trialThreeDLimit: 3,
+        cycleId: null,
+        gstin: gst || '',
+        createdAt: subNow,
+        updatedAt: subNow
+      };
+      await put('meta/subscription', subDoc);
+      if (window.FS) {
+        await window.FS.doc('subscriptions/' + ME.id).set(subDoc, { merge: true });
+      }
+    }
     if (window.VX_onStoreCreated) { var sNow = await fresh('meta/store'); await window.VX_onStoreCreated(sNow.code, sNow.name); }
     if (!(await fresh('meta/counters'))) await put('meta/counters', { inv: 0, cn: 0, po: 0, do: 0, tr: 0 });
     if (f.demo) await loadDemo();
@@ -233,6 +254,28 @@ function vHome() {
   }
   var low = lowList(), newDo = vals(D.dorders).filter(function (o) { return o.status === 'submitted'; }), toPack = vals(D.dorders).filter(function (o) { return o.status === 'accepted' || o.status === 'partial'; });
   var openPo = vals(D.pos).filter(function (p) { return p.status === 'open' || p.status === 'partial'; });
+  var sub = subState();
+  var subBanner = '';
+  if (sub.isExpired) {
+    subBanner = '<div class="banner bad" style="margin-bottom:16px;padding:12px 16px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">' +
+      '<div style="display:flex;align-items:center;gap:12px">' +
+        '<span class="ic bad">' + icon('lock', 20) + '</span>' +
+        '<div><b style="font-size:14.5px">' + esc(t('trial_ended_t', 'Your free trial has ended')) + '</b><div class="small muted">' + esc(t('trial_ended_b', 'Subscribe to create new bills, garments, and purchase orders. Your past data is safe.')) + '</div></div>' +
+      '</div>' +
+      '<button class="btn strong sm" data-a="openSubscribe">' + esc(t('subscribe_continue', 'Subscribe to continue')) + '</button>' +
+    '</div>';
+  } else if (sub.isTrial && !S.dismissTrialBanner) {
+    subBanner = '<div class="banner between" style="margin-bottom:16px;border:1px solid var(--line);border-radius:14px;padding:10px 16px">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<span class="ic acc" style="width:28px;height:28px;border-radius:999px;flex-shrink:0">' + icon('clock', 16) + '</span>' +
+        '<span style="font-size:13.5px;font-weight:600;color:var(--fg)">' + esc(t('trial_banner_left', 'Free trial — {n} days left', { n: sub.daysLeft })) + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<button class="btn primary xs" data-a="openSubscribe" style="padding:4px 12px;font-size:12px">' + esc(t('subscribe', 'Subscribe')) + '</button>' +
+        '<button class="ib plain xs" data-a="dismissTrialBanner" aria-label="Dismiss" style="color:var(--muted)">' + icon('x', 14) + '</button>' +
+      '</div>' +
+    '</div>';
+  }
   var held = vals(D.held);
   var att = [];
   if (D.loaded.products && low.length && allowed('lowstock')) att.push(['lowstock', 'bad', 'alert', t('att_low', 'Low stock: {n} variants', { n: low.length }), t('att_low_s', '{n} out of stock', { n: low.filter(function (x) { return x.out; }).length })]);
@@ -248,7 +291,7 @@ function vHome() {
   var head = '<header class="ph"><div class="ph-t"><p>' + esc(st.name || '') + ' · ' + esc(locName(curLoc())) + '</p><h1>' + esc(greet + (first ? ', ' + first : '')) + '</h1></div><div class="ph-a">' +
     '<button class="ib" data-a="sheet" data-k="search" aria-label="' + esc(t('search', 'Search')) + '">' + icon('search', 20) + '</button>' +
     '<button class="ib" data-a="sheet" data-k="alerts" aria-label="' + esc(t('alerts', 'Alerts')) + '">' + icon('bell', 20) + (att.length + reqs.length ? '<span class="bdg">' + (att.length + reqs.length) + '</span>' : '') + '</button></div></header>';
-  return head + '<div class="cols"><div class="stack lg">' + hero + qa + (banners ? '<div class="stack sm">' + banners + '</div>' : '') + attHtml + '</div><div class="stack lg">' + recHtml + weekHtml + '</div></div>';
+  return head + '<div class="cols"><div class="stack lg">' + subBanner + hero + qa + (banners ? '<div class="stack sm">' + banners + '</div>' : '') + attHtml + '</div><div class="stack lg">' + recHtml + weekHtml + '</div></div>';
 }
 function barChart(data, h) {
   var W = 320, H = h || 120, pad = 18, bw = (W - 8) / data.length, mx = Math.max.apply(null, data.map(function (d) { return d.v; }).concat([1]));
@@ -268,11 +311,52 @@ function vMore() {
     if (!items.length) return '';
     return '<section class="stack sm"><div class="sect"><h2>' + esc(t(g[1], g[2])) + '</h2></div><div class="qa">' + items.map(function (r) { var b = badgeFor(r); return '<a href="#' + r + '" data-a="go" data-r="' + r + '" style="position:relative">' + icon(ROUTES[r].icon, 22) + esc(rt(r)) + (b ? '<span class="pill acc" style="position:absolute;top:7px;right:7px;height:18px;padding:0 6px">' + b + '</span>' : '') + '</a>'; }).join('') + '</div></section>';
   }).join('');
+  var sub = subState();
+  var subTile = '<section class="stack sm"><div class="sect"><h2>' + esc(t('subscription_plan', 'Subscription & Plan')) + '</h2></div><div class="card pad stack">' +
+    '<div class="between" style="align-items:flex-start;gap:12px">' +
+      '<div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<b style="font-size:15px">' + esc(sub.isActive ? t('plan_active', 'Active Paid Plan') : (sub.isTrial ? t('plan_trial', '7-Day Free Trial') : t('plan_expired', 'Trial Expired'))) + '</b>' +
+          '<span class="pill ' + (sub.isActive ? 'ok' : (sub.isTrial ? 'acc' : 'bad')) + '">' + esc(sub.isActive ? (sub.cycleId === 'annual' ? 'Annual' : 'Monthly') : (sub.isTrial ? sub.daysLeft + ' days left' : 'Expired')) + '</span>' +
+        '</div>' +
+        '<div class="small muted" style="margin-top:4px">' + esc(sub.isActive ? t('plan_active_desc', 'Unlimited bills, multi-counter sync & unlimited 3D previews') : (sub.isTrial ? t('trial_days_remaining', '{n} days left in your free trial · Full access', { n: sub.daysLeft }) : t('trial_ended_desc', 'Subscribe to create new bills, items and orders'))) + '</div>' +
+      '</div>' +
+      '<button class="btn ' + (sub.isActive ? 'line sm' : 'primary sm') + '" data-a="openSubscribe">' + esc(sub.isActive ? t('manage_plan', 'View Plan') : t('subscribe_now', 'Subscribe')) + '</button>' +
+    '</div>' +
+    (sub.isTrial ? '<div class="small muted" style="border-top:1px solid var(--line);padding-top:8px;display:flex;align-items:center;gap:6px">' + icon('sparkles', 15) + '<span>' + esc(t('trial_3d_allowance_note', '3 free 3D previews included ({used}/3 used)', { used: sub.trialThreeDUsed })) + '</span></div>' : '') +
+  '</div></section>';
+
+  var helpGroup = '<section class="stack sm"><div class="sect"><h2>' + esc(t('help_custom_dev', 'Help & Custom Development')) + '</h2></div><div class="qa">' +
+    '<button type="button" data-a="openSub" data-k="contact" data-target="card-support">' + icon('message', 22) + esc(t('help_support_btn', 'Support')) + '</button>' +
+    '<button type="button" data-a="openSub" data-k="contact" data-target="card-cw">' + icon('layers', 22) + esc(t('custom_work_btn', 'Custom Work')) + '</button>' +
+    '<button type="button" data-a="openSub" data-k="threed" style="position:relative">' + icon('sparkles', 22) + esc(t('threed_preview_btn', '3D Preview')) + '<span class="pill ok" style="position:absolute;top:6px;right:6px;height:16px;padding:0 5px;font-size:9px;font-weight:700">' + esc(t('live_pill', 'Live')) + '</span></button>' +
+  '</div></section>';
+
+  var ownerBadge = sub.isActive
+    ? '<span class="pill ok" style="font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer" data-a="openSubscribe"><span class="dot" style="width:6px;height:6px"></span>' + esc(t('plan_active_badge', 'Active')) + '</span>'
+    : (sub.isTrial
+      ? '<span class="pill acc" style="font-size:11px;font-weight:700;cursor:pointer" data-a="openSubscribe">' + esc(t('trial_badge', '{n}d trial', { n: sub.daysLeft })) + '</span>'
+      : (sub.isExpired
+        ? '<span class="pill bad" style="font-size:11px;font-weight:700;cursor:pointer" data-a="openSubscribe">' + esc(t('plan_expired', 'Expired')) + '</span>'
+        : ''));
+
+  var profileCard = '<div class="card pad rowx">' +
+    (ME.avatar ? '<img class="avatar" style="width:52px;height:52px;border-radius:16px" src="' + esc(ME.avatar) + '" alt="">' : '<span class="ic" style="width:52px;height:52px;border-radius:16px;background:var(--strong);color:var(--strong-fg);font-size:17px">' + esc(initials(ME.name || 'You')) + '</span>') +
+    '<span class="grow"><span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">' + esc(ME.name || t('you', 'You')) + '</b>' + ownerBadge + '</span><br><span class="small muted">' + esc(roleName(ME.role) + ' · ' + (storeV().name || '')) + '</span></span>' +
+    (allowed('settings') ? '<a class="ib" href="#settings" data-a="go" data-r="settings" aria-label="' + esc(t('nav_settings', 'Settings')) + '">' + icon('settings', 19) + '</a>' : '') +
+  '</div>';
+
   return ph(t('nav_more', 'More')) + '<div class="stack lg" style="max-width:760px">' +
-    '<div class="card pad rowx">' + (ME.avatar ? '<img class="avatar" style="width:52px;height:52px;border-radius:16px" src="' + esc(ME.avatar) + '" alt="">' : '<span class="ic" style="width:52px;height:52px;border-radius:16px;background:var(--strong);color:var(--strong-fg);font-size:17px">' + esc(initials(ME.name || 'You')) + '</span>') + '<span class="grow"><b style="font-size:17px">' + esc(ME.name || t('you', 'You')) + '</b><br><span class="small muted">' + esc(roleName(ME.role) + ' · ' + (storeV().name || '')) + '</span></span>' + (allowed('settings') ? '<a class="ib" href="#settings" data-a="go" data-r="settings" aria-label="' + esc(t('nav_settings', 'Settings')) + '">' + icon('settings', 19) + '</a>' : '') + '</div>' +
-    groups + (typeof vxExtraMore === 'function' ? vxExtraMore() : '') +
+    profileCard +
+    groups +
+    helpGroup +
+    (typeof vxExtraMore === 'function' ? vxExtraMore() : '') +
+    subTile +
     '<section class="stack sm"><div class="sect"><h2>' + esc(t('this_device', 'This device')) + '</h2></div><div class="card pad stack">' + fld(t('language', 'Language'), langSeg()) + fld(t('appearance', 'Appearance'), themeSeg()) + '<button class="btn line" data-a="sheet" data-k="loc">' + icon('mapPin', 17) + esc(t('selling_from', 'Selling from: {l}', { l: locName(curLoc()) })) + '</button>' + syncLine() + '</div></section></div>';
 }
+A.openSub = function (d) { openSub(d.k, d); };
+A.openSubscribe = function () { openSheet('subscribe'); };
+A.dismissTrialBanner = function () { S.dismissTrialBanner = true; schedule(); };
 function langSeg() { return '<div class="seg" role="radiogroup" aria-label="' + esc(t('language', 'Language')) + '">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (l) { return '<button type="button" role="radio" aria-checked="' + (LANG === l[0]) + '" class="' + (LANG === l[0] ? 'on' : '') + '" data-a="setLang" data-v="' + l[0] + '">' + l[1] + '</button>'; }).join('') + '</div>'; }
 function themeSeg() { var v = lsGet('vx-theme') || 'system'; return '<div class="seg" role="radiogroup" aria-label="' + esc(t('appearance', 'Appearance')) + '">' + [['system', t('th_system', 'System')], ['light', t('th_light', 'Light')], ['dark', t('th_dark', 'Dark')]].map(function (l) { return '<button type="button" role="radio" aria-checked="' + (v === l[0]) + '" class="' + (v === l[0] ? 'on' : '') + '" data-a="setTheme" data-v="' + l[0] + '">' + esc(l[1]) + '</button>'; }).join('') + '</div>'; }
 A.setLang = function (d) { LANG = d.v; lsSet('vx-lang', LANG); memoCache = {}; schedule(); };

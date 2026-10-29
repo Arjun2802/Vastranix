@@ -163,10 +163,10 @@ function vSettings() {
   var hasDemo = products().some(function (p) { return p.sample; }) || vals(D.customers).some(function (c) { return c.sample; });
   var logoPicker = '<div class="fld"><label>' + esc(t('store_logo', 'Store logo')) + '</label>' +
     '<div style="display:flex;align-items:center;gap:14px;margin-top:6px">' +
-      (f.logo ? '<img src="' + esc(f.logo) + '" alt="Logo" style="width:56px;height:56px;object-fit:contain;border-radius:12px;border:1px solid var(--border);background:#fff;padding:2px">' : '<div style="width:56px;height:56px;border-radius:12px;background:var(--subtle);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;font-size:18px">' + esc(initials(f.name || 'Store')) + '</div>') +
+      (f.logo ? '<img src="' + esc(f.logo) + '" alt="Logo" style="width:56px;height:56px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:2px">' : '<div style="width:56px;height:56px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;font-size:18px">' + esc(initials(f.name || 'Store')) + '</div>') +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
         (ro ? '' : '<label class="btn line sm" style="cursor:pointer;margin:0;display:inline-flex;align-items:center;gap:6px">' + icon('upload', 16) + '<span>' + esc(f.logo ? t('change_logo', 'Change logo') : t('upload_logo', 'Upload logo')) + '</span><input type="file" accept="image/*" style="display:none" onchange="uploadStoreLogo(this)"></label>') +
-        (f.logo && !ro ? '<button type="button" class="btn soft sm" data-a="removeLogo" style="color:var(--danger)">' + icon('trash', 16) + esc(t('remove', 'Remove')) + '</button>' : '') +
+        (f.logo && !ro ? '<button type="button" class="btn soft sm" data-a="removeLogo" style="color:var(--bad)">' + icon('trash', 16) + esc(t('remove', 'Remove')) + '</button>' : '') +
       '</div>' +
     '</div>' +
     '<span class="xsmall muted" style="margin-top:4px;display:block">' + esc(t('logo_hint', 'PNG or JPG. Shown on invoices, receipts and store header.')) + '</span></div>';
@@ -290,11 +290,341 @@ A.gGo = function (d) { closeSheet(); go(d.r); };
 function confirmSheet(sh) { return sheetWrap(sh.title, '<p style="font-size:15px;line-height:1.5">' + esc(sh.msg) + '</p>', '<button class="btn line" data-a="close">' + esc(t('cancel', 'Cancel')) + '</button><button class="btn ' + (sh.danger ? 'danger' : 'primary') + '" data-a="' + sh.act + '">' + esc(sh.yes) + '</button>'); }
 function billThemeSheet() { return sheetWrap(t('invoice_theme', 'Invoice theme'), themePicker('bill.theme'), '<button class="btn primary lg" data-a="close">' + esc(t('done', 'Done')) + '</button>', true); }
 
-var SHEETS = { checkout: coView, saleDone: doneView, variant: variantSheet, line: lineSheet, custom: customSheet, disc: discSheet, custPick: custPickSheet, held: heldSheet, billTheme: billThemeSheet, pmore: pmoreSheet, count: countSheet, supplier: supplierSheet, supPay: supPaySheet, utr: utrSheet, cn: cnSheet, collect: collectSheet, custEdit: custEditSheet, expense: expenseSheet, cashEntry: cashEntrySheet, dealer: dealerSheet, dispatch: dispatchSheet, rejectDO: rejectSheet, loc: locSheet, search: searchSheet, alerts: alertsSheet, confirm: confirmSheet };
+var SHEETS = { checkout: coView, saleDone: doneView, variant: variantSheet, line: lineSheet, custom: customSheet, disc: discSheet, custPick: custPickSheet, held: heldSheet, billTheme: billThemeSheet, pmore: pmoreSheet, count: countSheet, supplier: supplierSheet, supPay: supPaySheet, utr: utrSheet, cn: cnSheet, collect: collectSheet, custEdit: custEditSheet, expense: expenseSheet, cashEntry: cashEntrySheet, dealer: dealerSheet, dispatch: dispatchSheet, rejectDO: rejectSheet, loc: locSheet, search: searchSheet, alerts: alertsSheet, confirm: confirmSheet, subscribe: subSheet, fabricDrape: fabricDrapeSheet };
 function sheetView() { var f = SHEETS[S.sheet.k]; if (!f) return ''; try { return f(S.sheet) || ''; } catch (e) { console.error(e); return sheetWrap(t('err_render', 'This screen hit a problem.'), '<p class="small muted">' + esc(e.message) + '</p>', ''); } }
 A.sheet = function (d) { var o = {}; Object.keys(d).forEach(function (k) { o[k] = d[k]; }); openSheet(d.k, o); };
-var SUBS = { product: subProduct, pform: subPform, tform: subTform, poform: subPOform, po: subPO, receive: subReceive, supplier: subSupplier, invoice: subInvoice, customer: subCustomer, doform: subDOform, dorder: subDO };
+var SUBS = { product: subProduct, pform: subPform, tform: subTform, poform: subPOform, po: subPO, receive: subReceive, supplier: subSupplier, invoice: subInvoice, customer: subCustomer, doform: subDOform, dorder: subDO, contact: subContact, threed: subThreeD, fabricJobs: subThreeD };
 var SUBS_NOBAR = { pform: 1, tform: 1, poform: 1, receive: 1, doform: 1 };
+
+/* ===================== SUBSCRIPTION SHEET ===================== */
+function subSheet() {
+  var sub = subState();
+  var sel = S.subCycle || 'annual';
+  return sheetWrap(t('sub_title', 'Vastrenix Subscription'),
+    '<div class="stack lg" style="padding-top:4px">' +
+      '<div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">' +
+        logo(48) +
+        '<b style="font-size:20px;letter-spacing:-0.03em;color:var(--fg)">vastrenix</b>' +
+        '<p class="muted small">' + esc(t('sub_subtitle', 'Retail, wholesale and multi-branch management for garments.')) + '</p>' +
+      '</div>' +
+      '<div class="g2" style="gap:12px">' +
+        '<button type="button" class="card pad stack" data-a="setSubCycle" data-v="monthly" style="text-align:left;cursor:pointer;border-radius:16px;border:2px solid ' + (sel === 'monthly' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'monthly' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);transition:all .15s ease">' +
+          '<div class="between"><b style="font-size:15px;color:var(--fg)">' + esc(t('sub_monthly', 'Monthly')) + '</b>' + (sel === 'monthly' ? '<span style="color:var(--accent-text);display:flex">' + icon('check', 18, 2.5) + '</span>' : '') + '</div>' +
+          '<div style="font-size:24px;font-weight:700;color:var(--fg);margin:6px 0">₹799<span class="xsmall muted" style="font-weight:400"> / mo</span></div>' +
+          '<span class="xsmall muted">' + esc(t('sub_monthly_desc', 'Billed every month. Cancel anytime.')) + '</span>' +
+        '</button>' +
+        '<button type="button" class="card pad stack" data-a="setSubCycle" data-v="annual" style="text-align:left;cursor:pointer;border-radius:16px;border:2px solid ' + (sel === 'annual' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'annual' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);position:relative;transition:all .15s ease">' +
+          '<span class="pill ok" style="position:absolute;top:-10px;right:10px;font-size:10px;font-weight:700">' + esc(t('save_17', 'SAVE 17%')) + '</span>' +
+          '<div class="between"><b style="font-size:15px;color:var(--fg)">' + esc(t('sub_annual', 'Annual')) + '</b>' + (sel === 'annual' ? '<span style="color:var(--accent-text);display:flex">' + icon('check', 18, 2.5) + '</span>' : '') + '</div>' +
+          '<div style="font-size:24px;font-weight:700;color:var(--fg);margin:6px 0">₹7,999<span class="xsmall muted" style="font-weight:400"> / yr</span></div>' +
+          '<span class="xsmall muted">' + esc(t('sub_annual_desc', '₹666/mo · 2 months free.')) + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="stack sm" style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface2)">' +
+        [
+          t('feat_1', 'Unlimited bills & WhatsApp invoices'),
+          t('feat_2', 'Multi-location inventory (Shop + Godowns)'),
+          t('feat_3', 'Customer Khata & UPI QR on bills'),
+          t('feat_4', 'Unlimited 3D fabric drape previews (included)'),
+          t('feat_5', 'Real-time multi-counter sync')
+        ].map(function (feat) {
+          return '<div style="display:flex;align-items:center;gap:10px;font-size:13px;padding:3px 0;color:var(--fg)">' +
+            '<span style="color:var(--ok);display:flex;align-items:center">' + icon('check', 15, 2.5) + '</span>' +
+            '<span>' + esc(feat) + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      busyBtn(sel === 'annual' ? t('subscribe_annually', 'Subscribe — ₹7,999 / year') : t('subscribe_monthly', 'Subscribe — ₹799 / month'), 'doSubscribe', 'primary lg block', '', 'sub') +
+      '<span class="xsmall muted" style="text-align:center;display:block">' + esc(t('sub_guarantee', 'Instant activation · Safe and secure payment')) + '</span>' +
+    '</div>',
+    ''
+  );
+}
+A.setSubCycle = function (d) { S.subCycle = d.v; schedule(); };
+A.doSubscribe = async function () {
+  var cycle = S.subCycle || 'annual';
+  var now = Date.now();
+  var duration = cycle === 'annual' ? (365 * 864e5) : (30 * 864e5);
+  S.busy = 'sub'; schedule();
+  try {
+    var sid = (storeV() && storeV().id) || ME.id;
+    var subDoc = {
+      businessId: sid,
+      status: 'active',
+      cycleId: cycle,
+      subscribedAt: now,
+      expiresAt: now + duration,
+      trialStartedAt: (D.subscription && D.subscription.trialStartedAt) || now,
+      trialEndsAt: (D.subscription && D.subscription.trialEndsAt) || now,
+      trialThreeDUsed: (D.subscription && D.subscription.trialThreeDUsed) || 0,
+      trialThreeDLimit: 3,
+      updatedAt: now
+    };
+    await put('meta/subscription', subDoc);
+    if (window.FS && sid) {
+      await window.FS.doc('subscriptions/' + sid).set(subDoc, { merge: true });
+    }
+    closeSheet();
+    toast(t('subscribed_success', 'Subscription active! All features and unlimited 3D unlocked.'));
+  } catch (e) {
+    toast(errText(e), 'bad');
+  }
+  S.busy = null; schedule();
+};
+
+/* ===================== CONTACT US & CUSTOM WORK ===================== */
+function subContact() {
+  var st = storeV();
+  var sf = S.f.support || (S.f.support = { name: ME.name || '', bizName: st.name || '', cat: 'bug', msg: '', err: '' });
+  var cf = S.f.customWork || (S.f.customWork = { name: ME.name || '', bizName: st.name || '', phone: st.phone || '', what: '', msg: '', err: '' });
+
+  var supportCard = '<section class="card pad stack" id="card-support">' +
+    '<div class="rowx" style="align-items:flex-start;gap:12px">' +
+      '<span class="ic acc" style="width:40px;height:40px;border-radius:12px;background:var(--accent-soft);color:var(--accent)">' + icon('message', 20) + '</span>' +
+      '<div class="grow">' +
+        '<b style="font-size:17px">' + esc(t('contact_help_t', 'Need help?')) + '</b>' +
+        '<p class="small muted" style="margin-top:2px">' + esc(t('contact_help_b', 'For bugs, account issues, billing questions, and general support.')) + '</p>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:8px 0">' +
+      '<span class="small muted">' + esc(t('direct_email', 'Email us directly:')) + '</span>' +
+      '<a class="btn line sm" href="mailto:contact@vastrenix.com?subject=Support%20Request%20-%20' + encodeURIComponent(st.name || '') + '">' + icon('mail', 15) + 'contact@vastrenix.com</a>' +
+    '</div>' +
+    '<hr class="hr">' +
+    '<div class="stack sm">' +
+      '<b style="font-size:14px">' + esc(t('send_ticket', 'Or send an in-app message')) + '</b>' +
+      '<div class="g2">' +
+        txtF(t('your_name', 'Your name'), 'f.support.name') +
+        txtF(t('biz_name', 'Business name'), 'f.support.bizName') +
+      '</div>' +
+      selF(t('issue_category', 'Category'), 'f.support.cat', [
+        ['bug', t('cat_bug', 'Bug / Something is broken')],
+        ['billing', t('cat_billing', 'Billing / Subscription')],
+        ['account', t('cat_account', 'Account / Login issue')],
+        ['other', t('cat_other', 'General inquiry / Other')]
+      ]) +
+      fld(t('message', 'Message'), '<textarea class="in" rows="3" data-m="f.support.msg" placeholder="' + esc(t('support_msg_ph', 'Describe what happened or what you need help with…')) + '">' + esc(sf.msg) + '</textarea>', null, null, null, sf.err) +
+      '<div class="rowx" style="justify-content:flex-end">' +
+        busyBtn(t('send_support_msg', 'Send support message'), 'sendSupportRequest', 'primary sm', '', 'sup') +
+      '</div>' +
+    '</div>' +
+  '</section>';
+
+  var customWorkCard = '<section class="card pad stack" id="card-cw" style="border:1.5px solid var(--accent);background:var(--surface)">' +
+    '<div class="rowx" style="align-items:flex-start;gap:12px">' +
+      '<span class="ic" style="width:40px;height:40px;border-radius:12px;background:var(--accent);color:#FFF">' + icon('sparkles', 20) + '</span>' +
+      '<div class="grow">' +
+        '<div class="between"><b style="font-size:17px">' + esc(t('contact_cw_t', 'Want something built for your business?')) + '</b><span class="pill acc" style="font-size:10.5px">' + esc(t('custom_dev', 'Custom Dev')) + '</span></div>' +
+        '<p class="small" style="margin-top:4px;line-height:1.5;color:var(--fg)">' + esc(t('contact_cw_b', 'Want a dedicated website for your store, or a custom feature added just for your business? We can build that — additional charges apply. Reach out and we’ll discuss what you need.')) + '</p>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:8px 0">' +
+      '<span class="small muted">' + esc(t('direct_email', 'Email us directly:')) + '</span>' +
+      '<a class="btn line sm" href="mailto:contact@vastrenix.com?subject=Custom%20Work%20Inquiry%20-%20' + encodeURIComponent(st.name || '') + '">' + icon('mail', 15) + 'contact@vastrenix.com</a>' +
+    '</div>' +
+    '<hr class="hr">' +
+    '<div class="stack sm">' +
+      '<b style="font-size:14px">' + esc(t('submit_cw_inquiry', 'Tell us what you would like built')) + '</b>' +
+      '<div class="g2">' +
+        txtF(t('your_name', 'Your name'), 'f.customWork.name') +
+        txtF(t('biz_name', 'Business name'), 'f.customWork.bizName') +
+      '</div>' +
+      txtF(t('phone', 'Phone / WhatsApp'), 'f.customWork.phone', 'inputmode="tel"') +
+      txtF(t('what_to_build', 'What would you like built?'), 'f.customWork.what', 'placeholder="' + esc(t('what_to_build_ph', 'e.g. Online storefront, wholesale portal, specific export report')) + '"', null, cf.err) +
+      fld(t('project_details', 'Details / Specific requirements'), '<textarea class="in" rows="3" data-m="f.customWork.msg" placeholder="' + esc(t('cw_msg_ph', 'Any specific ideas, timeline, or workflow requirements…')) + '">' + esc(cf.msg) + '</textarea>') +
+      '<div class="rowx" style="justify-content:flex-end">' +
+        busyBtn(t('send_cw_inquiry', 'Submit inquiry'), 'sendCustomWorkInquiry', 'strong sm', '', 'cw') +
+      '</div>' +
+    '</div>' +
+  '</section>';
+
+  return ph(t('nav_contact_us', 'Contact Us'), '', '', 'back') +
+    '<div class="stack lg" style="max-width:740px">' +
+      supportCard +
+      customWorkCard +
+    '</div>';
+}
+
+A.sendSupportRequest = async function () {
+  var f = S.f.support || {};
+  f.err = '';
+  if (!String(f.msg || '').trim()) {
+    f.err = t('err_enter_msg', 'Please enter your message');
+    schedule();
+    return;
+  }
+  var st = storeV(), sid = (st && st.id) || ME.id;
+  var docData = {
+    type: 'support',
+    category: f.cat || 'bug',
+    name: String(f.name || ME.name || '').trim(),
+    businessId: sid,
+    businessName: String(f.bizName || (st && st.name) || '').trim(),
+    email: (window.FB_USER && window.FB_USER.email) || '',
+    phone: (st && st.phone) || '',
+    message: String(f.msg || '').trim(),
+    createdAt: Date.now(),
+    status: 'open'
+  };
+  S.busy = 'sup'; schedule();
+  try {
+    if (window.FS) {
+      await window.FS.collection('supportRequests').add(docData);
+    } else {
+      await DB.collection('supportRequests').add(docData);
+    }
+    S.f.support = null;
+    toast(t('support_sent', 'Support message sent. We’ll get back to you shortly.'));
+  } catch (e) {
+    toast(errText(e), 'bad');
+  }
+  S.busy = null; schedule();
+};
+
+A.sendCustomWorkInquiry = async function () {
+  var f = S.f.customWork || {};
+  f.err = '';
+  if (!String(f.what || '').trim()) {
+    f.err = t('err_what_to_build', 'Please specify what you would like built');
+    schedule();
+    return;
+  }
+  var st = storeV(), sid = (st && st.id) || ME.id;
+  var docData = {
+    type: 'custom_work_inquiry',
+    name: String(f.name || ME.name || '').trim(),
+    businessId: sid,
+    businessName: String(f.bizName || (st && st.name) || '').trim(),
+    phone: String(f.phone || (st && st.phone) || '').trim(),
+    email: (window.FB_USER && window.FB_USER.email) || '',
+    whatToBuild: String(f.what || '').trim(),
+    message: String(f.msg || '').trim(),
+    createdAt: Date.now(),
+    status: 'open'
+  };
+  S.busy = 'cw'; schedule();
+  try {
+    if (window.FS) {
+      await window.FS.collection('supportRequests').add(docData);
+    } else {
+      await DB.collection('supportRequests').add(docData);
+    }
+    S.f.customWork = null;
+    toast(t('cw_sent', 'Custom work inquiry submitted! We’ll reach out to discuss your project.'));
+  } catch (e) {
+    toast(errText(e), 'bad');
+  }
+  S.busy = null; schedule();
+};
+
+/* ===================== 3D / 2D FABRIC PREVIEW STUDIO & QUEUE ===================== */
+function subThreeD() {
+  var sub = subState();
+  var allowanceText = '';
+  if (sub.isExpired) {
+    allowanceText = '<div class="banner bad"><span class="ic bad">' + icon('lock', 18) + '</span><span class="tx"><b>' + esc(t('trial_ended_3d', 'Your trial has ended. Subscribe to unlock unlimited 3D fabric previews.')) + '</b></span></div>';
+  } else if (sub.isTrial) {
+    allowanceText = '<div class="banner" style="background:var(--accent-soft);border:1px solid var(--line);color:var(--fg)">' +
+      '<span class="ic acc">' + icon('sparkles', 18) + '</span>' +
+      '<span class="tx"><b>' + esc(t('trial_3d_count', 'Trial Allowance: {used} of {limit} used', { used: sub.trialThreeDUsed, limit: sub.trialThreeDLimit })) + '</b><small>' + esc(t('trial_3d_note', '3 free 3D fabric drape generations included during your 7-day trial.')) + '</small></span>' +
+    '</div>';
+  } else if (sub.isActive) {
+    allowanceText = '<div class="banner ok"><span class="ic ok">' + icon('check', 18) + '</span><span class="tx"><b>' + esc(t('active_3d_unlimited', 'Unlimited 3D fabric drape previews active on your subscription')) + '</b></span></div>';
+  }
+
+  /* Extract and sort jobs from reactive dictionary D.fabricJobs */
+  var jobsList = Object.keys(D.fabricJobs || {}).map(function (k) {
+    var j = D.fabricJobs[k];
+    return Object.assign({ id: k }, j);
+  });
+  jobsList.sort(function (a, b) {
+    var ta = a.queuedAt && a.queuedAt.toMillis ? a.queuedAt.toMillis() : (a.queuedAt || 0);
+    var tb = b.queuedAt && b.queuedAt.toMillis ? b.queuedAt.toMillis() : (b.queuedAt || 0);
+    return tb - ta;
+  });
+
+  var queueHtml = '';
+  if (!jobsList.length) {
+    queueHtml = empty('sparkles', t('queue_empty', 'No fabric render jobs yet'), t('queue_empty_desc', 'Open any garment in Stock and tap "+ Drape Fabric Preview" to generate realistic mockups.'), '<button class="btn primary sm" data-a="gGo" data-r="stock">' + icon('shirt', 16) + esc(t('stock', 'Stock')) + '</button>');
+  } else {
+    queueHtml = '<div class="list">' + jobsList.map(function (j) {
+      var prod = j.productId && D.products[j.productId];
+      var name = prod ? prod.name : (j.productId || t('custom_swatch', 'Custom Swatch'));
+      var thumb = j.resultThumbnailUrl || (j.resultImageUrls && j.resultImageUrls[0]) || j.sourcePhotoUrl;
+      var statusBadge = '';
+      if (j.status === 'complete') {
+        statusBadge = '<span class="pill ok">' + icon('check', 12) + ' ' + esc(t('complete', 'Complete')) + '</span>';
+      } else if (j.status === 'processing') {
+        statusBadge = '<span class="pill acc"><span class="spin" style="display:inline-block;width:10px;height:10px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:4px"></span>' + esc(t('draping', 'Draping…')) + '</span>';
+      } else if (j.status === 'failed') {
+        statusBadge = '<span class="pill bad">' + icon('alert', 12) + ' ' + esc(t('failed', 'Failed')) + '</span>';
+      } else {
+        statusBadge = '<span class="pill warn">' + esc(t('queued', 'Queued')) + '</span>';
+      }
+
+      var thumbBox = thumb ?
+        '<span class="swatch" style="width:48px;height:48px;border-radius:10px;background-image:url(' + esc(thumb) + ');background-size:cover;background-position:center;flex-shrink:0"></span>' :
+        '<span class="swatch" style="width:48px;height:48px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0">' + icon('shirt', 20) + '</span>';
+
+      return '<div class="li" style="min-height:64px;gap:12px">' +
+        thumbBox +
+        '<span class="tx"><div class="rowx" style="gap:6px"><b>' + esc(name) + '</b><span class="pill" style="font-size:10px">' + esc((j.garmentTemplateId || 'garment').toUpperCase()) + '</span></div>' +
+        '<small>' + (j.errorMessage ? '<span class="bad-t">' + esc(j.errorMessage) + '</span>' : esc(statusBadge)) + '</small></span>' +
+        '<div class="rowx" style="gap:8px">' +
+          (j.status === 'failed' ? '<button class="btn line sm" data-a="retryFabricJob" data-id="' + esc(j.id) + '">' + icon('undo', 14) + esc(t('retry_job', 'Retry')) + '</button>' : '') +
+          (prod ? '<button class="ib plain" data-a="openSub" data-k="product" data-id="' + esc(prod.id) + '" aria-label="' + esc(t('view', 'View')) + '">' + icon('chevR', 18) + '</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  return ph(t('drape_studio_title', 'Fabric Drape Studio'), '', '<button class="btn line sm" data-a="gGo" data-r="stock">' + icon('shirt', 16) + esc(t('stock', 'Stock')) + '</button>', 'back') +
+    '<div class="stack lg" style="max-width:820px">' +
+      '<section class="card pad stack" style="gap:14px">' +
+        '<div class="between">' +
+          '<div class="rowx" style="gap:12px">' +
+            '<div style="width:48px;height:48px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center">' + icon('sparkles', 26) + '</div>' +
+            '<div class="stack xs">' +
+              '<h2 style="font-size:18px;margin:0">' + esc(t('drape_studio_title', 'Fabric Drape Studio')) + '</h2>' +
+              '<p class="muted small" style="margin:0">' + esc(t('drape_studio_desc', 'Real-time 2D fabric mockup generator powered by our dedicated Render engine.')) + '</p>' +
+            '</div>' +
+          '</div>' +
+          '<span class="pill ok">' + esc(t('engine_live', 'Engine Live')) + '</span>' +
+        '</div>' +
+        allowanceText +
+        '<div class="g5" style="gap:8px;margin-top:4px">' +
+          [
+            ['template_kurta', 'Kurta & Kurti', 'shirt'],
+            ['template_saree', 'Saree & Pallu', 'layers'],
+            ['template_shirt', 'Menswear Shirt', 'box'],
+            ['template_palazzo', 'Palazzo Pants', 'layers'],
+            ['template_nehru_jacket', 'Nehru Jacket', 'shirt']
+          ].map(function (tpl) {
+            return '<div class="card pad sm stack" style="background:var(--surface2);text-align:center;align-items:center;padding:10px 8px">' +
+              icon(tpl[2], 20) +
+              '<b style="font-size:11px;margin-top:4px">' + esc(t(tpl[0], tpl[1])) + '</b>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</section>' +
+      '<section class="card pad stack">' +
+        '<div class="between"><b>' + esc(t('recent_render_jobs', 'Recent Drape Jobs')) + '</b><span class="xsmall muted">' + esc(t('n_jobs', '{n} jobs', { n: jobsList.length })) + '</span></div>' +
+        queueHtml +
+      '</section>' +
+    '</div>';
+}
+
+A.retryFabricJob = async function (d) {
+  var jobId = d.id;
+  await DB.collection('fabricJobs').doc(jobId).update({
+    status: 'queued',
+    attempts: 0,
+    errorMessage: null,
+    queuedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  toast(t('job_retried', 'Job re-queued for processing'));
+  schedule();
+};
 
 /* ===================== BOOT ===================== */
 function evalIdentity() {

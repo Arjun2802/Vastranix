@@ -24,7 +24,14 @@ function vItems() {
 }
 A.itemsScan = function () { var hit = findByCode(S.q.items); if (hit) { S.q.items = ''; openSub('product', { id: hit.p.id }); } };
 A.openProduct = function (d) { openSub('product', { id: d.id }); };
-A.newProduct = function () { S.f.p = null; openSub('pform', {}); };
+A.newProduct = function () {
+  if (subState().isExpired) {
+    openSheet('subscribe');
+    toast(t('trial_ended_toast', 'Your free trial has ended. Subscribe to continue.'), 'bad');
+    return;
+  }
+  S.f.p = null; openSub('pform', {});
+};
 
 function subProduct(sub) {
   var p = D.products[sub.id];
@@ -38,6 +45,44 @@ function subProduct(sub) {
   var top = '<section class="card" style="overflow:hidden"><div style="height:200px;background-color:' + colorOf((p.colors || [])[0] || p.name) + ';' + (p.img ? 'background-image:url(' + p.img + ');background-size:cover;background-position:center' : '') + ';display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55)">' + (p.img ? '' : icon('shirt', 80, 1.1)) + '</div>' +
     '<div class="pad stack" style="padding:16px"><div class="g4">' + [['tier_retail', 'Retail', pr.retail], ['tier_wholesale', 'Wholesale', pr.wholesale], ['tier_dealer', 'Dealer', pr.dealer], ['cost', 'Cost', p.cost]].map(function (x) { return '<div class="kpi" style="padding:10px 12px"><small>' + esc(t(x[0], x[1])) + '</small><b style="font-size:16px">' + (x[2] ? inr(x[2]) : '—') + '</b></div>'; }).join('') + '</div>' +
     (margin != null ? '<span class="small muted">' + esc(t('margin', 'Margin on retail: {m}%', { m: margin })) + ' · GST ' + (+p.gst || 0) + '%</span>' : '') + '</div></section>';
+
+  /* Fabric Drape Preview card */
+  var activeJob = Object.values(D.fabricJobs || {}).find(function (j) {
+    return j.productId === p.id && (j.status === 'queued' || j.status === 'processing');
+  });
+
+  var fabricCard = '';
+  if (p.fabricPreviewImage) {
+    fabricCard = '<section class="card pad stack">' +
+      '<div class="between"><div class="rowx" style="gap:8px">' + icon('sparkles', 18) + '<b>' + esc(t('fabric_preview_title', 'Fabric Preview Mockup')) + '</b></div><span class="pill ok">' + esc((p.fabricTemplateId || 'Draped').toUpperCase()) + '</span></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:12px;padding:12px;overflow:hidden">' +
+        '<img src="' + esc(p.fabricPreviewImage) + '" alt="' + esc(p.name) + '" style="max-height:300px;max-width:100%;object-fit:contain;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08)"/>' +
+      '</div>' +
+      '<div class="rowx wrap" style="justify-content:space-between">' +
+        '<button class="btn line sm" data-a="openFabricDrape" data-pid="' + esc(p.id) + '">' + icon('sparkles', 15) + esc(t('redrape_btn', 'Change Garment / Re-drape')) + '</button>' +
+        '<button class="btn ghost sm bad-t" data-a="removeFabricPreview" data-pid="' + esc(p.id) + '">' + icon('x', 14) + esc(t('remove_preview', 'Remove Preview')) + '</button>' +
+      '</div>' +
+    '</section>';
+  } else if (activeJob) {
+    fabricCard = '<section class="card pad stack" style="border:1px dashed var(--accent)">' +
+      '<div class="rowx" style="gap:10px">' +
+        '<span class="spin" style="display:inline-block;width:18px;height:18px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%"></span>' +
+        '<div class="stack" style="gap:2px">' +
+          '<b>' + esc(t('drape_in_progress', 'Draping mockup in progress…')) + '</b>' +
+          '<span class="xsmall muted">' + esc(t('drape_job_status', 'Status: {st} ({tpl})', { st: activeJob.status, tpl: activeJob.garmentTemplateId || 'garment' })) + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</section>';
+  } else {
+    fabricCard = '<section class="card pad stack">' +
+      '<div class="between"><div class="rowx" style="gap:8px">' + icon('sparkles', 18) + '<b>' + esc(t('fabric_preview_title', 'Fabric Preview Mockup')) + '</b></div><span class="pill acc">' + esc(t('engine_ready', '2D Engine')) + '</span></div>' +
+      '<p class="small muted" style="margin:0;line-height:1.4">' + esc(t('drape_card_desc', 'Drape this fabric texture onto realistic garment silhouettes (Kurta, Saree, Shirt, Palazzo, Nehru Jacket) for instant visual mockups.')) + '</p>' +
+      '<div class="rowx">' +
+        '<button class="btn line sm" data-a="openFabricDrape" data-pid="' + esc(p.id) + '">' + icon('sparkles', 15) + esc(t('drape_garment_btn', '+ Drape Fabric Preview')) + '</button>' +
+      '</div>' +
+    '</section>';
+  }
+
   var stock = '<section class="card pad stack"><div class="between"><b>' + esc(t('stock', 'Stock')) + '</b><span class="small muted num">' + esc(t('stock_sub', '{a} on hand · {t} in transit', { a: tot.st, t: tot.tr })) + '</span></div>' +
     '<div class="sbar" aria-hidden="true"><i style="width:' + (Math.max(0, av) / base * 100) + '%;background:var(--strong)"></i><i style="width:' + (tot.res / base * 100) + '%;background:var(--accent)"></i><i style="width:' + (tot.tr / base * 100) + '%;background:var(--warn-solid)"></i><i style="width:' + (tot.dmg / base * 100) + '%;background:var(--bad-solid)"></i></div>' +
     '<div class="legend"><span><span><i style="background:var(--strong)"></i>' + esc(t('available', 'Available')) + '</span><b>' + av + '</b></span><span><span><i style="background:var(--accent)"></i>' + esc(t('reserved', 'Reserved')) + '</span><b>' + tot.res + '</b></span><span><span><i style="background:var(--warn-solid)"></i>' + esc(t('in_transit', 'In transit')) + '</span><b>' + tot.tr + '</b></span><span><span><i style="background:var(--bad-solid)"></i>' + esc(t('damaged', 'Damaged')) + '</span><b>' + tot.dmg + '</b></span></div>' +
@@ -45,7 +90,7 @@ function subProduct(sub) {
     vs.map(function (v) { var a = VXC.variantAvail(v), mn = v.min != null ? +v.min : 3; return '<tr><td><b>' + esc(variantLabel(v) || '—') + '</b><div class="xsmall muted mono">' + esc(v.sku) + ' · ' + esc(v.barcode || '') + '</div></td>' + ls.map(function (l) { return '<td class="r">' + (+((v.stock || {})[l.id]) || 0) + '</td>'; }).join('') + '<td class="r">' + (+v.reserved || 0) + '</td><td class="r"><span class="' + (a <= mn ? 'bad-t b' : 'b') + '">' + a + '</span></td><td class="r muted">' + mn + '</td></tr>'; }).join('') + '</tbody></table></div>' +
     (can('stock') || can('purchase') ? '<div class="rowx wrap">' + (can('stock') ? '<button class="btn line sm" data-a="sheet" data-k="count" data-id="' + esc(p.id) + '">' + icon('clipboard', 16) + esc(t('count_stock', 'Count stock')) + '</button>' : '') + (can('stock') && ls.length > 1 ? '<button class="btn line sm" data-a="newTransfer" data-pid="' + esc(p.id) + '">' + icon('transfer', 16) + esc(t('transfer', 'Transfer')) + '</button>' : '') + (can('purchase') || can('stock') ? '<button class="btn primary sm" data-a="reorder" data-pid="' + esc(p.id) + '">' + icon('file', 16) + esc(t('new_order', 'New restock order')) + '</button>' : '') + '</div>' : '') + '</section>';
   var info = '<section class="list">' + [[t('fabric', 'Fabric'), p.fabric], [t('supplier', 'Supplier'), sup ? sup.name : ''], [t('rack', 'Rack / shelf'), p.rack], [t('units_sold', 'Units sold'), nf(sum(vs, function (v) { return v.sold; }))], [t('added_on', 'Added'), p.createdAt ? fmtDY(p.createdAt) : '']].filter(function (x) { return x[1]; }).map(function (x) { return '<div class="li" style="min-height:48px"><span class="tx"><small>' + esc(x[0]) + '</small></span><b class="small">' + esc(x[1]) + '</b></div>'; }).join('') + '</section>';
-  return head + '<div class="cols"><div class="stack lg">' + top + info + '</div><div class="stack lg">' + stock + '</div></div>';
+  return head + '<div class="cols"><div class="stack lg">' + top + fabricCard + info + '</div><div class="stack lg">' + stock + '</div></div>';
 }
 A.editProduct = function (d) { S.f.p = null; openSub('pform', { id: d.id }); };
 A.reorder = function (d) { var p = D.products[d.pid]; if (!p) return; S.f.po = { supplierId: p.supplierId || '', note: '', lines: (p.variants || []).filter(function (v) { return VXC.variantAvail(v) <= (v.min != null ? +v.min : 3); }).map(function (v) { return poLine(p, v, Math.max((v.min != null ? +v.min : 3) * 2 - VXC.variantAvail(v), 1)); }) }; if (!S.f.po.lines.length) S.f.po.lines = (p.variants || []).slice(0, 1).map(function (v) { return poLine(p, v, 10); }); openSub('poform', {}); };
@@ -71,7 +116,9 @@ function subPform(sub) {
   var cats = (st.categories || []).map(function (c) { return [c, c]; }).concat([['__new', t('new_category', '+ New category')]]);
   var nVar = Math.max(1, f.sizes.length) * Math.max(1, f.colors.length);
   var sups = [['', t('none', 'None')]].concat(vals(D.suppliers).sort(by(function (s) { return s.name; })).map(function (s) { return [s.id, s.name]; }));
-  var photo = '<div class="rowx"><label class="btn line" style="height:96px;width:84px;flex-direction:column;gap:6px;border-style:dashed;font-size:12px" for="f-pimg">' + icon('camera', 22) + esc(t('photo', 'Photo')) + '</label><input type="file" id="f-pimg" accept="image/*" class="sr" data-change="pickImg">' +
+  var photo = '<div class="rowx">' +
+    '<button type="button" class="btn line" style="height:96px;width:84px;flex-direction:column;gap:6px;border-style:dashed;font-size:12px;cursor:pointer" data-a="triggerUpload" data-for="f-pimg">' + icon('camera', 22) + esc(t('photo', 'Photo')) + '</button>' +
+    '<input type="file" id="f-pimg" accept="image/*" class="sr" data-change="pickImg" onchange="A.pickImg(this.dataset, this, event)">' +
     (f.img ? '<span class="sw" style="width:84px;height:96px;border-radius:14px;background-image:url(' + f.img + ')"></span><button class="btn ghost sm" data-a="set" data-k="f.p.img" data-v="">' + esc(t('remove', 'Remove')) + '</button>' : '<span class="small muted" style="max-width:26ch">' + esc(t('photo_hint', 'Optional. Compressed to keep the app fast.')) + '</span>') + '</div>';
   var colors = fld(t('colours', 'Colours'), '<div class="picks">' + f.colors.map(function (c, i) { return '<button type="button" class="pick" data-a="rmColor" data-i="' + i + '"><span style="width:16px;height:16px;border-radius:999px;background:' + colorOf(c) + '"></span>' + esc(c) + '<span class="x">' + icon('x', 13) + '</span></button>'; }).join('') + '</div><div class="rowx"><input class="in grow" id="f-colorIn" data-m="f.p.colorIn" value="' + esc(f.colorIn) + '" placeholder="' + esc(t('colour_ph', 'e.g. Indigo, Rust, Ivory')) + '" data-enter="addColor"><button class="btn line" data-a="addColor">' + esc(t('add', 'Add')) + '</button></div>', t('colour_hint', 'Leave empty for a single-colour garment'));
   var sizes = fld(t('sizes', 'Sizes'), '<div class="picks">' + PRESET_SIZES.concat(f.sizes.filter(function (s) { return PRESET_SIZES.indexOf(s) < 0; })).map(function (s) { var on = f.sizes.indexOf(s) >= 0; return '<button type="button" class="pick' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-a="togSize" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div><div class="rowx"><input class="in grow" id="f-sizeIn" data-m="f.p.sizeIn" value="' + esc(f.sizeIn) + '" placeholder="' + esc(t('size_ph', 'Custom size, e.g. 2-3Y')) + '" data-enter="addSize"><button class="btn line" data-a="addSize">' + esc(t('add', 'Add')) + '</button></div>', null, err.sizes);
@@ -89,27 +136,38 @@ A.rmColor = function (d) { S.f.p.colors.splice(+d.i, 1); schedule(); };
 A.togSize = function (d) { var s = S.f.p.sizes, i = s.indexOf(d.v); if (i >= 0) s.splice(i, 1); else { s.push(d.v); var ord = PRESET_SIZES; s.sort(function (a, b) { var x = ord.indexOf(a), y = ord.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); }); } schedule(); };
 A.addSize = function () { var f = S.f.p, s = String(f.sizeIn || '').trim(); if (s && f.sizes.indexOf(s) < 0) f.sizes.push(s); f.sizeIn = ''; schedule(); };
 A.pickImg = function (d, el) {
-  var file = el.files && el.files[0]; if (!file) return;
+  if (!el) el = document.getElementById('f-pimg');
+  var file = el && el.files && el.files[0];
+  if (!file) return;
   var rd = new FileReader();
   rd.onload = function () {
     var img = new Image();
     img.onload = function () {
-      var max = 420, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+      var max = 540, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
       var cv = document.createElement('canvas'); cv.width = Math.round(w * k); cv.height = Math.round(h * k);
       cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      var url = cv.toDataURL('image/webp', 0.72); if (url.indexOf('image/webp') < 0) url = cv.toDataURL('image/jpeg', 0.72);
-      if (url.length > 90000) url = cv.toDataURL('image/jpeg', 0.55);
-      S.f.p.img = url; schedule();
+      var url = cv.toDataURL('image/jpeg', 0.75);
+      if (url.length > 120000) url = cv.toDataURL('image/jpeg', 0.58);
+      if (!S.f.p) S.f.p = draftFrom(null);
+      S.f.p.img = url;
+      schedule();
     };
     img.onerror = function () { toast(t('err_img', 'That file isn’t an image we can read.'), 'bad'); };
     img.src = rd.result;
   };
+  rd.onerror = function () { toast(t('err_img', 'Could not read file.'), 'bad'); };
   rd.readAsDataURL(file);
+  if (el) el.value = '';
 };
 function ean13(base12) { var s = 0; for (var i = 0; i < 12; i++) s += (+base12[i]) * (i % 2 ? 3 : 1); return base12 + ((10 - (s % 10)) % 10); }
 function newBarcode() { var b = '890'; for (var i = 0; i < 9; i++) b += Math.floor(Math.random() * 10); return ean13(b); }
 function catCode(c) { var x = String(c || 'GEN').toUpperCase().replace(/[^A-Z]/g, ''); return (x.slice(0, 3) || 'GEN').padEnd(3, 'X'); }
 A.saveProduct = async function () {
+  if (subState().isExpired) {
+    openSheet('subscribe');
+    toast(t('trial_ended_toast', 'Your free trial has ended. Subscribe to continue.'), 'bad');
+    return;
+  }
   var f = S.f.p, err = {};
   if (!String(f.name).trim()) err.name = t('err_gname', 'Enter the garment name');
   if (!(+f.retail > 0)) err.retail = t('err_price', 'Enter a price');
@@ -408,4 +466,154 @@ A.saveSupPay = async function () {
     return 1;
   });
   if (ok) { S.f.sp = null; closeSheet(); toast(t('pay_recorded', 'Payment recorded')); }
+};
+
+/* ===================== FABRIC PREVIEW DRAPE ACTIONS & SHEET ===================== */
+A.openFabricDrape = function (d) {
+  var p = D.products[d.pid];
+  if (!p) return;
+  S.f.drape = {
+    productId: p.id,
+    template: p.fabricTemplateId || 'kurta',
+    sourceType: (p.img ? 'product' : 'custom'),
+    customImg: ''
+  };
+  openSheet('fabricDrape', { productId: p.id });
+};
+
+A.removeFabricPreview = async function (d) {
+  var id = d.pid;
+  await tx('pdel', async function () {
+    var p = await fresh('products/' + id);
+    if (!p) return 1;
+    delete p.fabricPreviewImage;
+    delete p.fabricThumbnailImage;
+    delete p.fabricTemplateId;
+    p.updatedAt = Date.now();
+    await put('products/' + id, p);
+    return 1;
+  });
+  toast(t('preview_removed', 'Fabric preview removed'));
+  schedule();
+};
+
+function fabricDrapeSheet(sh) {
+  var p = D.products[sh.productId];
+  if (!p) return '';
+  if (!S.f.drape || S.f.drape.productId !== p.id) {
+    S.f.drape = { productId: p.id, template: p.fabricTemplateId || 'kurta', sourceType: (p.img ? 'product' : 'custom'), customImg: '' };
+  }
+  var f = S.f.drape;
+  var sub = subState();
+  var templates = [
+    { id: 'kurta', name: t('template_kurta', 'Kurta & Kurti'), icon: 'shirt', desc: t('template_kurta_s', 'A-line & Straight') },
+    { id: 'saree', name: t('template_saree', 'Saree & Pallu'), icon: 'layers', desc: t('template_saree_s', 'Pleats & Draped pallu') },
+    { id: 'shirt', name: t('template_shirt', 'Menswear Shirt'), icon: 'box', desc: t('template_shirt_s', 'Collar & Sleeve drape') },
+    { id: 'palazzo', name: t('template_palazzo', 'Palazzo Pants'), icon: 'layers', desc: t('template_palazzo_s', 'Wide-leg flare & flow') },
+    { id: 'nehru_jacket', name: t('template_nehru_jacket', 'Nehru Jacket'), icon: 'shirt', desc: t('template_nehru_jacket_s', 'Mandarin collar vest') }
+  ];
+
+  var tplHtml = '<div class="g2" style="gap:10px">' + templates.map(function (tpl) {
+    var sel = f.template === tpl.id;
+    return '<button type="button" class="card pad sm stack" data-a="set" data-k="f.drape.template" data-v="' + tpl.id + '" style="cursor:pointer;text-align:left;border:2px solid ' + (sel ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel ? 'var(--accent-soft)' : 'var(--surface2)') + ';border-radius:12px;transition:all .15s ease">' +
+      '<div class="between"><b>' + esc(tpl.name) + '</b>' + (sel ? '<span style="color:var(--accent-text)">' + icon('check', 16, 2.5) + '</span>' : '') + '</div>' +
+      '<span class="xsmall muted">' + esc(tpl.desc) + '</span>' +
+    '</button>';
+  }).join('') + '</div>';
+
+  var sourceHtml = '<div class="stack sm">' +
+    (p.img ? '<div class="rowx" style="gap:10px">' +
+      '<button type="button" class="btn ' + (f.sourceType === 'product' ? 'primary' : 'line') + ' sm" data-a="set" data-k="f.drape.sourceType" data-v="product">' + esc(t('use_product_photo', 'Use product photo')) + '</button>' +
+      '<button type="button" class="btn ' + (f.sourceType === 'custom' ? 'primary' : 'line') + ' sm" data-a="set" data-k="f.drape.sourceType" data-v="custom">' + esc(t('upload_new_swatch', 'Upload new swatch')) + '</button>' +
+    '</div>' : '') +
+    (f.sourceType === 'custom' || !p.img ?
+      '<div class="rowx" style="margin-top:8px">' +
+        '<button type="button" class="btn line" style="height:80px;width:80px;flex-direction:column;gap:4px;border-style:dashed;font-size:11px;cursor:pointer" data-a="triggerUpload" data-for="f-drape-img">' + icon('camera', 20) + esc(t('photo', 'Photo')) + '</button>' +
+        '<input type="file" id="f-drape-img" accept="image/*" class="sr" data-change="pickDrapeImg" onchange="A.pickDrapeImg(this.dataset, this, event)">' +
+        (f.customImg ? '<span class="sw" style="width:80px;height:80px;border-radius:12px;background-image:url(' + f.customImg + ');background-size:cover;background-position:center"></span>' : '<span class="small muted" style="max-width:24ch">' + esc(t('photo_hint', 'Fabric roll or flat swatch photo.')) + '</span>') +
+      '</div>' :
+      '<div class="rowx" style="margin-top:8px">' +
+        '<span class="sw" style="width:80px;height:80px;border-radius:12px;background-image:url(' + p.img + ');background-size:cover;background-position:center"></span>' +
+        '<span class="small muted">' + esc(t('using_item_photo', 'Using existing garment photo')) + '</span>' +
+      '</div>') +
+  '</div>';
+
+  var allowanceNotice = '';
+  if (sub.isTrial) {
+    allowanceNotice = '<div class="note" style="border-radius:10px;padding:8px 12px">' + icon('sparkles', 16) + '<span>' + esc(t('trial_3d_allowance_note', '3 free 3D previews included ({used}/3 used)', { used: sub.trialThreeDUsed })) + '</span></div>';
+  }
+
+  return sheetWrap(t('drape_garment_btn', 'Drape Fabric Preview'),
+    '<div class="stack lg">' +
+      '<div class="stack sm"><label class="b small">' + esc(t('choose_template', '1. Choose garment silhouette')) + '</label>' + tplHtml + '</div>' +
+      '<div class="stack sm"><label class="b small">' + esc(t('choose_fabric_source', '2. Fabric swatch photo')) + '</label>' + sourceHtml + '</div>' +
+      allowanceNotice +
+    '</div>',
+    busyBtn(t('generate_preview_btn', 'Generate Drape Preview'), 'submitFabricDrape', 'primary lg', '', 'drape')
+  );
+}
+
+A.pickDrapeImg = function (d, el) {
+  if (!el) el = document.getElementById('f-drape-img');
+  var file = el && el.files && el.files[0];
+  if (!file) return;
+  var rd = new FileReader();
+  rd.onload = function () {
+    var img = new Image();
+    img.onload = function () {
+      var max = 800, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+      var cv = document.createElement('canvas'); cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      var url = cv.toDataURL('image/jpeg', 0.85);
+      if (!S.f.drape) S.f.drape = {};
+      S.f.drape.customImg = url;
+      S.f.drape.sourceType = 'custom';
+      schedule();
+    };
+    img.onerror = function () { toast(t('err_img', 'That file isn’t an image we can read.'), 'bad'); };
+    img.src = rd.result;
+  };
+  rd.onerror = function () { toast(t('err_img', 'Could not read file.'), 'bad'); };
+  rd.readAsDataURL(file);
+  if (el) el.value = '';
+};
+
+A.submitFabricDrape = async function () {
+  var f = S.f.drape;
+  if (!f || !f.productId) return;
+  var p = D.products[f.productId];
+  if (!p) return;
+  var imgUrl = (f.sourceType === 'product' && p.img) ? p.img : f.customImg;
+  if (!imgUrl) {
+    toast(t('err_img', 'Please upload or select a fabric photo.'), 'bad');
+    return;
+  }
+  var bid = S.bizId || (storeV() && storeV().id) || 'default';
+  var check = await checkAndConsume3DAllowance(bid, { productId: p.id, garmentTemplateId: f.template });
+  if (!check.allowed) {
+    closeSheet();
+    openSheet('subscribe');
+    toast(check.message, 'bad');
+    return;
+  }
+
+  var ok = await tx('drape', async function () {
+    var jobId = uid('fj');
+    await DB.collection('fabricJobs').doc(jobId).set({
+      businessId: bid,
+      productId: p.id,
+      garmentTemplateId: f.template,
+      sourcePhotoUrl: imgUrl,
+      status: 'queued',
+      attempts: 0,
+      queuedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return 1;
+  });
+
+  if (ok) {
+    closeSheet();
+    toast(t('preview_queued_toast', 'Fabric preview job queued! Generating drape mockup…'));
+    schedule();
+  }
 };

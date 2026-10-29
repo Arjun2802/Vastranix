@@ -29,6 +29,17 @@ function matchProducts(q, cat) {
   });
 }
 function vBill() {
+  if (subState().isExpired) {
+    return ph(t('nav_bill', 'New bill'), '', '', 'goHome') +
+      '<div class="card pad stack" style="max-width:540px;margin:32px auto;text-align:center;align-items:center;padding:36px 20px;gap:16px">' +
+        '<div style="width:64px;height:64px;border-radius:999px;background:var(--bad-soft);display:flex;align-items:center;justify-content:center;color:var(--bad)">' + icon('lock', 32) + '</div>' +
+        '<div class="stack xs">' +
+          '<h2 style="font-size:22px">' + esc(t('trial_expired_bill_t', 'Your 7-day trial has ended')) + '</h2>' +
+          '<p class="muted" style="font-size:14px;line-height:1.5">' + esc(t('trial_expired_bill_b', 'Subscribe to Vastrenix to continue making bills, managing inventory, and tracking dues. Your past bills and records are safely preserved.')) + '</p>' +
+        '</div>' +
+        '<button class="btn primary lg block" data-a="openSubscribe">' + esc(t('view_plans_subscribe', 'View plans & Subscribe')) + '</button>' +
+      '</div>';
+  }
   syncTier();
   var b = bill(), st = storeV(), c = billCalc(b), loc = curLoc();
   var q = S.q.bill || '', cat = S.q.billCat || 'all';
@@ -113,6 +124,11 @@ function syncTier() { var b = S.bill; if (!b) return; if (lastTier !== null && l
 
 /* ----- checkout ----- */
 A.checkout = function () {
+  if (subState().isExpired) {
+    openSheet('subscribe');
+    toast(t('trial_ended_toast', 'Your free trial has ended. Subscribe to continue.'), 'bad');
+    return;
+  }
   var b = bill(); if (!b.lines.length) return;
   var st = storeV(), c = billCalc(b);
   S.co = { mode: st.defaultPay || 'cash', tendered: c.grand, last4: '', split: { cash: '', upi: '', card: '' }, credit: { name: b.cust ? b.cust.name : '', phone: b.cust ? b.cust.phone : '', paid: '', due: new Date(VXC.monthEnd(Date.now())).toISOString().slice(0, 10) }, utr: '', step: 'pay', err: {} };

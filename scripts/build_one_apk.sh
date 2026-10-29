@@ -74,8 +74,8 @@ $BUILD_TOOLS/aapt2 link -o "$BUILD_DIR/unaligned/app-res.apk" \
     -I "$PLATFORM" \
     --min-sdk-version 26 \
     --target-sdk-version 34 \
-    --version-code 4 \
-    --version-name "1.0.3" \
+    --version-code 6 \
+    --version-name "1.0.5" \
     --manifest "$MANIFEST" \
     -A "$BUILD_DIR/assets" \
     "$BUILD_DIR/compiled_res.zip" \

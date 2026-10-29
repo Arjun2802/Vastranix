@@ -68,6 +68,7 @@ var IC = (function () {
     layers: ['M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z', 'm22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65', 'm22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65'],
     archive: [R(2, 3, 20, 5, 1), 'M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8', 'M10 12h4'],
     pause: [R(14, 4, 4, 16, 1), R(6, 4, 4, 16, 1)],
+    sparkles: ['m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z', 'M5 3v4', 'M19 17v4', 'M3 5h4', 'M17 19h4'],
     sun: [C(12, 12, 4), 'M12 2v2', 'M12 20v2', 'm4.93 4.93 1.41 1.41', 'm17.66 17.66 1.41 1.41', 'M2 12h2', 'M20 12h2', 'm6.34 17.66-1.41 1.41', 'm19.07 4.93-1.41 1.41'],
     moon: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
     zap: ['M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z']
@@ -75,7 +76,18 @@ var IC = (function () {
 })();
 var ICON_CACHE = {};
 function icon(n, s, sw) { var key = n + '|' + s + '|' + sw; if (ICON_CACHE[key]) return ICON_CACHE[key]; var p = IC[n] || IC.home; s = s || 20; return (ICON_CACHE[key] = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 1.75) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p.map(function (d) { return '<path d="' + d + '"/>'; }).join('') + '</svg>'); }
-function logo(s, dark) { return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="' + (dark ? '#1C1B24' : '#0E0E12') + '"/><path d="M13 13.5 L24 35 L35 13.5" stroke="#FFFFFF" stroke-width="4.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 22 H28.2 M33.4 22 H39.5" stroke="#5B3DF5" stroke-width="3" stroke-linecap="round"/></svg>'; }
+function isDarkTheme() {
+  try {
+    var th = (typeof lsGet === 'function' && lsGet('vx-theme')) || (typeof document !== 'undefined' && document.documentElement && document.documentElement.getAttribute('data-theme'));
+    if (th === 'dark') return true;
+    if (th === 'light') return false;
+    return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch (e) { return false; }
+}
+function logo(s, dark) {
+  var d = dark != null ? dark : isDarkTheme();
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="' + (d ? '#231C4C' : '#0E0E12') + '"/><path d="M13 13.5 L24 35 L35 13.5" stroke="#FFFFFF" stroke-width="4.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 22 H28.2 M33.4 22 H39.5" stroke="' + (d ? '#7A63FF' : '#5B3DF5') + '" stroke-width="3" stroke-linecap="round"/></svg>';
+}
 
 /* ===================== UTILITIES ===================== */
 var r2 = VXC.r2, dayKey = VXC.dayKey, monthKey = VXC.monthKey;
@@ -162,7 +174,7 @@ function makeLocalDB() {
 var DB = null, USER = null, DL = null;
 var MODE = 'connecting'; // live | local
 var SESSION = uid('s');
-var D = { store: null, counters: null, products: {}, customers: {}, suppliers: {}, dealers: {}, ledger: {}, ledgerOld: {}, shifts: {}, pos: {}, dorders: {}, transfers: {}, held: {}, staff: {}, requests: {}, loaded: {}, err: {}, sync: 'live', profiles: {} };
+var D = { store: null, subscription: null, counters: null, products: {}, customers: {}, suppliers: {}, dealers: {}, ledger: {}, ledgerOld: {}, shifts: {}, pos: {}, dorders: {}, transfers: {}, held: {}, staff: {}, requests: {}, fabricJobs: {}, loaded: {}, err: {}, sync: 'live', profiles: {} };
 var ME = { id: null, name: '', avatar: '', isOwner: false, canEdit: false, role: null, gate: 'boot', staffDoc: null, reqDoc: null };
 var S = { route: 'home', sub: null, sheet: null, toasts: [], q: {}, f: {}, ui: {}, busy: null, loc: lsGet('vx-loc') || null, boot: { db: 0, user: 0, data: 0 } };
 
@@ -198,6 +210,7 @@ function watchDoc(key, ref, cb) {
 }
 function startData() {
   if (S.dataStarted) return; S.dataStarted = true;
+  watchDoc('subscription', DB.doc('meta/subscription'));
   watchColl('products', DB.collection('products'));
   watchColl('customers', DB.collection('customers'));
   watchColl('suppliers', DB.collection('suppliers'));
@@ -209,8 +222,108 @@ function startData() {
   watchColl('dorders', DB.collection('dorders').orderBy('createdAt', 'desc').limit(300));
   watchColl('transfers', DB.collection('transfers').orderBy('at', 'desc').limit(150));
   watchColl('held', DB.collection('held'));
+  watchColl('fabricJobs', DB.collection('fabricJobs').orderBy('queuedAt', 'desc').limit(100));
   if (ME.isOwner || ME.canEdit || MODE === 'local') watchColl('requests', DB.collection('requests'));
 }
+
+/* ===================== SUBSCRIPTION & 3D TRIAL ===================== */
+function subState() {
+  var s = D.subscription, now = Date.now();
+  if (!s) {
+    var st = storeV(), ca = (st && st.createdAt) || now;
+    var ends = ca + 7 * 864e5;
+    var exp = now > ends;
+    return {
+      status: exp ? 'expired' : 'trialing',
+      trialStartedAt: ca,
+      trialEndsAt: ends,
+      trialThreeDUsed: 0,
+      trialThreeDLimit: 3,
+      cycleId: null,
+      daysLeft: Math.max(0, Math.ceil((ends - now) / 864e5)),
+      isExpired: exp,
+      isTrial: !exp,
+      isActive: false
+    };
+  }
+  var isTrial = s.status === 'trialing';
+  var isExpired = false;
+  var daysLeft = 0;
+  if (isTrial) {
+    var trialEnds = s.trialEndsAt || (s.trialStartedAt + 7 * 864e5);
+    isExpired = now > trialEnds;
+    daysLeft = Math.max(0, Math.ceil((trialEnds - now) / 864e5));
+  } else if (s.status === 'active') {
+    isExpired = !!(s.expiresAt && now > s.expiresAt);
+  } else if (s.status === 'past_due' || s.status === 'cancelled') {
+    isExpired = true;
+  }
+  return {
+    status: isExpired ? 'expired' : s.status,
+    trialStartedAt: s.trialStartedAt,
+    trialEndsAt: s.trialEndsAt,
+    trialThreeDUsed: +s.trialThreeDUsed || 0,
+    trialThreeDLimit: s.trialThreeDLimit != null ? +s.trialThreeDLimit : 3,
+    cycleId: s.cycleId,
+    daysLeft: daysLeft,
+    isExpired: isExpired,
+    isTrial: isTrial && !isExpired,
+    isActive: s.status === 'active' && !isExpired
+  };
+}
+
+window.checkAndConsume3DAllowance = async function (businessId, reqData) {
+  var sid = businessId || (storeV() && storeV().id) || ME.id;
+  var sub = subState();
+  if (sub.isExpired) {
+    return {
+      allowed: false,
+      reason: 'trial_ended',
+      message: t('threed_trial_ended', 'Your free trial has ended — subscribe to continue using 3D fabric previews.')
+    };
+  }
+  if (sub.isTrial || sub.status === 'trialing') {
+    if (sub.trialThreeDUsed >= sub.trialThreeDLimit) {
+      return {
+        allowed: false,
+        reason: 'trial_limit_reached',
+        used: sub.trialThreeDUsed,
+        limit: sub.trialThreeDLimit,
+        message: t('threed_trial_limit', "You've used all {limit} free 3D previews during your trial — subscribe to continue using this feature.", { limit: sub.trialThreeDLimit })
+      };
+    }
+    var newCount = sub.trialThreeDUsed + 1;
+    var now = Date.now();
+    var patchObj = { trialThreeDUsed: newCount, updatedAt: now };
+    await patch('meta/subscription', patchObj);
+    if (window.FS && sid) {
+      await window.FS.doc('subscriptions/' + sid).set(patchObj, { merge: true });
+    }
+    if (D.subscription) {
+      D.subscription.trialThreeDUsed = newCount;
+    }
+    return {
+      allowed: true,
+      unlimited: false,
+      used: newCount,
+      limit: sub.trialThreeDLimit,
+      remaining: Math.max(0, sub.trialThreeDLimit - newCount),
+      message: t('threed_success', '3D preview generation initiated. ({rem} free previews left)', { rem: Math.max(0, sub.trialThreeDLimit - newCount) })
+    };
+  }
+  if (sub.isActive || sub.status === 'active') {
+    return {
+      allowed: true,
+      unlimited: true,
+      message: t('threed_unlimited', '3D preview generation initiated (unlimited plan).')
+    };
+  }
+  return {
+    allowed: false,
+    reason: 'no_subscription',
+    message: t('threed_no_sub', 'Please subscribe to use 3D fabric previews.')
+  };
+};
 async function fresh(path) { var s = await DB.doc(path).get(); return s.exists ? clone(s.data()) : null; }
 async function retry(fn) { try { return await fn(); } catch (e) { if (e && e.code === 'unavailable') { await sleep(400 + Math.random() * 600); return fn(); } throw e; } }
 function put(path, obj) { return retry(function () { return DB.doc(path).set(obj); }); }
@@ -364,9 +477,18 @@ document.addEventListener('input', function (e) {
   if (el.getAttribute('data-r') != null) schedule();
 });
 document.addEventListener('change', function (e) {
-  var el = e.target, m = el.getAttribute && el.getAttribute('data-m'); if (!m) return;
-  if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio' || el.type === 'date') { var v = el.type === 'checkbox' ? el.checked : el.value; setPath(S, m, v); schedule(); }
-  var fn = el.getAttribute('data-change'); if (fn && A[fn]) A[fn](el.dataset, el, e);
+  var el = e.target;
+  if (!el || !el.getAttribute) return;
+  var m = el.getAttribute('data-m');
+  if (m) {
+    if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio' || el.type === 'date') {
+      var v = el.type === 'checkbox' ? el.checked : el.value;
+      setPath(S, m, v);
+      schedule();
+    }
+  }
+  var fn = el.getAttribute('data-change');
+  if (fn && A[fn]) A[fn](el.dataset, el, e);
 });
 document.addEventListener('click', function (e) {
   var el = e.target.closest && e.target.closest('[data-a]'); if (!el) return;
@@ -374,6 +496,12 @@ document.addEventListener('click', function (e) {
   e.preventDefault();
   var fn = A[el.getAttribute('data-a')]; if (fn) fn(el.dataset, el, e);
 });
+A.triggerUpload = function (d) {
+  var id = d && d.for;
+  if (!id) return;
+  var inp = document.getElementById(id);
+  if (inp) inp.click();
+};
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && S.sheet) { closeSheet(); return; }
   var el = e.target; if (e.key === 'Enter' && el.getAttribute && el.getAttribute('data-enter')) { var fn = A[el.getAttribute('data-enter')]; if (fn) { e.preventDefault(); fn(el.dataset, el, e); } }
@@ -416,7 +544,19 @@ function toast(msg, kind, action) { var id = uid('t'); S.toasts.push({ id: id, m
 function toastsHtml() { if (!S.toasts.length) return ''; return '<div class="toasts" role="status" aria-live="polite">' + S.toasts.map(function (x) { return '<div class="toast ' + x.kind + '">' + icon(x.kind === 'bad' ? 'alert' : 'checkCircle', 18) + '<span>' + esc(x.msg) + '</span>' + (x.action ? '<button class="tb" data-a="' + x.action.a + '"' + (x.action.attrs || '') + '>' + esc(x.action.label) + '</button>' : '') + '</div>'; }).join('') + '</div>'; }
 function openSheet(kind, data) { S.sheet = Object.assign({ k: kind }, data || {}); schedule(); }
 function closeSheet() { S.sheet = null; schedule(); }
-function openSub(kind, data) { var prev = S.sub; S.sub = Object.assign({ k: kind, prev: prev, scroll: window.scrollY }, data || {}); S.sheet = null; window.scrollTo(0, 0); schedule(); }
+function openSub(kind, data) {
+  var prev = S.sub;
+  S.sub = Object.assign({ k: kind, prev: prev, scroll: window.scrollY }, data || {});
+  S.sheet = null;
+  window.scrollTo(0, 0);
+  schedule();
+  if (data && data.target) {
+    setTimeout(function () {
+      var el = document.getElementById(data.target);
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  }
+}
 function backSub() { var p = S.sub && S.sub.prev, y = S.sub && S.sub.scroll; S.sub = p || null; schedule(); requestAnimationFrame(function () { window.scrollTo(0, y || 0); }); }
 function go(r) { S.sub = null; S.sheet = null; if (location.hash !== '#' + r) { try { location.hash = r; } catch (e) { } } S.route = r; window.scrollTo(0, 0); schedule(); }
 
@@ -441,8 +581,9 @@ function searchBox(model, ph2, extra) { var id = 'f-' + model.replace(/\./g, '-'
 function stepper(dec, inc, val, label) { return '<span class="step"><button type="button" aria-label="' + esc(t('decrease', 'Decrease') + ' ' + (label || '')) + '" ' + dec + '>' + icon('minus', 16) + '</button><span class="num">' + esc(val) + '</span><button type="button" aria-label="' + esc(t('increase', 'Increase') + ' ' + (label || '')) + '" ' + inc + '>' + icon('plus', 16) + '</button></span>'; }
 function swatch(p, size) {
   var c = (p.colors && p.colors[0]) || ((p.variants || [])[0] || {}).color || p.name;
-  var st = 'background-color:' + colorOf(c) + ';' + (p.img ? 'background-image:url(' + p.img + ');' : '') + (size ? 'width:' + size[0] + 'px;height:' + size[1] + 'px;' : '');
-  return '<span class="sw" style="' + st + '">' + (p.img ? '' : icon('shirt', 18)) + '</span>';
+  var imgUrl = p.fabricThumbnailImage || p.fabricPreviewImage || p.img;
+  var st = 'background-color:' + colorOf(c) + ';' + (imgUrl ? 'background-image:url(' + imgUrl + ');' : '') + (size ? 'width:' + size[0] + 'px;height:' + size[1] + 'px;' : '');
+  return '<span class="sw" style="' + st + '">' + (imgUrl ? '' : icon('shirt', 18)) + '</span>';
 }
 function stockPill(a, mn) { if (a <= 0) return pill(t('out_of_stock', 'Out of stock'), 'bad'); if (a <= (mn == null ? 3 : mn)) return pill(t('n_left', '{n} left', { n: a }), 'bad'); if (a <= (mn == null ? 3 : mn) * 2) return pill(t('n_avail', '{n} available', { n: a }), 'warn'); return pill(t('n_avail', '{n} available', { n: a }), 'ok'); }
 function avatarHtml(name, cls) { return '<span class="ic round ' + (cls || 'acc') + '">' + esc(initials(name)) + '</span>'; }
@@ -457,5 +598,6 @@ var A = {
   go: function (d) { go(d.r); },
   back: function () { backSub(); },
   close: function () { closeSheet(); },
+  openSub: function (d) { openSub(d.k, d); },
   noop: function () { }
 };

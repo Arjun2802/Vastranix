@@ -17,6 +17,7 @@ html.native input,html.native textarea,html.native [contenteditable]{-webkit-use
   --mono:'Geist Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
   --gut-l:max(16px, env(safe-area-inset-left, 0px));--gut-r:max(16px, env(safe-area-inset-right, 0px));
   --tab-h:68px;
+  --border:var(--line);--text:var(--fg);--text-muted:var(--muted);--subtle:var(--surface2);--danger:var(--bad);--surface-raised:var(--surface);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0B0B0F;--surface:#15151B;--surface2:#1D1D25;--surface3:#24242D;--line:#25252E;--line2:#34343F;
@@ -26,6 +27,7 @@ html.native input,html.native textarea,html.native [contenteditable]{-webkit-use
   --accent:#7A63FF;--accent-h:#8E7BFF;--accent-fg:#FFFFFF;--accent-soft:#231C4C;--accent-text:#B9ADFF;--accent-ring:rgba(122,99,255,.35);
   --ok:#5BE3A6;--ok-soft:#0F2A1F;--ok-solid:#1F9D68;--warn:#F5B866;--warn-soft:#2D2210;--warn-solid:#D98A12;--bad:#FF8E9B;--bad-soft:#33161C;--bad-solid:#E0485C;
   --scrim:rgba(0,0,0,.62);--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);--shadow-lg:0 24px 60px rgba(0,0,0,.55);
+  --border:var(--line);--text:var(--fg);--text-muted:var(--muted);--subtle:var(--surface2);--danger:var(--bad);--surface-raised:var(--surface);
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0B0B0F;--surface:#15151B;--surface2:#1D1D25;--surface3:#24242D;--line:#25252E;--line2:#34343F;
@@ -35,6 +37,7 @@ html.native input,html.native textarea,html.native [contenteditable]{-webkit-use
   --accent:#7A63FF;--accent-h:#8E7BFF;--accent-fg:#FFFFFF;--accent-soft:#231C4C;--accent-text:#B9ADFF;--accent-ring:rgba(122,99,255,.35);
   --ok:#5BE3A6;--ok-soft:#0F2A1F;--ok-solid:#1F9D68;--warn:#F5B866;--warn-soft:#2D2210;--warn-solid:#D98A12;--bad:#FF8E9B;--bad-soft:#33161C;--bad-solid:#E0485C;
   --scrim:rgba(0,0,0,.62);--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);--shadow-lg:0 24px 60px rgba(0,0,0,.55);
+  --border:var(--line);--text:var(--fg);--text-muted:var(--muted);--subtle:var(--surface2);--danger:var(--bad);--surface-raised:var(--surface);
   color-scheme:dark}
 
 *{box-sizing:border-box}
