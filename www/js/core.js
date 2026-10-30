@@ -576,7 +576,7 @@ function searchBox(model, ph2, extra) { var id = 'f-' + model.replace(/\./g, '-'
 function stepper(dec, inc, val, label) { return '<span class="step"><button type="button" aria-label="' + esc(t('decrease', 'Decrease') + ' ' + (label || '')) + '" ' + dec + '>' + icon('minus', 16) + '</button><span class="num">' + esc(val) + '</span><button type="button" aria-label="' + esc(t('increase', 'Increase') + ' ' + (label || '')) + '" ' + inc + '>' + icon('plus', 16) + '</button></span>'; }
 function swatch(p, size) {
   var c = (p.colors && p.colors[0]) || ((p.variants || [])[0] || {}).color || p.name;
-  var imgUrl = p.fabricThumbnailImage || p.fabricPreviewImage || p.img;
+  var imgUrl = p.img;
   var st = 'background-color:' + colorOf(c) + ';' + (imgUrl ? 'background-image:url(' + imgUrl + ');' : '') + (size ? 'width:' + size[0] + 'px;height:' + size[1] + 'px;' : '');
   return '<span class="sw" style="' + st + '">' + (imgUrl ? '' : icon('shirt', 18)) + '</span>';
 }

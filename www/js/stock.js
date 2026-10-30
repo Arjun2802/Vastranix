@@ -46,42 +46,8 @@ function subProduct(sub) {
     '<div class="pad stack" style="padding:16px"><div class="g4">' + [['tier_retail', 'Retail', pr.retail], ['tier_wholesale', 'Wholesale', pr.wholesale], ['tier_dealer', 'Dealer', pr.dealer], ['cost', 'Cost', p.cost]].map(function (x) { return '<div class="kpi" style="padding:10px 12px"><small>' + esc(t(x[0], x[1])) + '</small><b style="font-size:16px">' + (x[2] ? inr(x[2]) : '—') + '</b></div>'; }).join('') + '</div>' +
     (margin != null ? '<span class="small muted">' + esc(t('margin', 'Margin on retail: {m}%', { m: margin })) + ' · GST ' + (+p.gst || 0) + '%</span>' : '') + '</div></section>';
 
-  /* Fabric Drape Preview card */
-  var activeJob = Object.values(D.fabricJobs || {}).find(function (j) {
-    return j.productId === p.id && (j.status === 'queued' || j.status === 'processing');
-  });
-
+  /* Fabric Drape Preview card (hidden per requirements) */
   var fabricCard = '';
-  if (p.fabricPreviewImage) {
-    fabricCard = '<section class="card pad stack">' +
-      '<div class="between"><div class="rowx" style="gap:8px">' + icon('sparkles', 18) + '<b>' + esc(t('fabric_preview_title', 'Fabric Preview Mockup')) + '</b></div><span class="pill ok">' + esc((p.fabricTemplateId || 'Draped').toUpperCase()) + '</span></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:12px;padding:12px;overflow:hidden">' +
-        '<img src="' + esc(p.fabricPreviewImage) + '" alt="' + esc(p.name) + '" style="max-height:300px;max-width:100%;object-fit:contain;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08)"/>' +
-      '</div>' +
-      '<div class="rowx wrap" style="justify-content:space-between">' +
-        '<button class="btn line sm" data-a="openFabricDrape" data-pid="' + esc(p.id) + '">' + icon('sparkles', 15) + esc(t('redrape_btn', 'Change Garment / Re-drape')) + '</button>' +
-        '<button class="btn ghost sm bad-t" data-a="removeFabricPreview" data-pid="' + esc(p.id) + '">' + icon('x', 14) + esc(t('remove_preview', 'Remove Preview')) + '</button>' +
-      '</div>' +
-    '</section>';
-  } else if (activeJob) {
-    fabricCard = '<section class="card pad stack" style="border:1px dashed var(--accent)">' +
-      '<div class="rowx" style="gap:10px">' +
-        '<span class="spin" style="display:inline-block;width:18px;height:18px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%"></span>' +
-        '<div class="stack" style="gap:2px">' +
-          '<b>' + esc(t('drape_in_progress', 'Draping mockup in progress…')) + '</b>' +
-          '<span class="xsmall muted">' + esc(t('drape_job_status', 'Status: {st} ({tpl})', { st: activeJob.status, tpl: activeJob.garmentTemplateId || 'garment' })) + '</span>' +
-        '</div>' +
-      '</div>' +
-    '</section>';
-  } else {
-    fabricCard = '<section class="card pad stack">' +
-      '<div class="between"><div class="rowx" style="gap:8px">' + icon('sparkles', 18) + '<b>' + esc(t('fabric_preview_title', 'Fabric Preview Mockup')) + '</b></div><span class="pill acc">' + esc(t('engine_ready', '2D Engine')) + '</span></div>' +
-      '<p class="small muted" style="margin:0;line-height:1.4">' + esc(t('drape_card_desc', 'Drape this fabric texture onto realistic garment silhouettes (Kurta, Saree, Shirt, Palazzo, Nehru Jacket) for instant visual mockups.')) + '</p>' +
-      '<div class="rowx">' +
-        '<button class="btn line sm" data-a="openFabricDrape" data-pid="' + esc(p.id) + '">' + icon('sparkles', 15) + esc(t('drape_garment_btn', '+ Drape Fabric Preview')) + '</button>' +
-      '</div>' +
-    '</section>';
-  }
 
   var stock = '<section class="card pad stack"><div class="between"><b>' + esc(t('stock', 'Stock')) + '</b><span class="small muted num">' + esc(t('stock_sub', '{a} on hand · {t} in transit', { a: tot.st, t: tot.tr })) + '</span></div>' +
     '<div class="sbar" aria-hidden="true"><i style="width:' + (Math.max(0, av) / base * 100) + '%;background:var(--strong)"></i><i style="width:' + (tot.res / base * 100) + '%;background:var(--accent)"></i><i style="width:' + (tot.tr / base * 100) + '%;background:var(--warn-solid)"></i><i style="width:' + (tot.dmg / base * 100) + '%;background:var(--bad-solid)"></i></div>' +

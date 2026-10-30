@@ -293,13 +293,13 @@ function billThemeSheet() { return sheetWrap(t('invoice_theme', 'Invoice theme')
 var SHEETS = { checkout: coView, saleDone: doneView, variant: variantSheet, line: lineSheet, custom: customSheet, disc: discSheet, custPick: custPickSheet, held: heldSheet, billTheme: billThemeSheet, pmore: pmoreSheet, count: countSheet, supplier: supplierSheet, supPay: supPaySheet, utr: utrSheet, cn: cnSheet, collect: collectSheet, custEdit: custEditSheet, expense: expenseSheet, cashEntry: cashEntrySheet, dealer: dealerSheet, dispatch: dispatchSheet, rejectDO: rejectSheet, loc: locSheet, search: searchSheet, alerts: alertsSheet, confirm: confirmSheet, subscribe: subSheet, fabricDrape: fabricDrapeSheet };
 function sheetView() { var f = SHEETS[S.sheet.k]; if (!f) return ''; try { return f(S.sheet) || ''; } catch (e) { console.error(e); return sheetWrap(t('err_render', 'This screen hit a problem.'), '<p class="small muted">' + esc(e.message) + '</p>', ''); } }
 A.sheet = function (d) { var o = {}; Object.keys(d).forEach(function (k) { o[k] = d[k]; }); openSheet(d.k, o); };
-var SUBS = { product: subProduct, pform: subPform, tform: subTform, poform: subPOform, po: subPO, receive: subReceive, supplier: subSupplier, invoice: subInvoice, customer: subCustomer, doform: subDOform, dorder: subDO, contact: subContact, threed: subThreeD, fabricJobs: subThreeD };
+var SUBS = { product: subProduct, pform: subPform, tform: subTform, poform: subPOform, po: subPO, receive: subReceive, supplier: subSupplier, invoice: subInvoice, customer: subCustomer, doform: subDOform, dorder: subDO, contact: subContact, about: subAbout, privacy: subPrivacy };
 var SUBS_NOBAR = { pform: 1, tform: 1, poform: 1, receive: 1, doform: 1 };
 
 /* ===================== SUBSCRIPTION SHEET ===================== */
 function subSheet() {
   var sub = subState();
-  var sel = S.subCycle || 'annual';
+  var sel = S.subCycle || 'quarterly';
   return sheetWrap(t('sub_title', 'Vastrenix Subscription'),
     '<div class="stack lg" style="padding-top:4px">' +
       '<div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">' +
@@ -307,17 +307,41 @@ function subSheet() {
         '<b style="font-size:20px;letter-spacing:-0.03em;color:var(--fg)">vastrenix</b>' +
         '<p class="muted small">' + esc(t('sub_subtitle', 'Retail, wholesale and multi-branch management for garments.')) + '</p>' +
       '</div>' +
-      '<div class="g2" style="gap:12px">' +
-        '<button type="button" class="card pad stack" data-a="setSubCycle" data-v="monthly" style="text-align:left;cursor:pointer;border-radius:16px;border:2px solid ' + (sel === 'monthly' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'monthly' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);transition:all .15s ease">' +
-          '<div class="between"><b style="font-size:15px;color:var(--fg)">' + esc(t('sub_monthly', 'Monthly')) + '</b>' + (sel === 'monthly' ? '<span style="color:var(--accent-text);display:flex">' + icon('check', 18, 2.5) + '</span>' : '') + '</div>' +
-          '<div style="font-size:24px;font-weight:700;color:var(--fg);margin:6px 0">₹799<span class="xsmall muted" style="font-weight:400"> / mo</span></div>' +
-          '<span class="xsmall muted">' + esc(t('sub_monthly_desc', 'Billed every month. Cancel anytime.')) + '</span>' +
+      '<div class="stack sm" style="gap:10px">' +
+        // Monthly Card: ₹699 / mo
+        '<button type="button" class="card pad" data-a="setSubCycle" data-v="monthly" style="text-align:left;cursor:pointer;border-radius:14px;border:2px solid ' + (sel === 'monthly' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'monthly' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);display:flex;justify-content:space-between;align-items:center;padding:14px 16px;transition:all .15s ease">' +
+          '<div class="stack xs">' +
+            '<b style="font-size:15px;color:var(--fg)">' + esc(t('sub_monthly', 'Monthly')) + '</b>' +
+            '<span class="xsmall muted">' + esc(t('sub_monthly_desc', 'Billed every month. Cancel anytime.')) + '</span>' +
+          '</div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:20px;font-weight:700;color:var(--fg)">₹699<span class="xsmall muted" style="font-weight:400"> / mo</span></div>' +
+            (sel === 'monthly' ? '<span style="color:var(--accent-text);display:inline-flex;margin-top:2px">' + icon('checkCircle', 16) + '</span>' : '') +
+          '</div>' +
         '</button>' +
-        '<button type="button" class="card pad stack" data-a="setSubCycle" data-v="annual" style="text-align:left;cursor:pointer;border-radius:16px;border:2px solid ' + (sel === 'annual' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'annual' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);position:relative;transition:all .15s ease">' +
-          '<span class="pill ok" style="position:absolute;top:-10px;right:10px;font-size:10px;font-weight:700">' + esc(t('save_17', 'SAVE 17%')) + '</span>' +
-          '<div class="between"><b style="font-size:15px;color:var(--fg)">' + esc(t('sub_annual', 'Annual')) + '</b>' + (sel === 'annual' ? '<span style="color:var(--accent-text);display:flex">' + icon('check', 18, 2.5) + '</span>' : '') + '</div>' +
-          '<div style="font-size:24px;font-weight:700;color:var(--fg);margin:6px 0">₹7,999<span class="xsmall muted" style="font-weight:400"> / yr</span></div>' +
-          '<span class="xsmall muted">' + esc(t('sub_annual_desc', '₹666/mo · 2 months free.')) + '</span>' +
+        // 3 Months Card: ₹1,899 / 3 mos
+        '<button type="button" class="card pad" data-a="setSubCycle" data-v="quarterly" style="text-align:left;cursor:pointer;border-radius:14px;border:2px solid ' + (sel === 'quarterly' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'quarterly' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);display:flex;justify-content:space-between;align-items:center;padding:14px 16px;position:relative;transition:all .15s ease">' +
+          '<span class="pill ok" style="position:absolute;top:-9px;right:16px;font-size:9px;font-weight:700;letter-spacing:0.04em">' + esc(t('sub_popular', 'POPULAR · SAVE 10%')) + '</span>' +
+          '<div class="stack xs">' +
+            '<b style="font-size:15px;color:var(--fg)">' + esc(t('sub_quarterly', '3 Months')) + '</b>' +
+            '<span class="xsmall muted">' + esc(t('sub_quarterly_desc', '₹633/mo · Billed ₹1,899 every 3 months.')) + '</span>' +
+          '</div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:20px;font-weight:700;color:var(--fg)">₹1,899<span class="xsmall muted" style="font-weight:400"> / 3 mos</span></div>' +
+            (sel === 'quarterly' ? '<span style="color:var(--accent-text);display:inline-flex;margin-top:2px">' + icon('checkCircle', 16) + '</span>' : '') +
+          '</div>' +
+        '</button>' +
+        // Annual Card: ₹6,999 / yr
+        '<button type="button" class="card pad" data-a="setSubCycle" data-v="annual" style="text-align:left;cursor:pointer;border-radius:14px;border:2px solid ' + (sel === 'annual' ? 'var(--accent)' : 'var(--line)') + ';background:' + (sel === 'annual' ? 'var(--accent-soft)' : 'var(--surface2)') + ';color:var(--fg);display:flex;justify-content:space-between;align-items:center;padding:14px 16px;position:relative;transition:all .15s ease">' +
+          '<span class="pill ok" style="position:absolute;top:-9px;right:16px;font-size:9px;font-weight:700;letter-spacing:0.04em">' + esc(t('sub_best_val', 'BEST VALUE · SAVE 17%')) + '</span>' +
+          '<div class="stack xs">' +
+            '<b style="font-size:15px;color:var(--fg)">' + esc(t('sub_annual', 'Annual')) + '</b>' +
+            '<span class="xsmall muted">' + esc(t('sub_annual_desc', '₹583/mo · 2 months free.')) + '</span>' +
+          '</div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:20px;font-weight:700;color:var(--fg)">₹6,999<span class="xsmall muted" style="font-weight:400"> / yr</span></div>' +
+            (sel === 'annual' ? '<span style="color:var(--accent-text);display:inline-flex;margin-top:2px">' + icon('checkCircle', 16) + '</span>' : '') +
+          '</div>' +
         '</button>' +
       '</div>' +
       '<div class="stack sm" style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface2)">' +
@@ -325,8 +349,8 @@ function subSheet() {
           t('feat_1', 'Unlimited bills & WhatsApp invoices'),
           t('feat_2', 'Multi-location inventory (Shop + Godowns)'),
           t('feat_3', 'Customer Khata & UPI QR on bills'),
-          t('feat_4', 'Unlimited 3D fabric drape previews (included)'),
-          t('feat_5', 'Real-time multi-counter sync')
+          t('feat_4', 'GST invoicing, thermal receipts & barcode scan'),
+          t('feat_5', 'Real-time multi-counter sync & cloud backup')
         ].map(function (feat) {
           return '<div style="display:flex;align-items:center;gap:10px;font-size:13px;padding:3px 0;color:var(--fg)">' +
             '<span style="color:var(--ok);display:flex;align-items:center">' + icon('check', 15, 2.5) + '</span>' +
@@ -334,7 +358,7 @@ function subSheet() {
           '</div>';
         }).join('') +
       '</div>' +
-      busyBtn(sel === 'annual' ? t('subscribe_annually', 'Subscribe — ₹7,999 / year') : t('subscribe_monthly', 'Subscribe — ₹799 / month'), 'doSubscribe', 'primary lg block', '', 'sub') +
+      busyBtn(sel === 'annual' ? t('subscribe_annually', 'Subscribe — ₹6,999 / year') : (sel === 'quarterly' ? t('subscribe_quarterly', 'Subscribe — ₹1,899 / 3 months') : t('subscribe_monthly', 'Subscribe — ₹699 / month')), 'doSubscribe', 'primary lg block', '', 'sub') +
       '<span class="xsmall muted" style="text-align:center;display:block">' + esc(t('sub_guarantee', 'Instant activation · Safe and secure payment')) + '</span>' +
     '</div>',
     ''
@@ -342,9 +366,9 @@ function subSheet() {
 }
 A.setSubCycle = function (d) { S.subCycle = d.v; schedule(); };
 A.doSubscribe = async function () {
-  var cycle = S.subCycle || 'annual';
+  var cycle = S.subCycle || 'quarterly';
   var now = Date.now();
-  var duration = cycle === 'annual' ? (365 * 864e5) : (30 * 864e5);
+  var duration = cycle === 'annual' ? (365 * 864e5) : (cycle === 'quarterly' ? (90 * 864e5) : (30 * 864e5));
   S.busy = 'sub'; schedule();
   try {
     var sid = (storeV() && storeV().id) || ME.id;
@@ -356,8 +380,6 @@ A.doSubscribe = async function () {
       expiresAt: now + duration,
       trialStartedAt: (D.subscription && D.subscription.trialStartedAt) || now,
       trialEndsAt: (D.subscription && D.subscription.trialEndsAt) || now,
-      trialThreeDUsed: (D.subscription && D.subscription.trialThreeDUsed) || 0,
-      trialThreeDLimit: 3,
       updatedAt: now
     };
     await put('meta/subscription', subDoc);
@@ -365,7 +387,7 @@ A.doSubscribe = async function () {
       await window.FS.doc('subscriptions/' + sid).set(subDoc, { merge: true });
     }
     closeSheet();
-    toast(t('subscribed_success', 'Subscription active! All features and unlimited 3D unlocked.'));
+    toast(t('subscribed_success', 'Subscription active! All business features unlocked.'));
   } catch (e) {
     toast(errText(e), 'bad');
   }
@@ -517,113 +539,137 @@ A.sendCustomWorkInquiry = async function () {
   S.busy = null; schedule();
 };
 
-/* ===================== 3D / 2D FABRIC PREVIEW STUDIO & QUEUE ===================== */
-function subThreeD() {
-  var sub = subState();
-  var allowanceText = '';
-  if (sub.isExpired) {
-    allowanceText = '<div class="banner bad"><span class="ic bad">' + icon('lock', 18) + '</span><span class="tx"><b>' + esc(t('trial_ended_3d', 'Your trial has ended. Subscribe to unlock unlimited 3D fabric previews.')) + '</b></span></div>';
-  } else if (sub.isTrial) {
-    allowanceText = '<div class="banner" style="background:var(--accent-soft);border:1px solid var(--line);color:var(--fg)">' +
-      '<span class="ic acc">' + icon('sparkles', 18) + '</span>' +
-      '<span class="tx"><b>' + esc(t('trial_3d_count', 'Trial Allowance: {used} of {limit} used', { used: sub.trialThreeDUsed, limit: sub.trialThreeDLimit })) + '</b><small>' + esc(t('trial_3d_note', '3 free 3D fabric drape generations included during your 7-day trial.')) + '</small></span>' +
-    '</div>';
-  } else if (sub.isActive) {
-    allowanceText = '<div class="banner ok"><span class="ic ok">' + icon('check', 18) + '</span><span class="tx"><b>' + esc(t('active_3d_unlimited', 'Unlimited 3D fabric drape previews active on your subscription')) + '</b></span></div>';
-  }
+/* ===================== ABOUT US & PRIVACY POLICY ===================== */
+function subAbout() {
+  return ph(t('nav_about', 'About Us'), '', '', 'back') +
+    '<div class="stack lg" style="max-width:760px;margin:0 auto;padding-bottom:32px">' +
+      '<section class="card pad stack" style="text-align:center;align-items:center;padding:32px 20px;gap:12px">' +
+        logo(56) +
+        '<b style="font-size:24px;letter-spacing:-0.03em;color:var(--fg)">vastrenix</b>' +
+        '<span class="pill ok" style="font-size:12px;font-weight:700">' + esc(t('tagline', 'Retail, wholesale and dealer — one thread.')) + '</span>' +
+        '<p style="max-width:560px;line-height:1.6;font-size:15px;color:var(--fg);margin-top:6px">' +
+          esc(t('about_intro', 'Built specifically for India’s clothing stores, boutiques, manufacturers, and textile wholesalers. We combine fast counter billing, multi-location stock, customer Khata, and dealer orders into one clean, seamless system.')) +
+        '</p>' +
+      '</section>' +
 
-  /* Extract and sort jobs from reactive dictionary D.fabricJobs */
-  var jobsList = Object.keys(D.fabricJobs || {}).map(function (k) {
-    var j = D.fabricJobs[k];
-    return Object.assign({ id: k }, j);
-  });
-  jobsList.sort(function (a, b) {
-    var ta = a.queuedAt && a.queuedAt.toMillis ? a.queuedAt.toMillis() : (a.queuedAt || 0);
-    var tb = b.queuedAt && b.queuedAt.toMillis ? b.queuedAt.toMillis() : (b.queuedAt || 0);
-    return tb - ta;
-  });
-
-  var queueHtml = '';
-  if (!jobsList.length) {
-    queueHtml = empty('sparkles', t('queue_empty', 'No fabric render jobs yet'), t('queue_empty_desc', 'Open any garment in Stock and tap "+ Drape Fabric Preview" to generate realistic mockups.'), '<button class="btn primary sm" data-a="gGo" data-r="stock">' + icon('shirt', 16) + esc(t('stock', 'Stock')) + '</button>');
-  } else {
-    queueHtml = '<div class="list">' + jobsList.map(function (j) {
-      var prod = j.productId && D.products[j.productId];
-      var name = prod ? prod.name : (j.productId || t('custom_swatch', 'Custom Swatch'));
-      var thumb = j.resultThumbnailUrl || (j.resultImageUrls && j.resultImageUrls[0]) || j.sourcePhotoUrl;
-      var statusBadge = '';
-      if (j.status === 'complete') {
-        statusBadge = '<span class="pill ok">' + icon('check', 12) + ' ' + esc(t('complete', 'Complete')) + '</span>';
-      } else if (j.status === 'processing') {
-        statusBadge = '<span class="pill acc"><span class="spin" style="display:inline-block;width:10px;height:10px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;margin-right:4px"></span>' + esc(t('draping', 'Draping…')) + '</span>';
-      } else if (j.status === 'failed') {
-        statusBadge = '<span class="pill bad">' + icon('alert', 12) + ' ' + esc(t('failed', 'Failed')) + '</span>';
-      } else {
-        statusBadge = '<span class="pill warn">' + esc(t('queued', 'Queued')) + '</span>';
-      }
-
-      var thumbBox = thumb ?
-        '<span class="swatch" style="width:48px;height:48px;border-radius:10px;background-image:url(' + esc(thumb) + ');background-size:cover;background-position:center;flex-shrink:0"></span>' :
-        '<span class="swatch" style="width:48px;height:48px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0">' + icon('shirt', 20) + '</span>';
-
-      return '<div class="li" style="min-height:64px;gap:12px">' +
-        thumbBox +
-        '<span class="tx"><div class="rowx" style="gap:6px"><b>' + esc(name) + '</b><span class="pill" style="font-size:10px">' + esc((j.garmentTemplateId || 'garment').toUpperCase()) + '</span></div>' +
-        '<small>' + (j.errorMessage ? '<span class="bad-t">' + esc(j.errorMessage) + '</span>' : esc(statusBadge)) + '</small></span>' +
-        '<div class="rowx" style="gap:8px">' +
-          (j.status === 'failed' ? '<button class="btn line sm" data-a="retryFabricJob" data-id="' + esc(j.id) + '">' + icon('undo', 14) + esc(t('retry_job', 'Retry')) + '</button>' : '') +
-          (prod ? '<button class="ib plain" data-a="openSub" data-k="product" data-id="' + esc(prod.id) + '" aria-label="' + esc(t('view', 'View')) + '">' + icon('chevR', 18) + '</button>' : '') +
-        '</div>' +
-      '</div>';
-    }).join('') + '</div>';
-  }
-
-  return ph(t('drape_studio_title', 'Fabric Drape Studio'), '', '<button class="btn line sm" data-a="gGo" data-r="stock">' + icon('shirt', 16) + esc(t('stock', 'Stock')) + '</button>', 'back') +
-    '<div class="stack lg" style="max-width:820px">' +
-      '<section class="card pad stack" style="gap:14px">' +
-        '<div class="between">' +
-          '<div class="rowx" style="gap:12px">' +
-            '<div style="width:48px;height:48px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center">' + icon('sparkles', 26) + '</div>' +
-            '<div class="stack xs">' +
-              '<h2 style="font-size:18px;margin:0">' + esc(t('drape_studio_title', 'Fabric Drape Studio')) + '</h2>' +
-              '<p class="muted small" style="margin:0">' + esc(t('drape_studio_desc', 'Real-time 2D fabric mockup generator powered by our dedicated Render engine.')) + '</p>' +
-            '</div>' +
+      '<section class="stack sm">' +
+        '<div class="sect"><h2>' + esc(t('about_why_title', 'Why Vastrenix?')) + '</h2></div>' +
+        '<div class="g2" style="gap:12px">' +
+          '<div class="card pad stack" style="gap:8px">' +
+            '<div class="rowx" style="gap:8px;color:var(--accent)">' + icon('receipt', 20) + '<b style="color:var(--fg);font-size:15px">' + esc(t('about_f1_t', 'Tailored for Garments')) + '</b></div>' +
+            '<p class="small muted" style="margin:0;line-height:1.5">' + esc(t('about_f1_b', 'Engineered for apparel nuances: size charts, color swatches, fabric varieties, and three-tier pricing (Retail, Wholesale, Dealer).')) + '</p>' +
           '</div>' +
-          '<span class="pill ok">' + esc(t('engine_live', 'Engine Live')) + '</span>' +
-        '</div>' +
-        allowanceText +
-        '<div class="g5" style="gap:8px;margin-top:4px">' +
-          [
-            ['template_kurta', 'Kurta & Kurti', 'shirt'],
-            ['template_saree', 'Saree & Pallu', 'layers'],
-            ['template_shirt', 'Menswear Shirt', 'box'],
-            ['template_palazzo', 'Palazzo Pants', 'layers'],
-            ['template_nehru_jacket', 'Nehru Jacket', 'shirt']
-          ].map(function (tpl) {
-            return '<div class="card pad sm stack" style="background:var(--surface2);text-align:center;align-items:center;padding:10px 8px">' +
-              icon(tpl[2], 20) +
-              '<b style="font-size:11px;margin-top:4px">' + esc(t(tpl[0], tpl[1])) + '</b>' +
-            '</div>';
-          }).join('') +
+          '<div class="card pad stack" style="gap:8px">' +
+            '<div class="rowx" style="gap:8px;color:var(--accent)">' + icon('warehouse', 20) + '<b style="color:var(--fg);font-size:15px">' + esc(t('about_f2_t', 'Store + Godowns')) + '</b></div>' +
+            '<p class="small muted" style="margin:0;line-height:1.5">' + esc(t('about_f2_b', 'Seamless inventory control across shop counters and separate warehouses with fast transfer challans.')) + '</p>' +
+          '</div>' +
+          '<div class="card pad stack" style="gap:8px">' +
+            '<div class="rowx" style="gap:8px;color:var(--accent)">' + icon('network', 20) + '<b style="color:var(--fg);font-size:15px">' + esc(t('about_f3_t', 'B2B Dealer Network')) + '</b></div>' +
+            '<p class="small muted" style="margin:0;line-height:1.5">' + esc(t('about_f3_b', 'Connect with your authorized dealers, receive purchase orders digitally, and track dispatches without phone confusion.')) + '</p>' +
+          '</div>' +
+          '<div class="card pad stack" style="gap:8px">' +
+            '<div class="rowx" style="gap:8px;color:var(--accent)">' + icon('cloud', 20) + '<b style="color:var(--fg);font-size:15px">' + esc(t('about_f4_t', 'Cloud Synced & Reliable')) + '</b></div>' +
+            '<p class="small muted" style="margin:0;line-height:1.5">' + esc(t('about_f4_b', 'Protected by Google Cloud and Firebase enterprise infrastructure with multi-counter real-time sync.')) + '</p>' +
+          '</div>' +
         '</div>' +
       '</section>' +
-      '<section class="card pad stack">' +
-        '<div class="between"><b>' + esc(t('recent_render_jobs', 'Recent Drape Jobs')) + '</b><span class="xsmall muted">' + esc(t('n_jobs', '{n} jobs', { n: jobsList.length })) + '</span></div>' +
-        queueHtml +
+
+      '<section class="card pad stack" style="gap:14px">' +
+        '<div class="sect"><h2 style="margin:0">' + esc(t('about_connect_t', 'Get in Touch')) + '</h2></div>' +
+        '<p class="small muted" style="margin:0;line-height:1.5">' + esc(t('about_connect_b', 'Have questions, need technical support, or want custom features built specifically for your retail chain?')) + '</p>' +
+        '<div class="rowx wrap" style="gap:10px">' +
+          '<button class="btn primary sm" data-a="openSub" data-k="contact" data-target="card-support">' + icon('message', 16) + esc(t('help_support_btn', 'Contact Support')) + '</button>' +
+          '<button class="btn line sm" data-a="openSub" data-k="contact" data-target="card-cw">' + icon('layers', 16) + esc(t('custom_work_btn', 'Custom Development')) + '</button>' +
+          '<a href="mailto:contact@vastrenix.com" class="btn ghost sm" style="text-decoration:none">' + icon('mail', 16) + 'contact@vastrenix.com</a>' +
+        '</div>' +
       '</section>' +
     '</div>';
 }
 
-A.retryFabricJob = async function (d) {
-  var jobId = d.id;
-  await DB.collection('fabricJobs').doc(jobId).update({
-    status: 'queued',
-    attempts: 0,
-    errorMessage: null,
-    queuedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  toast(t('job_retried', 'Job re-queued for processing'));
-  schedule();
+function subPrivacy() {
+  return ph(t('nav_privacy', 'Privacy Policy'), '', '<button class="btn line sm" data-a="copyPrivacyUrl">' + icon('copy', 15) + esc(t('copy_link', 'Copy Link')) + '</button>', 'back') +
+    '<div class="stack lg" style="max-width:760px;margin:0 auto;padding-bottom:32px">' +
+      '<div class="card pad stack" style="background:var(--accent-soft);border:1px solid var(--line);gap:10px">' +
+        '<div class="between">' +
+          '<div class="rowx" style="gap:8px">' + icon('shield', 20) + '<b style="font-size:15px">' + esc(t('privacy_badge', 'DPDPA 2023 & Play Store Compliant')) + '</b></div>' +
+          '<span class="pill ok">' + esc(t('privacy_status', 'October 2026')) + '</span>' +
+        '</div>' +
+        '<p class="small" style="margin:0;line-height:1.5">' + esc(t('privacy_notice_top', 'Vastrenix is committed to transparent, lawful, and secure handling of data for garment retail and wholesale businesses. This policy outlines what data is collected, why, where it is stored, and your rights under Indian data protection law.')) + '</p>' +
+        '<div class="rowx wrap" style="gap:8px;margin-top:2px">' +
+          '<button class="btn primary sm" data-a="copyPrivacyUrl">' + icon('share', 15) + esc(t('view_online_policy', 'Copy Public URL')) + '</button>' +
+          '<a href="https://arjun2802.github.io/Vastranix/privacy.html" target="_blank" rel="noopener" class="btn line sm" style="text-decoration:none">' + icon('globe', 15) + esc(t('open_browser', 'Open in Browser')) + '</a>' +
+        '</div>' +
+      '</div>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s1_t', '1. Scope & Application')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">' + esc(t('p_s1_b', 'Vastrenix (“we”, “our”, or “us”) operates the Vastrenix mobile application, Point-of-Sale (POS) and inventory platform. This Privacy Policy applies to shop owners, authorized staff members, and dealers who access or use our services. By using Vastrenix, you acknowledge and agree to the data collection and practices described herein.')) + '</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s2_t', '2. Categories of Data Collected')) + '</h3>' +
+        '<div class="stack sm" style="gap:8px;font-size:13px;line-height:1.5">' +
+          '<div><b>• Staff & Account Information:</b> Name, mobile number, email address, assigned role (Owner, Manager, Biller, Inventory Stockist), and designated shop/branch location.</div>' +
+          '<div><b>• Customer Information:</b> Customer name, phone number, purchase history, store credit / Khata ledger, dues balance, and payment status.</div>' +
+          '<div><b>• Business Profile:</b> Business trading name, GSTIN (Goods & Services Tax Identification Number), registered shop and godown addresses, contact phone numbers, and business logo.</div>' +
+          '<div><b>• Transaction & Invoicing Data:</b> Sales invoices, item descriptions, quantities, prices, payment modes (Cash, UPI, Card, Split, Store Credit), and 12-digit UPI UTR transaction reference numbers.</div>' +
+          '<div><b>• Uploaded Media:</b> Garment catalog photos, merchant UPI QR code images, and shop logos uploaded voluntarily by the business owner.</div>' +
+        '</div>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s3_t', '3. Purpose & Legal Basis for Processing')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">We process collected data strictly for legitimate business purposes: (a) generating GST-compliant tax invoices, receipts, and WhatsApp delivery notices; (b) managing multi-location garment inventory and stock transfer challans; (c) tracking customer credit (Khata) and dues reminders; (d) fulfilling B2B dealer purchase orders; and (e) providing customer technical support.</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s4_t', '4. Storage, Hosting & Infrastructure')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">All business records and databases are hosted on Google Cloud Platform and Firebase infrastructure (Cloud Firestore, Firebase Authentication, and Firebase Storage). Data is encrypted in transit using TLS 1.3/HTTPS and at rest using AES-256 bit encryption. Google Cloud complies with ISO 27001, SOC 1/2/3, and standard Data Processing Agreements (<a href="https://cloud.google.com/terms/data-processing-terms" target="_blank" rel="noopener" style="color:var(--accent)">Google Terms</a>).</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s5_t', '5. Payment Processing & Subscriptions')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Vastrenix plan subscriptions are processed through Razorpay Software Private Limited. Vastrenix does NOT collect, handle, or store debit/credit card numbers, CVVs, net banking credentials, or UPI MPINs. All payments are processed through Razorpay’s PCI-DSS Level 1 certified payment gateway (<a href="https://razorpay.com/privacy/" target="_blank" rel="noopener" style="color:var(--accent)">Razorpay Privacy Policy</a>).</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px;border-left:3px solid var(--accent)">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s6_t', '6. Dealer Network Data Sharing (Specific Disclosure)')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">When a business opts into the Dealer Network and approves a connection with another merchant or wholesaler, order-specific data (products ordered, quantities, agreed wholesale/dealer tier pricing, and fulfillment status) is shared strictly between the two connected parties. Connected businesses cannot access your internal retail bills, customer Khata, overall revenues, or unconnected branch stock.</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px;border-left:3px solid var(--ok)">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s7_t', '7. Statutory Data Retention & GST Compliance')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Under Section 36 of the Central Goods and Services Tax (CGST) Act, 2017, registered businesses are legally obligated to maintain invoices, credit/debit notes, and books of account for at least <b>72 months (6 years)</b> from the due date of furnishing the annual return for the relevant year. To ensure our users remain compliant with tax authorities, sales invoices and transaction logs are retained for this mandatory statutory period.</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s8_t', '8. User Rights under DPDPA 2023')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Under India’s Digital Personal Data Protection Act (DPDPA), 2023, you have the right to: (a) request access to a summary of your personal data processed; (b) request correction or updating of inaccurate data; (c) request deletion of personal data (subject to mandatory GST record-keeping obligations); and (d) seek grievance redressal by contacting contact@vastrenix.com. We acknowledge requests within 48 hours and resolve verifiable requests within 30 days.</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s9_t', '9. Children’s Privacy')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">Vastrenix is exclusively a commercial B2B software tool for registered businesses and retail professionals. The app is not intended for or directed towards individuals under 18 years of age.</p>' +
+      '</section>' +
+
+      '<section class="card pad stack" style="gap:10px">' +
+        '<h3 style="margin:0;font-size:16px">' + esc(t('p_s10_t', '10. Contact & Grievance Officer')) + '</h3>' +
+        '<p class="small muted" style="margin:0;line-height:1.6">For questions, data access/deletion requests, or grievances regarding this Privacy Policy, please email our Data Grievance Desk at <a href="mailto:contact@vastrenix.com" style="color:var(--accent)">contact@vastrenix.com</a>.</p>' +
+      '</section>' +
+    '</div>';
+}
+
+A.copyPrivacyUrl = function () {
+  var url = 'https://arjun2802.github.io/Vastranix/privacy.html';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function () {
+      toast(t('policy_copied', 'Privacy policy URL copied!'));
+    }).catch(function () {
+      prompt(t('copy_url', 'Copy URL:'), url);
+    });
+  } else {
+    prompt(t('copy_url', 'Copy URL:'), url);
+  }
 };
 
 /* ===================== BOOT ===================== */

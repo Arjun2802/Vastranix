@@ -312,24 +312,25 @@ function vMore() {
     return '<section class="stack sm"><div class="sect"><h2>' + esc(t(g[1], g[2])) + '</h2></div><div class="qa">' + items.map(function (r) { var b = badgeFor(r); return '<a href="#' + r + '" data-a="go" data-r="' + r + '" style="position:relative">' + icon(ROUTES[r].icon, 22) + esc(rt(r)) + (b ? '<span class="pill acc" style="position:absolute;top:7px;right:7px;height:18px;padding:0 6px">' + b + '</span>' : '') + '</a>'; }).join('') + '</div></section>';
   }).join('');
   var sub = subState();
+  var cycleLabel = sub.cycleId === 'annual' ? t('plan_annual', 'Annual') : (sub.cycleId === 'quarterly' ? t('plan_quarterly', '3 Months') : t('plan_monthly', 'Monthly'));
   var subTile = '<section class="stack sm"><div class="sect"><h2>' + esc(t('subscription_plan', 'Subscription & Plan')) + '</h2></div><div class="card pad stack">' +
     '<div class="between" style="align-items:flex-start;gap:12px">' +
       '<div>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<b style="font-size:15px">' + esc(sub.isActive ? t('plan_active', 'Active Paid Plan') : (sub.isTrial ? t('plan_trial', '7-Day Free Trial') : t('plan_expired', 'Trial Expired'))) + '</b>' +
-          '<span class="pill ' + (sub.isActive ? 'ok' : (sub.isTrial ? 'acc' : 'bad')) + '">' + esc(sub.isActive ? (sub.cycleId === 'annual' ? 'Annual' : 'Monthly') : (sub.isTrial ? sub.daysLeft + ' days left' : 'Expired')) + '</span>' +
+          '<span class="pill ' + (sub.isActive ? 'ok' : (sub.isTrial ? 'acc' : 'bad')) + '">' + esc(sub.isActive ? cycleLabel : (sub.isTrial ? sub.daysLeft + ' days left' : 'Expired')) + '</span>' +
         '</div>' +
-        '<div class="small muted" style="margin-top:4px">' + esc(sub.isActive ? t('plan_active_desc', 'Unlimited bills, multi-counter sync & unlimited 3D previews') : (sub.isTrial ? t('trial_days_remaining', '{n} days left in your free trial · Full access', { n: sub.daysLeft }) : t('trial_ended_desc', 'Subscribe to create new bills, items and orders'))) + '</div>' +
+        '<div class="small muted" style="margin-top:4px">' + esc(sub.isActive ? t('plan_active_desc', 'Unlimited bills, multi-counter sync & full business features') : (sub.isTrial ? t('trial_days_remaining', '{n} days left in your free trial · Full access', { n: sub.daysLeft }) : t('trial_ended_desc', 'Subscribe to create new bills, items and orders'))) + '</div>' +
       '</div>' +
       '<button class="btn ' + (sub.isActive ? 'line sm' : 'primary sm') + '" data-a="openSubscribe">' + esc(sub.isActive ? t('manage_plan', 'View Plan') : t('subscribe_now', 'Subscribe')) + '</button>' +
     '</div>' +
-    (sub.isTrial ? '<div class="small muted" style="border-top:1px solid var(--line);padding-top:8px;display:flex;align-items:center;gap:6px">' + icon('sparkles', 15) + '<span>' + esc(t('trial_3d_allowance_note', '3 free 3D previews included ({used}/3 used)', { used: sub.trialThreeDUsed })) + '</span></div>' : '') +
   '</div></section>';
 
-  var helpGroup = '<section class="stack sm"><div class="sect"><h2>' + esc(t('help_custom_dev', 'Help & Custom Development')) + '</h2></div><div class="qa">' +
+  var helpGroup = '<section class="stack sm"><div class="sect"><h2>' + esc(t('help_custom_dev', 'Help & Resources')) + '</h2></div><div class="qa">' +
     '<button type="button" data-a="openSub" data-k="contact" data-target="card-support">' + icon('message', 22) + esc(t('help_support_btn', 'Support')) + '</button>' +
     '<button type="button" data-a="openSub" data-k="contact" data-target="card-cw">' + icon('layers', 22) + esc(t('custom_work_btn', 'Custom Work')) + '</button>' +
-    '<button type="button" data-a="openSub" data-k="threed" style="position:relative">' + icon('sparkles', 22) + esc(t('threed_preview_btn', '3D Preview')) + '<span class="pill ok" style="position:absolute;top:6px;right:6px;height:16px;padding:0 5px;font-size:9px;font-weight:700">' + esc(t('live_pill', 'Live')) + '</span></button>' +
+    '<button type="button" data-a="openSub" data-k="about">' + icon('info', 22) + esc(t('nav_about', 'About Us')) + '</button>' +
+    '<button type="button" data-a="openSub" data-k="privacy">' + icon('shield', 22) + esc(t('nav_privacy', 'Privacy Policy')) + '</button>' +
   '</div></section>';
 
   var ownerBadge = sub.isActive
