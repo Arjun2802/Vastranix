@@ -597,7 +597,7 @@ function subPrivacy() {
         '<p class="small" style="margin:0;line-height:1.5">' + esc(t('privacy_notice_top', 'Vastrenix is committed to transparent, lawful, and secure handling of data for garment retail and wholesale businesses. This policy outlines what data is collected, why, where it is stored, and your rights under Indian data protection law.')) + '</p>' +
         '<div class="rowx wrap" style="gap:8px;margin-top:2px">' +
           '<button class="btn primary sm" data-a="copyPrivacyUrl">' + icon('share', 15) + esc(t('view_online_policy', 'Copy Public URL')) + '</button>' +
-          '<a href="https://arjun2802.github.io/Vastranix/privacy.html" target="_blank" rel="noopener" class="btn line sm" style="text-decoration:none">' + icon('globe', 15) + esc(t('open_browser', 'Open in Browser')) + '</a>' +
+          '<a href="https://arjun2802.github.io/vastrenix-fabric-engine/privacy.html" target="_blank" rel="noopener" class="btn line sm" style="text-decoration:none">' + icon('globe', 15) + esc(t('open_browser', 'Open in Browser')) + '</a>' +
         '</div>' +
       '</div>' +
 
@@ -660,7 +660,7 @@ function subPrivacy() {
 }
 
 A.copyPrivacyUrl = function () {
-  var url = 'https://arjun2802.github.io/Vastranix/privacy.html';
+  var url = 'https://arjun2802.github.io/vastrenix-fabric-engine/privacy.html';
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(function () {
       toast(t('policy_copied', 'Privacy policy URL copied!'));
