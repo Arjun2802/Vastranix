@@ -70,6 +70,12 @@ public class MainActivity extends Activity {
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
 
+        // Security Hardening: Gate WebView debugging strictly behind debuggable flag
+        final boolean isDebuggable = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(isDebuggable);
+        }
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -79,13 +85,17 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setAllowFileAccess(true);
+
+        // Security Hardening: Disable arbitrary host filesystem access from URLs
+        settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
+        // Required for local bundled SPA running from file:///android_asset to access demo.json and Firestore Web SDK
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
 
+        // Security Hardening: Strictly block insecure mixed HTTP content
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
 
         // Register Native Android Javascript Bridge
@@ -104,7 +114,10 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
-                Log.d(TAG, "[JS] " + cm.message() + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
+                // Security Hardening: Suppress JavaScript logs in release builds to prevent leaking state to logcat
+                if (isDebuggable) {
+                    Log.d(TAG, "[JS] " + cm.message() + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
+                }
                 return true;
             }
 
@@ -214,12 +227,9 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler, android.net.http.SslError error) {
-                Log.w(TAG, "SSL Certificate warning for: " + (error.getUrl() != null ? error.getUrl() : "unknown"));
-                if (error.getUrl() != null && (error.getUrl().contains("onrender.com") || error.getUrl().contains("vastrenix-api"))) {
-                    handler.proceed();
-                } else {
-                    handler.cancel();
-                }
+                // Security Hardening: Strictly cancel SSL errors per Play Store CWE-295 compliance
+                Log.w(TAG, "SSL Certificate error on: " + (error.getUrl() != null ? error.getUrl() : "unknown") + " code: " + error.getPrimaryError());
+                handler.cancel();
             }
 
             @Override
@@ -235,7 +245,8 @@ public class MainActivity extends Activity {
             private boolean handleExternalUrl(WebView view, Uri uri) {
                 if (uri == null) return false;
                 String urlStr = uri.toString();
-                if (urlStr.startsWith("file://") || urlStr.startsWith("data:") || urlStr.startsWith("blob:") || urlStr.startsWith("javascript:")) {
+                // Stay inside local app assets context
+                if (urlStr.startsWith("file:///android_asset/") || urlStr.startsWith("data:") || urlStr.startsWith("blob:") || urlStr.startsWith("javascript:")) {
                     return false;
                 }
                 if (urlStr.endsWith(".pdf") || urlStr.contains("/pdf")) {
@@ -247,6 +258,10 @@ public class MainActivity extends Activity {
                     Intent intent;
                     if (urlStr.startsWith("intent:")) {
                         intent = Intent.parseUri(urlStr, Intent.URI_INTENT_SCHEME);
+                    } else if (urlStr.startsWith("mailto:")) {
+                        intent = new Intent(Intent.ACTION_SENDTO, uri);
+                    } else if (urlStr.startsWith("tel:")) {
+                        intent = new Intent(Intent.ACTION_DIAL, uri);
                     } else {
                         intent = new Intent(Intent.ACTION_VIEW, uri);
                     }

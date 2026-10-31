@@ -69,6 +69,120 @@ if [ -f "google-services.json" ]; then
     cp google-services.json "$BUILD_DIR/assets/"
 fi
 
+echo "=== 3b. Minifying client JS assets (Production Build Hygiene) ==="
+python3 -c "
+import os
+
+def strip_js_comments(code):
+    out = []
+    i, n = 0, len(code)
+    IN_SINGLE, IN_DOUBLE, IN_TEMPLATE, IN_REGEX, IN_LINE_COMMENT, IN_BLOCK_COMMENT, NORMAL = 1, 2, 3, 4, 5, 6, 0
+    state = NORMAL
+    last_sig = ''
+    while i < n:
+        c = code[i]
+        c2 = code[i:i+2]
+        if state == NORMAL:
+            if c == '\"':
+                state, last_sig = IN_DOUBLE, '\"'
+                out.append(c)
+                i += 1
+            elif c == '\'':
+                state, last_sig = IN_SINGLE, '\''
+                out.append(c)
+                i += 1
+            elif c == '\`':
+                state, last_sig = IN_TEMPLATE, '\`'
+                out.append(c)
+                i += 1
+            elif c2 == '//':
+                state = IN_LINE_COMMENT
+                i += 2
+            elif c2 == '/*':
+                state = IN_BLOCK_COMMENT
+                i += 2
+            elif c == '/':
+                if last_sig in '(=[!&|?:,;{}' or last_sig == '':
+                    state = IN_REGEX
+                out.append(c)
+                i += 1
+            else:
+                out.append(c)
+                if not c.isspace():
+                    last_sig = c
+                i += 1
+        elif state == IN_DOUBLE:
+            out.append(c)
+            if c == '\\\\':
+                if i + 1 < n:
+                    out.append(code[i+1])
+                    i += 2
+                    continue
+            elif c == '\"':
+                state, last_sig = NORMAL, '\"'
+            i += 1
+        elif state == IN_SINGLE:
+            out.append(c)
+            if c == '\\\\':
+                if i + 1 < n:
+                    out.append(code[i+1])
+                    i += 2
+                    continue
+            elif c == '\'':
+                state, last_sig = NORMAL, '\''
+            i += 1
+        elif state == IN_TEMPLATE:
+            out.append(c)
+            if c == '\\\\':
+                if i + 1 < n:
+                    out.append(code[i+1])
+                    i += 2
+                    continue
+            elif c == '\`':
+                state, last_sig = NORMAL, '\`'
+            i += 1
+        elif state == IN_REGEX:
+            out.append(c)
+            if c == '\\\\':
+                if i + 1 < n:
+                    out.append(code[i+1])
+                    i += 2
+                    continue
+            elif c == '/':
+                state, last_sig = NORMAL, '/'
+            i += 1
+        elif state == IN_LINE_COMMENT:
+            if c == '\n' or c == '\r':
+                out.append(c)
+                state = NORMAL
+            i += 1
+        elif state == IN_BLOCK_COMMENT:
+            if c2 == '*/':
+                state = NORMAL
+                i += 2
+            else:
+                i += 1
+    res = ''.join(out)
+    clean_lines = [line for line in res.splitlines() if line.strip()]
+    return '\n'.join(clean_lines)
+
+dirs = ['$BUILD_DIR/assets', '$BUILD_DIR/assets/web']
+count = 0
+for d in dirs:
+    for root, _, files in os.walk(d):
+        for f in files:
+            if f.endswith('.js') and not f.endswith('.min.js'):
+                path = os.path.join(root, f)
+                with open(path, 'r', encoding='utf-8') as fh:
+                    code = fh.read()
+                minified = strip_js_comments(code)
+                with open(path, 'w', encoding='utf-8') as fh:
+                    fh.write(minified)
+                count += 1
+print(f'Successfully minified {count} packaged JavaScript asset files.')
+"
+find "$BUILD_DIR/assets" -name "*.map" -delete 2>/dev/null || true
+
 echo "=== 4. Linking resources with Android 14 SDK (minSdk=26, targetSdk=34) ==="
 $BUILD_TOOLS/aapt2 link -o "$BUILD_DIR/unaligned/app-res.apk" \
     -I "$PLATFORM" \

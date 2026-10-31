@@ -554,6 +554,12 @@ function openSub(kind, data) {
 }
 function backSub() { var p = S.sub && S.sub.prev, y = S.sub && S.sub.scroll; S.sub = p || null; schedule(); requestAnimationFrame(function () { window.scrollTo(0, y || 0); }); }
 function go(r) { S.sub = null; S.sheet = null; if (location.hash !== '#' + r) { try { location.hash = r; } catch (e) { } } S.route = r; window.scrollTo(0, 0); schedule(); }
+window.handleAndroidBack = function () {
+  if (S.sheet) { closeSheet(); return true; }
+  if (S.sub) { backSub(); return true; }
+  if (S.route && S.route !== 'home') { go('home'); return true; }
+  return false;
+};
 
 /* ===================== COMPONENTS ===================== */
 function ph(title, sub, actions, back, small) {
